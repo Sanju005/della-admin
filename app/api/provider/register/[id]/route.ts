@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 
 import { getProviderRegistration } from "@/lib/provider-registration-storage";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _request: Request,
-  context: RouteContext<"/api/provider/register/[id]">
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
+  const { id } = await params;
   const record = await getProviderRegistration(id);
 
   if (!record) {
