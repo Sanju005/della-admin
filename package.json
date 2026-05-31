@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed:supabase-demo": "node scripts/seed-supabase-demo.mjs",
+    "build:cf": "opennextjs-cloudflare build",
+    "deploy:cf": "wrangler deploy",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
