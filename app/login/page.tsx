@@ -45,7 +45,7 @@ export default function LoginPage() {
               </div>
 
               <div className="mt-7">
-                <h2 className="text-[3.5rem] font-extrabold leading-[0.94] tracking-[-0.08em] text-[#0F172A]">
+                <h2 className="text-[3.5rem] font-extrabold leading-[0.94] tracking-[-0.04em] text-[#0F172A]">
                   Welcome back
                 </h2>
                 <p className="mt-4 text-[18px] leading-8 text-[#64748B]">
@@ -164,7 +164,9 @@ function TrustItem({
   bordered?: boolean;
 }) {
   return (
-    <div className={`flex flex-col px-3 text-left ${bordered ? "border-r border-[#E2E8F0]" : ""}`}>
+    <div
+      className={`flex flex-col items-center px-3 text-center ${bordered ? "border-r border-[#E2E8F0]" : ""}`}
+    >
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EEF8EF]">
         {icon}
       </div>
@@ -178,42 +180,28 @@ function TrustItem({
 
 function HeroScene() {
   return (
-    <div className="relative mt-4 h-[306px] overflow-hidden">
-      <div className="absolute right-[-12%] top-[8%] h-[86%] w-[74%] rounded-full bg-[#ECF8EE]" />
-      <div className="absolute left-[48%] top-[37%] h-[56%] w-[67%] rounded-full bg-[#F1FAF3]" />
+    <div className="relative mt-4 h-[248px] overflow-hidden">
+      <div className="absolute right-[-10%] top-[6%] h-[92%] w-[76%] rounded-full bg-[#ECF8EE]" />
+      <div className="absolute left-[51%] top-[36%] h-[58%] w-[62%] rounded-full bg-[#F1FAF3]" />
 
-      <div className="absolute right-12 top-2 h-28 w-24 rounded-[4px] border-[5px] border-[#EADAB8] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
-        <div className="flex h-full items-center justify-center">
-          <HouseBadge />
-        </div>
+      <div className="absolute left-[58%] top-[56%] h-10 w-16 -translate-x-1/2 rounded-full bg-[#DDBE82]" />
+      <div className="absolute left-[58%] top-[59%] h-10 w-16 -translate-x-1/2 rounded-[14px] bg-[#F0D49A]" />
+      <div className="absolute left-[55%] top-[67%] h-11 w-1.5 rounded-full bg-[#DDB166]" />
+      <div className="absolute left-[58.5%] top-[67%] h-11 w-1.5 rounded-full bg-[#DDB166]" />
+      <div className="absolute left-[62%] top-[67%] h-11 w-1.5 rounded-full bg-[#DDB166]" />
+      <div className="absolute left-[56.8%] top-[74%] h-5 w-1.5 rotate-[16deg] rounded-full bg-[#C99545]" />
+      <div className="absolute left-[60.1%] top-[74%] h-5 w-1.5 rotate-[-16deg] rounded-full bg-[#C99545]" />
+
+      <div className="absolute right-[6%] top-[18%] h-40 w-18">
+        <div className="absolute bottom-0 left-4 h-20 w-9 rounded-t-full bg-[#63B857]" />
+        <div className="absolute bottom-11 left-0 h-14 w-9 rotate-[-30deg] rounded-full bg-[#79C96E]" />
+        <div className="absolute bottom-16 left-8 h-14 w-9 rotate-[26deg] rounded-full bg-[#77C66A]" />
+        <div className="absolute bottom-25 left-1 h-14 w-9 rotate-[-18deg] rounded-full bg-[#83D177]" />
+        <div className="absolute bottom-26 left-8 h-14 w-9 rotate-[16deg] rounded-full bg-[#72C165]" />
+        <div className="absolute bottom-0 left-1 h-12 w-14 rounded-t-[22px] rounded-b-[16px] bg-[#EFE3CA]" />
       </div>
 
-      <div className="absolute left-[56%] top-[43%] h-24 w-16 -translate-x-1/2">
-        <div className="absolute bottom-0 left-4 h-16 w-8 rounded-t-full bg-[#6ABD61]" />
-        <div className="absolute bottom-10 left-0 h-10 w-7 rotate-[-28deg] rounded-full bg-[#81CA74]" />
-        <div className="absolute bottom-12 left-7 h-10 w-7 rotate-[22deg] rounded-full bg-[#79C96D]" />
-        <div className="absolute bottom-17 left-2 h-10 w-7 rotate-[-10deg] rounded-full bg-[#8CD580]" />
-        <div className="absolute bottom-0 left-2 h-8 w-12 rounded-t-[18px] rounded-b-[14px] bg-[#EFE4D0]" />
-      </div>
-
-      <div className="absolute left-[58.5%] top-[66%] h-10 w-16 -translate-x-1/2 rounded-full bg-[#DDBE82]" />
-      <div className="absolute left-[58.5%] top-[69%] h-10 w-16 -translate-x-1/2 rounded-[14px] bg-[#F0D49A]" />
-      <div className="absolute left-[55%] top-[76%] h-11 w-1.5 rounded-full bg-[#DDB166]" />
-      <div className="absolute left-[58.5%] top-[76%] h-11 w-1.5 rounded-full bg-[#DDB166]" />
-      <div className="absolute left-[62%] top-[76%] h-11 w-1.5 rounded-full bg-[#DDB166]" />
-      <div className="absolute left-[56.8%] top-[81%] h-5 w-1.5 rotate-[16deg] rounded-full bg-[#C99545]" />
-      <div className="absolute left-[60.1%] top-[81%] h-5 w-1.5 rotate-[-16deg] rounded-full bg-[#C99545]" />
-
-      <div className="absolute right-[5%] top-[18%] h-44 w-20">
-        <div className="absolute bottom-0 left-5 h-24 w-10 rounded-t-full bg-[#63B857]" />
-        <div className="absolute bottom-13 left-0 h-16 w-10 rotate-[-30deg] rounded-full bg-[#79C96E]" />
-        <div className="absolute bottom-18 left-10 h-16 w-10 rotate-[26deg] rounded-full bg-[#77C66A]" />
-        <div className="absolute bottom-29 left-1 h-16 w-10 rotate-[-18deg] rounded-full bg-[#83D177]" />
-        <div className="absolute bottom-30 left-10 h-16 w-10 rotate-[16deg] rounded-full bg-[#72C165]" />
-        <div className="absolute bottom-0 left-2 h-14 w-16 rounded-t-[24px] rounded-b-[18px] bg-[#EFE3CA]" />
-      </div>
-
-      <div className="absolute right-[12%] top-[47%] h-44 w-40 rounded-[34px] bg-[#D3EAD3] shadow-[0_14px_28px_rgba(72,119,73,0.14)]">
+      <div className="absolute right-[14%] top-[34%] h-44 w-40 rounded-[34px] bg-[#D3EAD3] shadow-[0_14px_28px_rgba(72,119,73,0.14)]">
         <div className="absolute left-[10%] top-[18%] h-29 w-28 rounded-[28px] bg-[#C3DFC3]" />
         <div className="absolute left-[7%] top-[24%] h-16 w-11 rounded-[20px] bg-[#C3DFC3]" />
         <div className="absolute right-[7%] top-[24%] h-16 w-11 rounded-[20px] bg-[#C3DFC3]" />
@@ -222,36 +210,5 @@ function HeroScene() {
         <div className="absolute bottom-[5%] right-[24%] h-20 w-4 rotate-[-14deg] rounded-full bg-[#D2A255]" />
       </div>
     </div>
-  );
-}
-
-function HouseBadge() {
-  return (
-    <svg viewBox="0 0 64 64" fill="none" className="h-12 w-12 text-[#9AD49E]">
-      <path
-        d="M12 30 32 14l20 16"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M19 28v22h26V28"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M28 36c0-2.8 1.8-5 4-5s4 2.2 4 5c0 2.8-1.8 5-4 5s-4-2.2-4-5Z"
-        stroke="currentColor"
-        strokeWidth="3.5"
-      />
-      <path
-        d="M32 42v4"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }
