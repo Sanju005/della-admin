@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Star,
   Timer,
+  ThumbsUp,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -116,6 +117,19 @@ export default async function ProviderDetailPage(props: {
                 <InfoPill icon={<BadgeCheck className="h-4.5 w-4.5 text-[#16A34A]" />} label={detail.yearsExperience} />
               </div>
             </div>
+          </section>
+
+          <section className="mt-4 grid grid-cols-2 gap-3">
+            <ProfileStatCard
+              icon={<BadgeCheck className="h-5 w-5 fill-[#16A34A] text-[#16A34A]" />}
+              value={String(detail.jobsCompleted)}
+              label="Completed Jobs"
+            />
+            <ProfileStatCard
+              icon={<ThumbsUp className="h-5 w-5 text-[#16A34A]" />}
+              value="98%"
+              label="Recommended"
+            />
           </section>
 
           <section className="mt-5">
@@ -328,6 +342,26 @@ function PriceMetric({
         <p className="pb-0.5 text-[12px] text-[#344054]">{suffix}</p>
         <span className="ml-auto">{icon}</span>
       </div>
+    </div>
+  );
+}
+
+function ProfileStatCard({
+  icon,
+  value,
+  label,
+}: {
+  icon: ReactNode;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="rounded-[18px] border border-[#E6ECE7] bg-white px-4 py-4 text-center shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+      <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#EEF9F1] text-[#16A34A]">
+        {icon}
+      </div>
+      <p className="mt-3 text-[18px] font-extrabold text-[#0F172A]">{value}</p>
+      <p className="mt-1 text-[12px] font-medium text-[#475467]">{label}</p>
     </div>
   );
 }
