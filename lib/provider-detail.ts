@@ -22,6 +22,15 @@ type ProviderAvailabilitySlot = {
   state: "available" | "booked";
 };
 
+type ProviderCustomerReview = {
+  id: string;
+  customerName: string;
+  rating: number;
+  postedLabel: string;
+  comment: string;
+  images: string[];
+};
+
 export type ProviderDetail = ProviderListing & {
   href: string;
   profileImage: string;
@@ -35,6 +44,7 @@ export type ProviderDetail = ProviderListing & {
   about: string;
   gallery: ProviderGalleryImage[];
   availability: ProviderAvailabilitySlot[];
+  customerReviews: ProviderCustomerReview[];
 };
 
 const providerDescriptions: Record<ProviderCategoryKey, string> = {
@@ -171,6 +181,84 @@ function mergeSpecialties(listing: ProviderListing) {
   return [...new Set(combined)].slice(0, 6);
 }
 
+function buildCustomerReviews(listing: ProviderListing): ProviderCustomerReview[] {
+  const imageA = buildProviderPortraitSrc(listing);
+  const imageB = providerMediaUrl(listing.serviceKey, "gallery-1");
+  const imageC = providerMediaUrl(listing.serviceKey, "gallery-2");
+
+  const reviewCopy: Record<ProviderCategoryKey, [string, string, string]> = {
+    chef: [
+      "The food was fresh, nicely presented, and tasted just like a private dining experience at home.",
+      "Chef arrived on time, kept the kitchen clean, and adjusted the menu for our family preferences.",
+      "Booked for a small birthday dinner and everyone loved the dishes. Would definitely book again.",
+    ],
+    maid: [
+      "Very tidy work and the whole house felt fresh after the session.",
+      "Laundry and kitchen were handled carefully. Communication was also very easy.",
+      "Good attention to detail and arrived exactly on time.",
+    ],
+    babysitter: [
+      "Very patient with my child and kept a calm routine throughout the evening.",
+      "Shared updates during the booking and made us feel comfortable leaving home.",
+      "Friendly, responsible, and easy for the kids to warm up to.",
+    ],
+    driver: [
+      "Smooth ride, punctual arrival, and very professional throughout the trip.",
+      "Helped with bags and kept us updated before pickup.",
+      "Safe driving and easy communication. Great overall service.",
+    ],
+    cleaner: [
+      "Bathrooms and kitchen were spotless. Really happy with the result.",
+      "Came prepared and worked efficiently without rushing the details.",
+      "The home looked refreshed and organized after the cleaning session.",
+    ],
+    tutor: [
+      "Explains clearly and helped my child feel more confident with the subject.",
+      "Lesson was structured well and easy to follow from start to finish.",
+      "Very patient teaching style and useful feedback after class.",
+    ],
+    plumber: [
+      "Solved the issue quickly and explained what caused the leak.",
+      "Brought the right tools and kept the work area neat.",
+      "Responsive, practical, and the repair has been holding up well.",
+    ],
+    electrician: [
+      "Clear explanation, careful work, and everything was tested before leaving.",
+      "Installed the fittings neatly and arrived on time.",
+      "Professional service and good communication throughout the visit.",
+    ],
+  };
+
+  const [first, second, third] = reviewCopy[listing.serviceKey];
+
+  return [
+    {
+      id: `${listing.id}-review-1`,
+      customerName: "Nurul S.",
+      rating: Number(listing.rating.toFixed(1)),
+      postedLabel: "2 days ago",
+      comment: first,
+      images: [imageB, imageC],
+    },
+    {
+      id: `${listing.id}-review-2`,
+      customerName: "Farid K.",
+      rating: Math.max(4.6, listing.rating - 0.1),
+      postedLabel: "1 week ago",
+      comment: second,
+      images: [imageA],
+    },
+    {
+      id: `${listing.id}-review-3`,
+      customerName: "Amanda L.",
+      rating: Math.max(4.7, listing.rating),
+      postedLabel: "2 weeks ago",
+      comment: third,
+      images: [imageC, imageA],
+    },
+  ];
+}
+
 function buildDetailFromListing(listing: ProviderListing): ProviderDetail {
   const captions = galleryCaptions[listing.serviceKey];
 
@@ -205,6 +293,7 @@ function buildDetailFromListing(listing: ProviderListing): ProviderDetail {
       },
     ],
     availability: buildAvailability(listing.serviceKey),
+    customerReviews: buildCustomerReviews(listing),
   };
 }
 

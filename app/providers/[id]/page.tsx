@@ -216,61 +216,73 @@ export default async function ProviderDetailPage(props: {
 
           <section className="mt-5 rounded-[20px] border border-[#E6ECE7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                Availability
-              </h2>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#16A34A]"
-              >
-                <CalendarDays className="h-4 w-4" />
-                View Calendar
-              </button>
+              <div>
+                <h2 className="text-[15px] font-extrabold text-[#0F172A]">
+                  Customer Reviews
+                </h2>
+                <p className="mt-1 text-[12px] text-[#667085]">
+                  Real feedback with ratings and photos
+                </p>
+              </div>
+              <div className="rounded-full bg-[#FFF7E8] px-2.5 py-1 text-[12px] font-bold text-[#B54708]">
+                {detail.rating.toFixed(1)} / 5
+              </div>
             </div>
 
-            <div className="mt-4 flex gap-2.5 overflow-x-auto pb-1">
-              {detail.availability.map((slot, index) => (
+            <div className="mt-4 space-y-3">
+              {detail.customerReviews.map((review) => (
                 <div
-                  key={`${detail.id}-${slot.dayLabel}-${slot.dateLabel}`}
-                  className={`min-w-[6rem] rounded-[16px] border px-3 py-3 ${
-                    index === 0
-                      ? "border-[#B7E7C2] bg-[#F3FFF5]"
-                      : "border-[#E7ECE7] bg-white"
-                  }`}
+                  key={review.id}
+                  className="rounded-[16px] border border-[#E7ECE7] bg-[#FBFCFB] p-3.5"
                 >
-                  <p className="text-center text-[13px] font-semibold text-[#0F172A]">
-                    {slot.dayLabel}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-bold text-[#0F172A]">
+                        {review.customerName}
+                      </p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <div className="flex items-center gap-0.5 text-[#F59E0B]">
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <Star
+                              key={`${review.id}-${value}`}
+                              className={`h-3.5 w-3.5 ${
+                                value <= Math.round(review.rating)
+                                  ? "fill-current"
+                                  : "text-[#D0D5DD]"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[11px] font-semibold text-[#344054]">
+                          {review.rating.toFixed(1)}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-[#98A2B3]">{review.postedLabel}</span>
+                  </div>
+
+                  <p className="mt-3 text-[12px] leading-5 text-[#344054]">
+                    {review.comment}
                   </p>
-                  <p className="mt-1 text-center text-[11px] text-[#475467]">
-                    {slot.dateLabel}
-                  </p>
-                  <p className="mt-4 text-center text-[12px] leading-5 text-[#0F172A]">
-                    {slot.timeLabel}
-                  </p>
-                  <div className="mt-3 flex justify-center">
-                    <span
-                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${
-                        slot.state === "available"
-                          ? "bg-[#16A34A] text-white"
-                          : "bg-[#F2F4F7] text-[#667085]"
-                      }`}
-                    >
-                      {slot.state === "available" ? (
-                        <CheckCheck className="h-3.5 w-3.5" />
-                      ) : (
-                        <span className="text-[14px]">×</span>
-                      )}
-                    </span>
+
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                    {review.images.map((image, index) => (
+                      <div
+                        key={`${review.id}-${index}`}
+                        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[12px]"
+                      >
+                        <Image
+                          src={image}
+                          alt={`${review.customerName} review image ${index + 1}`}
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
-              <button
-                type="button"
-                aria-label="Next availability"
-                className="inline-flex min-w-[2.5rem] items-center justify-center text-[#16A34A]"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
             </div>
           </section>
 
