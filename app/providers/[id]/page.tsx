@@ -218,8 +218,7 @@ export default async function ProviderDetailPage(props: {
           <AvailabilityCalendar
             providerId={detail.id}
             serviceQuery={searchParams.service ?? null}
-            monthLabel={detail.calendarMonthLabel}
-            dates={detail.calendarDates}
+            slots={detail.availability}
           />
 
           <section className="mt-5 rounded-[20px] border border-[#E6ECE7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">

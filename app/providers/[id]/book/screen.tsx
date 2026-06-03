@@ -90,7 +90,7 @@ export function BookingFormScreen({
         month: "short",
         year: "numeric",
       })}`
-    : toDateLabel(defaultSlot.dayLabel, defaultSlot.dateLabel);
+    : initialDateQuery ?? toDateLabel(defaultSlot.dayLabel, defaultSlot.dateLabel);
 
   const [bookingMode, setBookingMode] = useState<BookingMode>("hourly");
   const [selectedDate, setSelectedDate] = useState(defaultDateLabel);

@@ -15,7 +15,7 @@ type ProviderGalleryImage = {
   caption: string;
 };
 
-type ProviderAvailabilitySlot = {
+export type ProviderAvailabilitySlot = {
   dayLabel: string;
   dateLabel: string;
   timeLabel: string;
@@ -156,26 +156,28 @@ function providerMediaUrl(serviceKey: ProviderCategoryKey, kind: string) {
 
 function buildAvailability(serviceKey: ProviderCategoryKey): ProviderAvailabilitySlot[] {
   const defaults: Record<ProviderCategoryKey, string[]> = {
-    chef: ["10:00 AM - 8:00 PM", "10:00 AM - 8:00 PM", "10:00 AM - 6:00 PM", "Full Day Booked", "10:00 AM - 8:00 PM"],
-    maid: ["9:00 AM - 6:00 PM", "9:00 AM - 6:00 PM", "8:00 AM - 5:00 PM", "Half Day Booked", "9:00 AM - 6:00 PM"],
-    babysitter: ["8:00 AM - 5:00 PM", "10:00 AM - 8:00 PM", "10:00 AM - 6:00 PM", "Evening Booked", "8:00 AM - 6:00 PM"],
-    driver: ["7:00 AM - 7:00 PM", "8:00 AM - 8:00 PM", "8:00 AM - 5:00 PM", "Full Day Booked", "7:00 AM - 7:00 PM"],
-    cleaner: ["9:00 AM - 6:00 PM", "9:00 AM - 6:00 PM", "8:00 AM - 5:00 PM", "11:00 AM - 4:00 PM", "9:00 AM - 6:00 PM"],
-    tutor: ["3:00 PM - 8:00 PM", "3:00 PM - 8:00 PM", "4:00 PM - 7:00 PM", "5:00 PM - 7:00 PM", "3:00 PM - 8:00 PM"],
-    plumber: ["9:00 AM - 8:00 PM", "9:00 AM - 8:00 PM", "9:00 AM - 6:00 PM", "Emergency Only", "9:00 AM - 8:00 PM"],
-    electrician: ["9:00 AM - 8:00 PM", "9:00 AM - 8:00 PM", "9:00 AM - 6:00 PM", "Half Day Booked", "9:00 AM - 8:00 PM"],
+    chef: ["2:00 PM", "10:00 AM", "10:00 AM", "10:00 AM", "10:00 AM", "Booked", "1:00 PM"],
+    maid: ["9:00 AM", "9:00 AM", "8:00 AM", "9:00 AM", "9:00 AM", "Booked", "10:00 AM"],
+    babysitter: ["8:00 AM", "10:00 AM", "10:00 AM", "11:00 AM", "10:00 AM", "Booked", "8:00 AM"],
+    driver: ["7:00 AM", "8:00 AM", "8:00 AM", "9:00 AM", "8:00 AM", "Booked", "7:00 AM"],
+    cleaner: ["9:00 AM", "9:00 AM", "8:00 AM", "11:00 AM", "9:00 AM", "Booked", "10:00 AM"],
+    tutor: ["3:00 PM", "3:00 PM", "4:00 PM", "5:00 PM", "3:00 PM", "Booked", "2:00 PM"],
+    plumber: ["9:00 AM", "9:00 AM", "9:00 AM", "10:00 AM", "9:00 AM", "Booked", "11:00 AM"],
+    electrician: ["9:00 AM", "9:00 AM", "9:00 AM", "10:00 AM", "9:00 AM", "Booked", "11:00 AM"],
   };
 
   const days = [
-    ["Today", "Jun 1"],
     ["Mon", "Jun 2"],
     ["Tue", "Jun 3"],
     ["Wed", "Jun 4"],
     ["Thu", "Jun 5"],
+    ["Fri", "Jun 6"],
+    ["Sat", "Jun 7"],
+    ["Sun", "Jun 8"],
   ] as const;
 
   return days.map(([dayLabel, dateLabel], index) => {
-    const timeLabel = defaults[serviceKey][index] ?? "10:00 AM - 6:00 PM";
+    const timeLabel = defaults[serviceKey][index] ?? "10:00 AM";
     return {
       dayLabel,
       dateLabel,

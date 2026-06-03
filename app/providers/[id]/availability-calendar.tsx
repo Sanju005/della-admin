@@ -2,126 +2,99 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, ChevronRight } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, X } from "lucide-react";
 
-import type { ProviderCalendarDate } from "@/lib/provider-detail";
+import type { ProviderAvailabilitySlot } from "@/lib/provider-detail";
 
 type AvailabilityCalendarProps = {
   providerId: string;
   serviceQuery: string | null;
-  monthLabel: string;
-  dates: ProviderCalendarDate[];
+  slots: ProviderAvailabilitySlot[];
 };
 
 export function AvailabilityCalendar({
   providerId,
   serviceQuery,
-  monthLabel,
-  dates,
+  slots,
 }: AvailabilityCalendarProps) {
-  const firstAvailable = useMemo(
-    () => dates.find((date) => date.state === "available")?.isoDate ?? dates[0]?.isoDate ?? "",
-    [dates]
+  const selectedDefault = useMemo(
+    () => slots.find((slot) => slot.state === "available") ?? slots[0],
+    [slots]
   );
-  const [selectedDate, setSelectedDate] = useState(firstAvailable);
+  const [selectedSlot, setSelectedSlot] = useState(selectedDefault);
 
-  const weeks = useMemo(() => {
-    const chunks: ProviderCalendarDate[][] = [];
-    for (let index = 0; index < dates.length; index += 7) {
-      chunks.push(dates.slice(index, index + 7));
-    }
-    return chunks;
-  }, [dates]);
+  const nextAvailable = useMemo(
+    () => slots.find((slot) => slot.state === "available") ?? slots[0],
+    [slots]
+  );
 
+  const selectedDateLabel = `${selectedSlot.dayLabel}, ${selectedSlot.dateLabel}`;
   const bookHref = serviceQuery
-    ? `/providers/${encodeURIComponent(providerId)}/book?service=${encodeURIComponent(serviceQuery)}&date=${encodeURIComponent(selectedDate)}`
-    : `/providers/${encodeURIComponent(providerId)}/book?date=${encodeURIComponent(selectedDate)}`;
+    ? `/providers/${encodeURIComponent(providerId)}/book?service=${encodeURIComponent(serviceQuery)}&date=${encodeURIComponent(selectedDateLabel)}`
+    : `/providers/${encodeURIComponent(providerId)}/book?date=${encodeURIComponent(selectedDateLabel)}`;
 
   return (
     <section className="mt-5 rounded-[20px] border border-[#E6ECE7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-            Availability Calendar
-          </h2>
-          <p className="mt-1 text-[12px] text-[#667085]">{monthLabel}</p>
-        </div>
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF9F1] px-2.5 py-1 text-[11px] font-bold text-[#16A34A]">
-          <CalendarDays className="h-3.5 w-3.5" />
-          Choose a date
-        </div>
-      </div>
+      <h2 className="text-[15px] font-extrabold text-[#0F172A]">
+        Available This Week
+      </h2>
 
-      <div className="mt-4 overflow-hidden rounded-[16px] border border-[#E7ECE7]">
-        <div className="grid grid-cols-7 border-b border-[#E7ECE7] bg-[#F8FBF9]">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
-            <div
-              key={label}
-              className="px-1 py-2 text-center text-[10px] font-bold uppercase tracking-[0.05em] text-[#98A2B3]"
+      <div className="mt-4 grid grid-cols-7 gap-2">
+        {slots.map((slot) => {
+          const isAvailable = slot.state === "available";
+          const isSelected =
+            selectedSlot.dayLabel === slot.dayLabel &&
+            selectedSlot.dateLabel === slot.dateLabel;
+
+          return (
+            <button
+              key={`${slot.dayLabel}-${slot.dateLabel}`}
+              type="button"
+              disabled={!isAvailable}
+              onClick={() => setSelectedSlot(slot)}
+              className={`rounded-[14px] px-1 py-2 text-center ${
+                isSelected ? "bg-[#F3FFF5]" : "bg-transparent"
+              } ${!isAvailable ? "opacity-80" : ""}`}
             >
-              {label}
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-px bg-[#E7ECE7]">
-          {weeks.map((week, index) => (
-            <div key={index} className="grid grid-cols-7 gap-px bg-[#E7ECE7]">
-              {week.map((date) => {
-                const isSelected = selectedDate === date.isoDate;
-                const isBooked = date.state === "booked";
-
-                return (
-                  <button
-                    key={date.isoDate}
-                    type="button"
-                    disabled={isBooked}
-                    onClick={() => setSelectedDate(date.isoDate)}
-                    className={`min-h-[4.2rem] bg-white px-1.5 py-2 text-center ${
-                      isBooked ? "opacity-55" : ""
-                    } ${isSelected ? "bg-[#F3FFF5]" : ""}`}
-                  >
-                    <p className="text-[10px] font-semibold text-[#98A2B3]">
-                      {date.weekdayShort}
-                    </p>
-                    <p
-                      className={`mt-1 text-[14px] font-extrabold ${
-                        isSelected ? "text-[#16A34A]" : "text-[#0F172A]"
-                      }`}
-                    >
-                      {date.dayNumber}
-                    </p>
-                    <p
-                      className={`mt-1 text-[10px] font-semibold ${
-                        isBooked ? "text-[#B42318]" : "text-[#16A34A]"
-                      }`}
-                    >
-                      {isBooked ? "Booked" : "Open"}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+              <p className="text-[11px] font-semibold text-[#344054]">
+                {slot.dayLabel}
+              </p>
+              <div
+                className={`mx-auto mt-2 inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                  isAvailable ? "bg-[#DFF7E7] text-[#16A34A]" : "bg-[#FDECEC] text-[#EF4444]"
+                }`}
+              >
+                {isAvailable ? <Check className="h-4.5 w-4.5" /> : <X className="h-4.5 w-4.5" />}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 rounded-[16px] bg-[#F8FBF9] px-3.5 py-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#98A2B3]">
-            Selected Date
-          </p>
-          <p className="mt-1 text-[13px] font-bold text-[#0F172A]">
-            {selectedDate || "Choose a date"}
-          </p>
+      <div className="mt-4 border-t border-[#E8ECE8] pt-4">
+        <h3 className="text-[14px] font-extrabold text-[#0F172A]">Next Available</h3>
+
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-[16px] bg-[linear-gradient(90deg,#F5FFF8_0%,#EEFDF4_100%)] px-3.5 py-3.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E9F8EE] text-[#16A34A]">
+              <CalendarDays className="h-4.5 w-4.5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-extrabold text-[#16A34A]">
+                {nextAvailable.dayLabel}, {nextAvailable.timeLabel}
+              </p>
+              <p className="mt-1 text-[11px] text-[#667085]">{nextAvailable.dateLabel}</p>
+            </div>
+          </div>
+
+          <Link
+            href={bookHref}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-[12px] bg-[#16A34A] px-3.5 text-[12px] font-extrabold text-white"
+          >
+            Book
+            <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
-        <Link
-          href={bookHref}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-[12px] bg-[#16A34A] px-4 text-[13px] font-extrabold text-white"
-        >
-          Book Date
-          <ChevronRight className="h-4 w-4" />
-        </Link>
       </div>
     </section>
   );
