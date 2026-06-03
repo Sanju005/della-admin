@@ -9,6 +9,7 @@ import type {
   SettingGroup,
 } from "./profile-types";
 import { listCustomerBookings } from "./customer-booking-storage";
+import { buildProviderPortraitSrc } from "./provider-catalog";
 
 const mockProfile: CustomerProfile = {
   firstName: "Sanju",
@@ -25,54 +26,69 @@ const mockProfile: CustomerProfile = {
 
 const favoriteProviders = [
   {
-    id: "chef-amina",
+    id: "mock-chef-chef-amina",
     name: "Chef Amina",
     role: "Chef",
     initials: "CA",
     accent: "from-emerald-500 to-green-700",
+    serviceKey: "chef",
     location: "Kajang, Selangor",
     rating: 4.9,
     priceLabel: "RM260",
+    portraitSrc: buildProviderPortraitSrc({ name: "Chef Amina", serviceKey: "chef" }),
+    bookHref: "/providers/mock-chef-chef-amina/book?service=chef",
   },
   {
-    id: "maid-siti",
+    id: "mock-maid-siti-maid-service",
     name: "Maid Siti",
     role: "Cleaning",
     initials: "MS",
     accent: "from-teal-500 to-emerald-700",
+    serviceKey: "maid",
     location: "Setapak, Kuala Lumpur",
     rating: 4.8,
     priceLabel: "RM180",
+    portraitSrc: buildProviderPortraitSrc({ name: "Siti Maid Service", serviceKey: "maid" }),
+    bookHref: "/providers/mock-maid-siti-maid-service/book?service=maid",
   },
   {
-    id: "driver-kumar",
+    id: "mock-driver-driver-kumar",
     name: "Driver Kumar",
     role: "Driver",
     initials: "DK",
     accent: "from-sky-500 to-slate-700",
+    serviceKey: "driver",
     location: "Ampang, Selangor",
     rating: 4.7,
     priceLabel: "RM205",
+    portraitSrc: buildProviderPortraitSrc({ name: "Driver Kumar", serviceKey: "driver" }),
+    bookHref: "/providers/mock-driver-driver-kumar/book?service=driver",
   },
   {
-    id: "plumber-murugan",
+    id: "mock-plumber-home-pipe-expert",
     name: "Murugan",
     role: "Plumber",
     initials: "MU",
     accent: "from-orange-500 to-amber-700",
+    serviceKey: "plumber",
     location: "Shah Alam, Selangor",
     rating: 4.8,
     priceLabel: "RM360",
+    portraitSrc: buildProviderPortraitSrc({ name: "Home Pipe Expert", serviceKey: "plumber" }),
+    bookHref: "/providers/mock-plumber-home-pipe-expert/book?service=plumber",
   },
   {
-    id: "tutor-farah",
+    id: "mock-tutor-tutor-farah",
     name: "Tutor Farah",
     role: "Tutor",
     initials: "TF",
     accent: "from-violet-500 to-fuchsia-700",
+    serviceKey: "tutor",
     location: "Subang Jaya, Selangor",
     rating: 4.8,
     priceLabel: "RM260",
+    portraitSrc: buildProviderPortraitSrc({ name: "Tutor Farah", serviceKey: "tutor" }),
+    bookHref: "/providers/mock-tutor-tutor-farah/book?service=tutor",
   },
 ];
 

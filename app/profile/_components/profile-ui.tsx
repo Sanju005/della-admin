@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -211,20 +212,34 @@ export function ProfileOverviewScreen({ initialData }: OverviewProps) {
 }
 
 export function FavoritesScreen({ providers }: FavoritesProps) {
+  const [items, setItems] = useState(providers);
+
   return (
     <ProfileShell title="Favourite Providers" showBack backHref="/profile">
       <div className="space-y-4">
-        {providers.map((provider) => (
+        {items.map((provider) => (
           <div
             key={provider.id}
             className="rounded-[18px] border border-[#e4ece7] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.04)]"
           >
             <div className="flex items-start gap-4">
-              <AvatarCircle
-                initials={provider.initials}
-                size="lg"
-                accent={provider.accent}
-              />
+              <div className="relative h-[5.6rem] w-[5.6rem] shrink-0 overflow-hidden rounded-full">
+                {provider.portraitSrc ? (
+                  <Image
+                    src={provider.portraitSrc}
+                    alt={provider.name}
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                ) : (
+                  <AvatarCircle
+                    initials={provider.initials}
+                    size="lg"
+                    accent={provider.accent}
+                  />
+                )}
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -235,9 +250,18 @@ export function FavoritesScreen({ providers }: FavoritesProps) {
                       {provider.role}
                     </p>
                   </div>
-                  <span className="rounded-full bg-[#e9f9ec] px-2.5 py-1 text-[12px] font-bold text-[#16a34a]">
-                    Favourite
-                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${provider.name} from favourites`}
+                    onClick={() =>
+                      setItems((current) =>
+                        current.filter((item) => item.id !== provider.id)
+                      )
+                    }
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#fff1f1] text-[#ef4444]"
+                  >
+                    <FavoriteHeartIcon className="h-5 w-5 fill-current" />
+                  </button>
                 </div>
 
                 <div className="mt-3 grid grid-cols-2 gap-3 text-[13px] text-[#4b5563]">
@@ -260,10 +284,25 @@ export function FavoritesScreen({ providers }: FavoritesProps) {
                     </span>
                   </p>
                 </div>
+
+                <div className="mt-4 flex justify-end">
+                  <Link
+                    href={provider.bookHref ?? "/profile/favourites"}
+                    className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#16a34a] px-4 text-[13px] font-extrabold text-white shadow-[0_12px_24px_rgba(22,163,74,0.18)]"
+                  >
+                    Book Now
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
         ))}
+
+        {items.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-[#d9e2dd] bg-white px-4 py-8 text-center text-[14px] text-[#6b7280]">
+            No favourite providers left.
+          </div>
+        ) : null}
       </div>
     </ProfileShell>
   );
@@ -1414,6 +1453,16 @@ function WalletIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconClass(className)}>
       <rect x="3" y="6" width="18" height="12" rx="2" />
       <path d="M16 12h3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FavoriteHeartIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <path
+        d="M12 20.4s-6.7-4.2-9.2-8.1C.9 9.3 2 5.6 5.4 4.8c2-.5 4 .2 5.2 1.8 1.2-1.6 3.2-2.3 5.2-1.8 3.4.8 4.5 4.5 2.6 7.5-2.5 3.9-9.2 8.1-9.2 8.1Z"
+      />
     </svg>
   );
 }
