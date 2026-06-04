@@ -2,12 +2,12 @@ import { CheckCircle2, Globe2, LockKeyhole, Shield, Sparkles } from "lucide-reac
 
 const settingsGroups = [
   {
-    title: "Access & identity",
+    title: "Sign in",
     icon: LockKeyhole,
     items: [
-      "Supabase Auth handles primary sign-in for admin users.",
-      "Role access is enforced from the shared profiles table.",
-      "Normal customer and provider roles are redirected to a blocked view.",
+      "Supabase Auth handles sign-in with email and password.",
+      "Correct credentials sign in immediately.",
+      "Wrong credentials show a simple error message.",
     ],
   },
   {
@@ -44,7 +44,7 @@ export function SettingsPage() {
             </h2>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-emerald-50/90">
               This dashboard is intentionally separate from the consumer app so admin
-              deployment, routing, and access control stay isolated while still using the
+              deployment and routing stay isolated while still using the
               same Supabase backend.
             </p>
           </div>

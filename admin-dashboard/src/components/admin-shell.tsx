@@ -52,12 +52,14 @@ function formatToday() {
 
 export function AdminShell() {
   const location = useLocation();
-  const { profile, signOut } = useAuth();
+  const { profile, session, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const displayName = profile?.full_name?.trim() || session?.user.email || "User";
+  const displayRole = profile?.role?.replaceAll("_", " ") || "Signed in";
 
   const title = useMemo(() => routeTitles[location.pathname] ?? "DELLA Admin", [location.pathname]);
   const initials = useMemo(() => {
-    const name = profile?.full_name?.trim();
+    const name = displayName.trim();
 
     if (!name) {
       return "DA";
@@ -68,7 +70,7 @@ export function AdminShell() {
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("");
-  }, [profile?.full_name]);
+  }, [displayName]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(103,232,170,0.3),_transparent_30%),linear-gradient(180deg,_#f6fff8_0%,_#eef8f0_38%,_#f8fafc_100%)] text-slate-900">
@@ -149,10 +151,10 @@ export function AdminShell() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-slate-950">
-                    {profile?.full_name ?? "Admin User"}
+                    {displayName}
                   </p>
                   <p className="truncate text-sm capitalize text-slate-500">
-                    {profile?.role?.replaceAll("_", " ") ?? "Admin"}
+                    {displayRole}
                   </p>
                 </div>
               </div>
