@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/admin-dashboard/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -19,6 +20,8 @@
 
 # production
 /build
+/admin-dashboard/dist
+/admin-dashboard/.wrangler
 
 # misc
 .DS_Store
