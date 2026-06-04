@@ -1,14 +1,39 @@
 import { LoaderCircle, ShieldAlert } from "lucide-react";
+import { Suspense, lazy } from "react";
 import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
 import { AdminShell } from "./components/admin-shell";
 import { complaints, payments, providers, reviews, users, bookings } from "./data/mock-data";
-import { DashboardPage } from "./pages/dashboard-page";
-import { ForgotPasswordPage } from "./pages/forgot-password-page";
-import { LoginPage } from "./pages/login-page";
-import { ResetPasswordPage } from "./pages/reset-password-page";
-import { ResourcePage } from "./pages/resource-page";
-import { SettingsPage } from "./pages/settings-page";
+
+const DashboardPage = lazy(async () => {
+  const module = await import("./pages/dashboard-page");
+  return { default: module.DashboardPage };
+});
+
+const ForgotPasswordPage = lazy(async () => {
+  const module = await import("./pages/forgot-password-page");
+  return { default: module.ForgotPasswordPage };
+});
+
+const LoginPage = lazy(async () => {
+  const module = await import("./pages/login-page");
+  return { default: module.LoginPage };
+});
+
+const ResetPasswordPage = lazy(async () => {
+  const module = await import("./pages/reset-password-page");
+  return { default: module.ResetPasswordPage };
+});
+
+const ResourcePage = lazy(async () => {
+  const module = await import("./pages/resource-page");
+  return { default: module.ResourcePage };
+});
+
+const SettingsPage = lazy(async () => {
+  const module = await import("./pages/settings-page");
+  return { default: module.SettingsPage };
+});
 
 function LoadingScreen() {
   return (
@@ -26,6 +51,20 @@ function LoadingScreen() {
       </div>
     </div>
   );
+}
+
+function RouteLoader() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center">
+      <div className="mx-auto grid size-14 place-items-center rounded-3xl bg-[linear-gradient(135deg,#0f8b3d,#7c3aed)] text-white shadow-[0_20px_60px_rgba(15,139,61,0.25)]">
+        <LoaderCircle className="size-6 animate-spin" />
+      </div>
+    </div>
+  );
+}
+
+function withSuspense(element: React.ReactNode) {
+  return <Suspense fallback={<RouteLoader />}>{element}</Suspense>;
 }
 
 function BlockedPage() {
@@ -87,15 +126,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 const router = createBrowserRouter([
   {
     path: "/login",
-    element: <LoginPage />,
+    element: withSuspense(<LoginPage />),
   },
   {
     path: "/forgot-password",
-    element: <ForgotPasswordPage />,
+    element: withSuspense(<ForgotPasswordPage />),
   },
   {
     path: "/reset-password",
-    element: <ResetPasswordPage />,
+    element: withSuspense(<ResetPasswordPage />),
   },
   {
     path: "/blocked",
@@ -104,18 +143,18 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: (
-      <ProtectedRoute>
-        <AdminShell />
-      </ProtectedRoute>
+        <ProtectedRoute>
+          <AdminShell />
+        </ProtectedRoute>
     ),
     children: [
       {
         index: true,
-        element: <DashboardPage />,
+        element: withSuspense(<DashboardPage />),
       },
       {
         path: "users",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Users"
             description="Customer, provider, and internal user management at a glance."
@@ -137,11 +176,11 @@ const router = createBrowserRouter([
               { label: "Suspended", value: "844", note: "Accounts needing review" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "service-providers",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Service Providers"
             description="Provider health, approval state, and geographic coverage."
@@ -163,11 +202,11 @@ const router = createBrowserRouter([
               { label: "Paused", value: "113", note: "Temporarily hidden or inactive" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "provider-approvals",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Provider Approvals"
             description="Pending provider and listing approval decisions."
@@ -188,11 +227,11 @@ const router = createBrowserRouter([
               { label: "Listings", value: "5", note: "Marketplace visibility approvals" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "tasks-bookings",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Tasks / Bookings"
             description="Real-time service operations and fulfilment pipeline."
@@ -214,11 +253,11 @@ const router = createBrowserRouter([
               { label: "Cancelled", value: "83", note: "Needs quality follow-up" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "payments",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Payments"
             description="Customer collections, settlement state, and refund monitoring."
@@ -240,11 +279,11 @@ const router = createBrowserRouter([
               { label: "Refunds", value: "RM7,340", note: "Requires finance review where needed" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "reviews",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Reviews"
             description="Moderation and quality signals from marketplace feedback."
@@ -266,11 +305,11 @@ const router = createBrowserRouter([
               { label: "Average rating", value: "4.82", note: "Rolling 30-day platform score" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "complaints",
-        element: (
+        element: withSuspense((
           <ResourcePage
             title="Complaints"
             description="Trust, support, and service recovery queue."
@@ -292,11 +331,11 @@ const router = createBrowserRouter([
               { label: "Resolved", value: "143", note: "Closed this month" },
             ]}
           />
-        ),
+        )),
       },
       {
         path: "settings",
-        element: <SettingsPage />,
+        element: withSuspense(<SettingsPage />),
       },
     ],
   },
