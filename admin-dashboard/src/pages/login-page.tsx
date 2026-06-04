@@ -31,11 +31,14 @@ export function LoginPage() {
     event.preventDefault();
     setSubmitting(true);
     setFormError(null);
-    const error = await signIn(email, password);
-    setSubmitting(false);
+    try {
+      const error = await signIn(email, password);
 
-    if (error) {
-      setFormError(error);
+      if (error) {
+        setFormError(error);
+      }
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -101,6 +104,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="admin@dellaapp.com"
+                autoComplete="username"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-slate-950 outline-none transition focus:border-emerald-400 focus:bg-white"
                 required
               />
@@ -112,6 +116,7 @@ export function LoginPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Enter your password"
+                autoComplete="current-password"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-slate-950 outline-none transition focus:border-emerald-400 focus:bg-white"
                 required
               />

@@ -110,8 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return "Supabase environment variables are missing.";
         }
 
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        return error?.message ?? null;
+        setAuthError(null);
+
+        try {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          return error?.message ?? null;
+        } catch (error) {
+          return error instanceof Error ? error.message : "Unable to sign in right now.";
+        }
       },
       async signOut() {
         if (!supabase) {
