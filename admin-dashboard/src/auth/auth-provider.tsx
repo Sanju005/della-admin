@@ -47,6 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    setLoading(true);
+
     if (!supabase) {
       setAuthError("Supabase environment variables are missing.");
       setLoading(false);
