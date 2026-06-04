@@ -156,6 +156,12 @@
       "namedRegex": "^/favicon\\.ico(?:/)?$"
     },
     {
+      "page": "/forgot-password",
+      "regex": "^/forgot\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/forgot\\-password(?:/)?$"
+    },
+    {
       "page": "/home",
       "regex": "^/home(?:/)?$",
       "routeKeys": {},
@@ -310,6 +316,12 @@
       "regex": "^/register/verify(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/register/verify(?:/)?$"
+    },
+    {
+      "page": "/reset-password",
+      "regex": "^/reset\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reset\\-password(?:/)?$"
     },
     {
       "page": "/signup",

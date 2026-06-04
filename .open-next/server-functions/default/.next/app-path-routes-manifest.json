@@ -12,6 +12,7 @@
   "/api/providers/[id]/route": "/api/providers/[id]",
   "/api/providers/route": "/api/providers",
   "/favicon.ico/route": "/favicon.ico",
+  "/forgot-password/page": "/forgot-password",
   "/home/page": "/home",
   "/images/mock/chef-amina.jpg/route": "/images/mock/chef-amina.jpg",
   "/images/mock/chef-banner.png/route": "/images/mock/chef-banner.png",
@@ -44,6 +45,7 @@
   "/register/page": "/register",
   "/register/success/page": "/register/success",
   "/register/verify/page": "/register/verify",
+  "/reset-password/page": "/reset-password",
   "/signup/check-email/page": "/signup/check-email",
   "/signup/page": "/signup",
   "/signup/user/page": "/signup/user"
