@@ -67,6 +67,14 @@ const router = createBrowserRouter([
     element: withSuspense(<LoginPage />),
   },
   {
+    path: "/blocked",
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: "/blokced",
+    element: <Navigate to="/login" replace />,
+  },
+  {
     path: "/forgot-password",
     element: withSuspense(<ForgotPasswordPage />),
   },
