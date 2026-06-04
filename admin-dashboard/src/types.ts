@@ -39,6 +39,7 @@ export type NavItem = {
   to: string;
   icon: LucideIcon;
   count?: number;
+  disabled?: boolean;
 };
 
 export type StatusTone =
@@ -116,4 +117,95 @@ export type ApprovalItem = {
   pending: number;
   accent: string;
   note: string;
+};
+
+export type UserAddress = {
+  id: string;
+  label: string;
+  line1: string;
+  line2: string;
+  tag?: string;
+};
+
+export type UserTimelineItem = {
+  id: string;
+  title: string;
+  note: string;
+  time: string;
+  tone: StatusTone;
+};
+
+export type UserActionItem = {
+  id: string;
+  label: string;
+  time: string;
+};
+
+export type UserDocumentItem = {
+  id: string;
+  label: string;
+  status: string;
+  updated: string;
+};
+
+export type UserReportItem = {
+  id: string;
+  title: string;
+  status: string;
+  submitted: string;
+};
+
+export type UserReviewItem = {
+  id: string;
+  provider: string;
+  rating: number;
+  review: string;
+  date: string;
+};
+
+export type UserMetric = {
+  id: string;
+  label: string;
+  value: string;
+  note: string;
+  tone: StatusTone;
+};
+
+export type UserDetailRecord = {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  phone: string;
+  dob: string;
+  gender: string;
+  city: string;
+  joined: string;
+  lastLogin: string;
+  registeredAt: string;
+  device: string;
+  ipAddress: string;
+  referrer: string;
+  accountType: string;
+  loginCount: string;
+  failedLogins: string;
+  twoFactorAuth: string;
+  walletBalance: string;
+  totalSpent: string;
+  reviewsGiven: string;
+  reportsSubmitted: string;
+  completionRate: string;
+  cancellationRate: string;
+  averageRating: string;
+  emailVerifiedAt: string;
+  phoneVerifiedAt: string;
+  kycVerifiedAt: string;
+  addresses: UserAddress[];
+  timeline: UserTimelineItem[];
+  recentActions: UserActionItem[];
+  documents: UserDocumentItem[];
+  reports: UserReportItem[];
+  recentReviews: UserReviewItem[];
+  metrics: UserMetric[];
 };
