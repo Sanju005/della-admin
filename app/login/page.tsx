@@ -94,7 +94,7 @@ export default function LoginPage() {
             </div>
 
             <div className="mt-4 flex justify-end">
-              <Link href="/login" className="text-[15px] font-extrabold text-[#16A34A]">
+              <Link href="/forgot-password" className="text-[15px] font-extrabold text-[#16A34A]">
                 Forgot Password?
               </Link>
             </div>

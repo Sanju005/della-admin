@@ -4,7 +4,9 @@ import { AuthProvider, useAuth } from "./auth/auth-provider";
 import { AdminShell } from "./components/admin-shell";
 import { complaints, payments, providers, reviews, users, bookings } from "./data/mock-data";
 import { DashboardPage } from "./pages/dashboard-page";
+import { ForgotPasswordPage } from "./pages/forgot-password-page";
 import { LoginPage } from "./pages/login-page";
+import { ResetPasswordPage } from "./pages/reset-password-page";
 import { ResourcePage } from "./pages/resource-page";
 import { SettingsPage } from "./pages/settings-page";
 
@@ -86,6 +88,14 @@ const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginPage />,
+  },
+  {
+    path: "/forgot-password",
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: "/reset-password",
+    element: <ResetPasswordPage />,
   },
   {
     path: "/blocked",
