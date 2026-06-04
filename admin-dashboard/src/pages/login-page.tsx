@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/auth-provider";
 
 export function LoginPage() {
-  const { access, loading, signIn } = useAuth();
+  const { initialized, session, signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -13,16 +13,13 @@ export function LoginPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (loading) {
+    if (!initialized || !session) {
       return;
     }
 
-    if (access === "allowed") {
-      const from = (location.state as { from?: { pathname?: string } } | null)?.from;
-      navigate(from?.pathname ?? "/", { replace: true });
-    }
-
-  }, [access, loading, location.state, navigate]);
+    const from = (location.state as { from?: { pathname?: string } } | null)?.from;
+    navigate(from?.pathname ?? "/", { replace: true });
+  }, [initialized, session, location.state, navigate]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,6 +30,9 @@ export function LoginPage() {
 
       if (error) {
         setFormError(error);
+      } else {
+        const from = (location.state as { from?: { pathname?: string } } | null)?.from;
+        navigate(from?.pathname ?? "/", { replace: true });
       }
     } finally {
       setSubmitting(false);

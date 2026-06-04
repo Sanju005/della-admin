@@ -1,4 +1,3 @@
-import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
@@ -35,30 +34,10 @@ const SettingsPage = lazy(async () => {
   return { default: module.SettingsPage };
 });
 
-function LoadingScreen() {
-  return (
-    <div className="grid min-h-screen place-items-center bg-[linear-gradient(180deg,#f8fff9_0%,#eef8f0_50%,#f8fafc_100%)] px-6 text-center">
-      <div>
-        <div className="mx-auto grid size-16 place-items-center rounded-3xl bg-[linear-gradient(135deg,#0f8b3d,#7c3aed)] text-white shadow-[0_20px_60px_rgba(15,139,61,0.25)]">
-          <LoaderCircle className="size-7 animate-spin" />
-        </div>
-        <h1 className="mt-6 font-display text-3xl font-bold text-slate-950">
-          Preparing DELLA Admin
-        </h1>
-        <p className="mt-3 text-sm text-slate-500">
-          Verifying your session.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function RouteLoader() {
   return (
     <div className="grid min-h-[40vh] place-items-center">
-      <div className="mx-auto grid size-14 place-items-center rounded-3xl bg-[linear-gradient(135deg,#0f8b3d,#7c3aed)] text-white shadow-[0_20px_60px_rgba(15,139,61,0.25)]">
-        <LoaderCircle className="size-6 animate-spin" />
-      </div>
+      <div className="h-10 w-10 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" />
     </div>
   );
 }
@@ -68,14 +47,14 @@ function withSuspense(element: React.ReactNode) {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { access, loading } = useAuth();
+  const { initialized, session } = useAuth();
   const location = useLocation();
 
-  if (loading) {
-    return <LoadingScreen />;
+  if (!initialized) {
+    return null;
   }
 
-  if (access === "guest") {
+  if (!session) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

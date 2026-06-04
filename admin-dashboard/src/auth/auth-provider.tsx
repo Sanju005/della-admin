@@ -7,12 +7,11 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import type { AdminProfile, AuthAccess } from "../types";
+import type { AdminProfile } from "../types";
 
 type AuthContextValue = {
-  access: AuthAccess;
   authError: string | null;
-  loading: boolean;
+  initialized: boolean;
   profile: AdminProfile | null;
   session: Session | null;
   signIn: (email: string, password: string) => Promise<string | null>;
@@ -21,17 +20,9 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function resolveAccess(session: Session | null): AuthAccess {
-  if (!session) {
-    return "guest";
-  }
-
-  return "allowed";
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const profile = useMemo<AdminProfile | null>(() => {
     if (!session) {
@@ -53,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setAuthError("Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable auth.");
-      setLoading(false);
+      setInitialized(true);
       return;
     }
 
@@ -62,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       if (isMounted) {
         setSession(data.session);
-        setLoading(false);
+        setInitialized(true);
       }
     });
 
@@ -70,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setLoading(false);
+      setInitialized(true);
     });
 
     return () => {
@@ -81,9 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      access: resolveAccess(session),
       authError,
-      loading,
+      initialized,
       profile,
       session,
       async signIn(email, password) {
@@ -94,12 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(null);
 
         try {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
           if (error) {
             return "Wrong credentials";
           }
 
+          setSession(data.session ?? null);
           return null;
         } catch (error) {
           return error instanceof Error ? "Wrong credentials" : "Unable to sign in right now.";
@@ -110,10 +101,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        setSession(null);
         await supabase.auth.signOut();
       },
     }),
-    [authError, loading, profile, session]
+    [authError, initialized, profile, session]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
