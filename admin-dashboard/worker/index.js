@@ -37,16 +37,23 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 export default {
     fetch: function (request, env) {
         return __awaiter(this, void 0, void 0, function () {
-            var url, assetResponse, indexRequest;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var url, assetResponse, acceptsHtml, isAssetRequest, indexRequest;
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
                     case 0:
                         url = new URL(request.url);
                         return [4 /*yield*/, env.ASSETS.fetch(request)];
                     case 1:
-                        assetResponse = _a.sent();
+                        assetResponse = _c.sent();
+                        acceptsHtml = (_b = (_a = request.headers.get("accept")) === null || _a === void 0 ? void 0 : _a.includes("text/html")) !== null && _b !== void 0 ? _b : false;
+                        isAssetRequest = url.pathname.startsWith("/assets/") ||
+                            url.pathname.startsWith("/favicon") ||
+                            /\.[a-z0-9]+$/i.test(url.pathname);
                         if (request.method === "GET" &&
                             assetResponse.status === 404 &&
+                            acceptsHtml &&
+                            !isAssetRequest &&
                             !url.pathname.startsWith("/api/")) {
                             indexRequest = new Request(new URL("/index.html", url.origin), request);
                             return [2 /*return*/, env.ASSETS.fetch(indexRequest)];
