@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/auth-provider";
 
 export function LoginPage() {
-  const { access, loading, signIn, signOut } = useAuth();
+  const { access, loading, signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -22,11 +22,7 @@ export function LoginPage() {
       navigate(from?.pathname ?? "/", { replace: true });
     }
 
-    if (access === "denied") {
-      void signOut();
-      setFormError("Wrong credentials");
-    }
-  }, [access, loading, location.state, navigate, signOut]);
+  }, [access, loading, location.state, navigate]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,9 +88,7 @@ export function LoginPage() {
           </div>
 
           <p className="mt-5 text-sm leading-7 text-slate-500">
-            Sign in with your Supabase account. Access is granted only if your
-            `profiles.role` is one of `super_admin`, `admin`, `manager`, or
-            `customer_care`.
+            Sign in with your Supabase account.
           </p>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>

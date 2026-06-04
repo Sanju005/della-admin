@@ -1,4 +1,4 @@
-import { LoaderCircle, ShieldAlert } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
@@ -46,7 +46,7 @@ function LoadingScreen() {
           Preparing DELLA Admin
         </h1>
         <p className="mt-3 text-sm text-slate-500">
-          Verifying your session and checking admin access.
+          Verifying your session.
         </p>
       </div>
     </div>
@@ -67,43 +67,6 @@ function withSuspense(element: React.ReactNode) {
   return <Suspense fallback={<RouteLoader />}>{element}</Suspense>;
 }
 
-function BlockedPage() {
-  const { profile, signOut } = useAuth();
-
-  return (
-    <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,_rgba(251,113,133,0.15),_transparent_30%),linear-gradient(180deg,_#fff8f8_0%,_#fff5f5_45%,_#f8fafc_100%)] px-4">
-      <div className="max-w-xl rounded-[32px] border border-white/80 bg-white/95 p-8 text-center shadow-[0_28px_90px_rgba(15,23,42,0.12)]">
-        <div className="mx-auto grid size-16 place-items-center rounded-3xl bg-rose-100 text-rose-600">
-          <ShieldAlert className="size-8" />
-        </div>
-        <h1 className="mt-6 font-display text-4xl font-extrabold tracking-tight text-slate-950">
-          Access blocked
-        </h1>
-        <p className="mt-4 text-sm leading-7 text-slate-500">
-          This account is signed in, but the role in `profiles` is not allowed to use the
-          admin dashboard.
-        </p>
-        <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4 text-left text-sm text-slate-600">
-          <p>
-            <span className="font-semibold text-slate-900">Detected role:</span>{" "}
-            {profile?.role ?? "Unknown"}
-          </p>
-          <p className="mt-2">
-            Allowed roles: `super_admin`, `admin`, `manager`, `customer_care`
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="mt-6 rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white"
-        >
-          Sign out
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { access, loading } = useAuth();
   const location = useLocation();
@@ -114,10 +77,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (access === "guest") {
     return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
-  if (access === "denied") {
-    return <Navigate to="/blocked" replace />;
   }
 
   return <>{children}</>;
@@ -135,10 +94,6 @@ const router = createBrowserRouter([
   {
     path: "/reset-password",
     element: withSuspense(<ResetPasswordPage />),
-  },
-  {
-    path: "/blocked",
-    element: <BlockedPage />,
   },
   {
     path: "/",

@@ -10,8 +10,6 @@ import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import type { AdminProfile, AuthAccess } from "../types";
 
-const allowedRoles = new Set(["super_admin", "admin", "manager", "customer_care"]);
-
 type AuthContextValue = {
   access: AuthAccess;
   authError: string | null;
@@ -29,7 +27,7 @@ function resolveAccess(profile: AdminProfile | null, session: Session | null): A
     return "guest";
   }
 
-  return profile?.role && allowedRoles.has(profile.role) ? "allowed" : "denied";
+  return "allowed";
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -115,20 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(null);
 
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-          if (error || !data.user) {
-            return "Wrong credentials";
-          }
-
-          const { data: nextProfile, error: profileError } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", data.user.id)
-            .maybeSingle<{ role: string | null }>();
-
-          if (profileError || !nextProfile?.role || !allowedRoles.has(nextProfile.role)) {
-            await supabase.auth.signOut();
+          if (error) {
             return "Wrong credentials";
           }
 
