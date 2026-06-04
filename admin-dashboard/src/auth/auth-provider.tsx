@@ -115,10 +115,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(null);
 
         try {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
-          return error?.message ?? null;
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+          if (error || !data.user) {
+            return "Wrong credentials";
+          }
+
+          const { data: nextProfile, error: profileError } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", data.user.id)
+            .maybeSingle<{ role: string | null }>();
+
+          if (profileError || !nextProfile?.role || !allowedRoles.has(nextProfile.role)) {
+            await supabase.auth.signOut();
+            return "Wrong credentials";
+          }
+
+          return null;
         } catch (error) {
-          return error instanceof Error ? error.message : "Unable to sign in right now.";
+          return error instanceof Error ? "Wrong credentials" : "Unable to sign in right now.";
         }
       },
       async signOut() {

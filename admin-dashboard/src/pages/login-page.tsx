@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/auth-provider";
 
 export function LoginPage() {
-  const { access, authError, loading, signIn } = useAuth();
+  const { access, loading, signIn, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -23,9 +23,10 @@ export function LoginPage() {
     }
 
     if (access === "denied") {
-      navigate("/blocked", { replace: true });
+      void signOut();
+      setFormError("Wrong credentials");
     }
-  }, [access, loading, location.state, navigate]);
+  }, [access, loading, location.state, navigate, signOut]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,7 +103,10 @@ export function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFormError(null);
+                }}
                 placeholder="admin@dellaapp.com"
                 autoComplete="username"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-slate-950 outline-none transition focus:border-emerald-400 focus:bg-white"
@@ -114,7 +118,10 @@ export function LoginPage() {
               <input
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setFormError(null);
+                }}
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-slate-950 outline-none transition focus:border-emerald-400 focus:bg-white"
@@ -128,9 +135,9 @@ export function LoginPage() {
               </Link>
             </div>
 
-            {formError || authError ? (
+            {formError ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {formError ?? authError}
+                {formError}
               </div>
             ) : null}
 
@@ -142,11 +149,6 @@ export function LoginPage() {
               {submitting ? "Signing in..." : "Sign in to admin"}
             </button>
           </form>
-
-          <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-            Normal customers and providers are blocked automatically after login.
-            If you need admin access, update the role in the shared `profiles` table.
-          </div>
 
           <p className="mt-6 text-sm text-slate-500">
             Main marketplace:{" "}
