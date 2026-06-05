@@ -21,10 +21,16 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
-import { InfoRow, MetricTile, MiniStatus, PillBadge, ReviewStars, SurfaceCard, TableShell } from "../components/user-detail-ui";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { InfoRow, MetricTile, MiniStatus, PillBadge, SurfaceCard, TableShell } from "../components/user-detail-ui";
 import { providerDetailRecords } from "../data/provider-detail-mocks";
+import {
+  getProviderProfileWithFallback,
+  setProviderSuspended,
+  setProviderVisibility,
+  updateProviderProfile,
+} from "../lib/admin-providers";
 import type { ProviderDetailRecord } from "../types";
 
 const tabs = [
@@ -123,39 +129,248 @@ function renderSimpleRows(title: string, headers: string[], rows: string[][]) {
 
 export function ProviderProfilePage() {
   const { providerId = "" } = useParams();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>("Overview");
   const [message, setMessage] = useState<string | null>(null);
-  const record = providerDetailRecords[providerId] ?? providerDetailRecords["PRV-2034"]!;
+  const [provider, setProvider] = useState<ProviderDetailRecord | null>(
+    providerDetailRecords[providerId] ?? providerDetailRecords["PRV-2034"] ?? null
+  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    name: provider?.name ?? "",
+    email: provider?.email ?? "",
+    phone: provider?.phone ?? "",
+    serviceArea: provider?.serviceArea ?? "",
+    about: provider?.about ?? "",
+  });
 
-  const provider = useMemo<ProviderDetailRecord>(() => record, [record]);
+  useEffect(() => {
+    let active = true;
+
+    setActiveTab("Overview");
+    setMessage(null);
+    setLoading(true);
+
+    async function loadProvider() {
+      const fallback = providerDetailRecords[providerId] ?? providerDetailRecords["PRV-2034"] ?? null;
+
+      if (active) {
+        setProvider(fallback);
+      }
+
+      const payload = await getProviderProfileWithFallback(providerId);
+
+      if (!active) {
+        return;
+      }
+
+      setProvider(payload.detail);
+      setForm({
+        name: payload.detail?.name ?? "",
+        email: payload.detail?.email ?? "",
+        phone: payload.detail?.phone ?? "",
+        serviceArea: payload.detail?.serviceArea ?? "",
+        about: payload.detail?.about ?? "",
+      });
+      setLoading(false);
+    }
+
+    void loadProvider();
+
+    return () => {
+      active = false;
+    };
+  }, [providerId]);
 
   function flash(nextMessage: string) {
     setMessage(nextMessage);
+  }
+
+  if (loading && !provider) {
+    return (
+      <div className="grid min-h-[40vh] place-items-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!provider) {
+    return (
+      <SurfaceCard title="Provider Details">
+        <p className="text-sm text-slate-500">Provider record was not found.</p>
+      </SurfaceCard>
+    );
+  }
+
+  const detail = provider;
+
+  async function handleSaveProfile() {
+    if (saving) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await updateProviderProfile(detail.providerId, {
+      full_name: form.name,
+      email: form.email,
+      phone: form.phone,
+      marketing_name: form.name,
+      service_location: form.serviceArea,
+      bio: form.about,
+    });
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    setProvider((current) =>
+      current
+        ? {
+            ...current,
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            serviceArea: form.serviceArea,
+            about: form.about,
+          }
+        : current
+    );
+    setEditing(false);
+    flash("Provider details updated.");
+  }
+
+  async function handleSuspend() {
+    if (saving) {
+      return;
+    }
+
+    const suspended = detail.status !== "Suspended";
+    setSaving(true);
+    const result = await setProviderSuspended(detail.providerId, suspended);
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    setProvider((current) =>
+      current ? { ...current, status: suspended ? "Suspended" : "Active" } : current
+    );
+    flash(suspended ? "Provider suspended." : "Provider restored.");
+  }
+
+  async function handleDeactivate() {
+    if (saving) {
+      return;
+    }
+
+    const confirmed = window.confirm("Deactivate this provider?");
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await setProviderVisibility(detail.providerId, false);
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    setProvider((current) => (current ? { ...current, status: "Paused" } : current));
+    flash("Provider deactivated.");
+    window.setTimeout(() => {
+      navigate("/service-providers");
+    }, 500);
   }
 
   function renderOverview() {
     return (
       <>
         <section className="grid gap-4 xl:grid-cols-[1.03fr_0.95fr_0.78fr_1fr]">
-          <SurfaceCard
-            title="Personal Details"
-            action={
-              <button className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-                Edit
-              </button>
-            }
-          >
-            <div className="space-y-4">
-              <InfoRow label="Full Name" value={provider.name} icon={<UserCircle2 className="size-4" />} />
-              <InfoRow label="Email Address" value={provider.email} icon={<Mail className="size-4" />} />
-              <InfoRow label="Phone Number" value={provider.phone} icon={<Phone className="size-4" />} />
-              <InfoRow label="Date of Birth" value={provider.dob} icon={<CalendarDays className="size-4" />} />
-              <InfoRow label="Gender" value={provider.gender} icon={<ShieldCheck className="size-4" />} />
-              <InfoRow label="Language" value={provider.language} icon={<Languages className="size-4" />} />
-              <InfoRow label="NRIC / ID Number" value={provider.nationalId} icon={<FileBadge2 className="size-4" />} />
-              <InfoRow label="Emergency Contact" value={provider.emergencyContact} icon={<Phone className="size-4" />} />
-              <InfoRow label="Address" value={<span className="whitespace-pre-line">{provider.address}</span>} icon={<MapPin className="size-4" />} />
+            <SurfaceCard
+              title="Personal Details"
+              action={
+                <button
+                  type="button"
+                  onClick={() => setEditing((current) => !current)}
+                  className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700"
+                >
+                  {editing ? "Cancel" : "Edit"}
+                </button>
+              }
+            >
+              <div className="space-y-4">
+              <InfoRow
+                label="Full Name"
+                value={
+                  editing ? (
+                    <input
+                      value={form.name}
+                      onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : (
+                    detail.name
+                  )
+                }
+                icon={<UserCircle2 className="size-4" />}
+              />
+              <InfoRow
+                label="Email Address"
+                value={
+                  editing ? (
+                    <input
+                      value={form.email}
+                      onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : (
+                    detail.email
+                  )
+                }
+                icon={<Mail className="size-4" />}
+              />
+              <InfoRow
+                label="Phone Number"
+                value={
+                  editing ? (
+                    <input
+                      value={form.phone}
+                      onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : (
+                    detail.phone
+                  )
+                }
+                icon={<Phone className="size-4" />}
+              />
+              <InfoRow label="Date of Birth" value={detail.dob} icon={<CalendarDays className="size-4" />} />
+              <InfoRow label="Gender" value={detail.gender} icon={<ShieldCheck className="size-4" />} />
+              <InfoRow label="Language" value={detail.language} icon={<Languages className="size-4" />} />
+              <InfoRow label="NRIC / ID Number" value={detail.nationalId} icon={<FileBadge2 className="size-4" />} />
+              <InfoRow label="Emergency Contact" value={detail.emergencyContact} icon={<Phone className="size-4" />} />
+              <InfoRow label="Address" value={<span className="whitespace-pre-line">{detail.address}</span>} icon={<MapPin className="size-4" />} />
             </div>
+            {editing ? (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            ) : null}
           </SurfaceCard>
 
           <div className="space-y-4">
@@ -168,7 +383,7 @@ export function ProviderProfilePage() {
               }
             >
               <div className="space-y-4">
-                {provider.serviceAreas.map((area) => (
+                {detail.serviceAreas.map((area) => (
                   <div key={area.id} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 text-sm text-slate-700">
                       <MapPin className="size-4 text-slate-400" />
@@ -186,10 +401,10 @@ export function ProviderProfilePage() {
 
             <SurfaceCard title="Quick Summary">
               <div className="grid gap-4 sm:grid-cols-2">
-                <SummaryMetric label="Average Rating" value={provider.averageRating} />
-                <SummaryMetric label="Total Reviews" value={provider.totalReviews} />
-                <SummaryMetric label="On-time Rate" value={provider.onTimeRate} />
-                <SummaryMetric label="Repeat Customers" value={provider.repeatCustomers} />
+                <SummaryMetric label="Average Rating" value={detail.averageRating} />
+                <SummaryMetric label="Total Reviews" value={detail.totalReviews} />
+                <SummaryMetric label="On-time Rate" value={detail.onTimeRate} />
+                <SummaryMetric label="Repeat Customers" value={detail.repeatCustomers} />
               </div>
             </SurfaceCard>
           </div>
@@ -199,43 +414,43 @@ export function ProviderProfilePage() {
               <div className="space-y-4 text-sm">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Account Status</span>
-                  <MiniStatus status={provider.status} />
+                  <MiniStatus status={detail.status} />
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Approval Status</span>
-                  <MiniStatus status={provider.approvalStatus} />
+                  <MiniStatus status={detail.approvalStatus} />
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Background Check</span>
-                  <MiniStatus status={provider.backgroundCheck} />
+                  <MiniStatus status={detail.backgroundCheck} />
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">KYC Status</span>
-                  <MiniStatus status={provider.kycStatus} />
+                  <MiniStatus status={detail.kycStatus} />
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Member Since</span>
-                  <span className="font-medium text-slate-900">{provider.memberSince}</span>
+                  <span className="font-medium text-slate-900">{detail.memberSince}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Last Login</span>
-                  <span className="font-medium text-slate-900">{provider.lastLogin}</span>
+                  <span className="font-medium text-slate-900">{detail.lastLogin}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Device</span>
-                  <span className="font-medium text-slate-900">{provider.device}</span>
+                  <span className="font-medium text-slate-900">{detail.device}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Completed Jobs</span>
-                  <span className="font-medium text-slate-900">{provider.completedJobs}</span>
+                  <span className="font-medium text-slate-900">{detail.completedJobs}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Cancellation Rate</span>
-                  <span className="font-medium text-slate-900">{provider.cancellationRate}</span>
+                  <span className="font-medium text-slate-900">{detail.cancellationRate}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Response Rate</span>
-                  <span className="font-medium text-slate-900">{provider.responseRate}</span>
+                  <span className="font-medium text-slate-900">{detail.responseRate}</span>
                 </div>
               </div>
             </SurfaceCard>
@@ -243,12 +458,20 @@ export function ProviderProfilePage() {
 
           <div className="space-y-4">
             <SurfaceCard title="About Provider">
-              <p className="text-sm leading-7 text-slate-600">{provider.about}</p>
+              {editing ? (
+                <textarea
+                  value={form.about}
+                  onChange={(event) => setForm((current) => ({ ...current, about: event.target.value }))}
+                  className="min-h-[132px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+                />
+              ) : (
+                <p className="text-sm leading-7 text-slate-600">{detail.about}</p>
+              )}
 
               <div className="mt-8">
                 <h4 className="text-base font-bold text-slate-950">Skills & Services</h4>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {provider.skills.map((skill) => (
+                  {detail.skills.map((skill) => (
                     <span
                       key={skill.id}
                       className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-600"
@@ -265,7 +488,7 @@ export function ProviderProfilePage() {
                   <button className="text-xs font-semibold text-emerald-700">View all</button>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {provider.documents.map((document) => (
+                  {detail.documents.map((document) => (
                     <div key={document.id} className="flex items-center justify-between gap-3 text-sm">
                       <div className="flex items-center gap-3 text-slate-700">
                         <FileText className="size-4 text-slate-400" />
@@ -286,14 +509,14 @@ export function ProviderProfilePage() {
         <section className="grid gap-4 xl:grid-cols-3">
           <SurfaceCard title="Availability">
             <div className="grid gap-4 sm:grid-cols-2">
-              <SummaryMetric label="Working Days" value={provider.workingDays} />
-              <SummaryMetric label="Working Hours" value={provider.workingHours} />
+              <SummaryMetric label="Working Days" value={detail.workingDays} />
+              <SummaryMetric label="Working Hours" value={detail.workingHours} />
             </div>
           </SurfaceCard>
 
           <SurfaceCard title="Recent Actions">
             <div className="space-y-3">
-              {provider.recentActions.map((action) => (
+              {detail.recentActions.map((action) => (
                 <div key={action.id} className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm text-slate-700">
                     <TimerReset className="size-4 text-slate-400" />
@@ -307,7 +530,7 @@ export function ProviderProfilePage() {
 
           <SurfaceCard title="Activity Log">
             <div className="space-y-4">
-              {provider.activityLog.map((item) => (
+              {detail.activityLog.map((item) => (
                 <div key={item.id} className="rounded-2xl bg-slate-50 px-4 py-3">
                   <p className="text-sm font-semibold text-slate-900">{item.title}</p>
                   <p className="mt-1 text-[13px] text-slate-500">{item.note}</p>
@@ -332,7 +555,7 @@ export function ProviderProfilePage() {
                 </tr>
               </thead>
               <tbody>
-                {provider.completedTaskRows.map((task) => (
+                {detail.completedTaskRows.map((task) => (
                   <tr key={task.id} className="border-b border-slate-50">
                     <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
                     <td className="py-3">{task.service}</td>
@@ -359,7 +582,7 @@ export function ProviderProfilePage() {
                 </tr>
               </thead>
               <tbody>
-                {provider.upcomingTaskRows.map((task) => (
+                {detail.upcomingTaskRows.map((task) => (
                   <tr key={task.id} className="border-b border-slate-50">
                     <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
                     <td className="py-3">{task.service}</td>
@@ -385,7 +608,7 @@ export function ProviderProfilePage() {
                 </tr>
               </thead>
               <tbody>
-                {provider.payoutRows.map((row) => (
+                {detail.payoutRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-50">
                     <td className="py-3 font-semibold text-slate-700">{row.id}</td>
                     <td className="py-3">{row.type}</td>
@@ -409,11 +632,11 @@ export function ProviderProfilePage() {
           <div className="flex flex-col gap-5 sm:flex-row">
             <div className="relative">
               <div
-                className={`grid size-[104px] shrink-0 place-items-center rounded-[30px] bg-gradient-to-br ${avatarGradient(provider.name)} shadow-inner ring-8 ring-slate-50`}
+                className={`grid size-[104px] shrink-0 place-items-center rounded-[30px] bg-gradient-to-br ${avatarGradient(detail.name)} shadow-inner ring-8 ring-slate-50`}
               >
                 <div className="grid size-[82px] place-items-center rounded-[26px] bg-white/70 backdrop-blur">
                   <span className="font-display text-[2rem] font-extrabold text-slate-700">
-                    {initials(provider.name)}
+                    {initials(detail.name)}
                   </span>
                 </div>
               </div>
@@ -423,19 +646,19 @@ export function ProviderProfilePage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="font-display text-[2rem] font-extrabold tracking-tight text-slate-950">
-                  {provider.name}
+                  {detail.name}
                 </h1>
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                  {provider.status}
+                  {detail.status}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-slate-500">Provider ID: {provider.providerId}</p>
+              <p className="mt-1 text-sm text-slate-500">Provider ID: {detail.providerId}</p>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <PillBadge tone="emerald"><BadgeCheck className="size-3.5" /> Email Verified</PillBadge>
                 <PillBadge tone="emerald"><Phone className="size-3.5" /> Phone Verified</PillBadge>
                 <PillBadge tone="emerald"><ShieldCheck className="size-3.5" /> KYC Verified</PillBadge>
-                <PillBadge tone="blue">{provider.roleBadge}</PillBadge>
+                <PillBadge tone="blue">{detail.roleBadge}</PillBadge>
               </div>
 
               <div className="mt-5 grid gap-4 text-sm text-slate-500 sm:grid-cols-2 xl:grid-cols-5">
@@ -443,35 +666,35 @@ export function ProviderProfilePage() {
                   <CalendarDays className="mt-0.5 size-4 text-slate-400" />
                   <div>
                     <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Joined</p>
-                    <p className="mt-1 font-medium text-slate-900">{provider.joinedAt}</p>
+                    <p className="mt-1 font-medium text-slate-900">{detail.joinedAt}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <Clock3 className="mt-0.5 size-4 text-slate-400" />
                   <div>
                     <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Last Login</p>
-                    <p className="mt-1 font-medium text-slate-900">{provider.lastLogin}</p>
+                    <p className="mt-1 font-medium text-slate-900">{detail.lastLogin}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <BriefcaseBusiness className="mt-0.5 size-4 text-slate-400" />
                   <div>
                     <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Type</p>
-                    <p className="mt-1 font-medium text-slate-900">{provider.serviceType}</p>
+                    <p className="mt-1 font-medium text-slate-900">{detail.serviceType}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <MapPin className="mt-0.5 size-4 text-slate-400" />
                   <div>
                     <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Area</p>
-                    <p className="mt-1 font-medium text-slate-900">{provider.serviceArea}</p>
+                    <p className="mt-1 font-medium text-slate-900">{detail.serviceArea}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <Star className="mt-0.5 size-4 text-amber-400" />
                   <div>
                     <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Rating</p>
-                    <p className="mt-1 font-medium text-slate-900">{provider.rating} {provider.ratingNote}</p>
+                    <p className="mt-1 font-medium text-slate-900">{detail.rating} {detail.ratingNote}</p>
                   </div>
                 </div>
               </div>
@@ -482,6 +705,7 @@ export function ProviderProfilePage() {
             <button
               type="button"
               onClick={() => flash("Public provider profile opened.")}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700"
             >
               <Eye className="size-4" />
@@ -489,15 +713,17 @@ export function ProviderProfilePage() {
             </button>
             <button
               type="button"
-              onClick={() => flash("Provider suspended.")}
+              onClick={handleSuspend}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 px-5 py-3 text-sm font-semibold text-amber-700"
             >
               <Ban className="size-4" />
-              Suspend Provider
+              {detail.status === "Suspended" ? "Restore Provider" : "Suspend Provider"}
             </button>
             <button
               type="button"
               onClick={() => flash("Password reset link sent.")}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 px-5 py-3 text-sm font-semibold text-blue-700"
             >
               <KeyRound className="size-4" />
@@ -505,7 +731,8 @@ export function ProviderProfilePage() {
             </button>
             <button
               type="button"
-              onClick={() => flash("Provider deactivated.")}
+              onClick={handleDeactivate}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 px-5 py-3 text-sm font-semibold text-rose-600"
             >
               <Trash2 className="size-4" />
@@ -522,7 +749,7 @@ export function ProviderProfilePage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-8">
-        {provider.metrics.map((metric, index) => (
+        {detail.metrics.map((metric, index) => (
           <MetricTile
             key={metric.id}
             icon={metricIcons[index] ?? <BriefcaseBusiness className="size-5" />}
@@ -559,7 +786,7 @@ export function ProviderProfilePage() {
         ? renderSimpleRows(
             "All Tasks",
             ["Task ID", "Service", "Customer", "Date", "Amount", "Status"],
-            [...provider.completedTaskRows, ...provider.upcomingTaskRows.map((task) => ({
+            [...detail.completedTaskRows, ...detail.upcomingTaskRows.map((task) => ({
               id: task.id,
               service: task.service,
               customer: task.customer,
@@ -573,7 +800,7 @@ export function ProviderProfilePage() {
         ? renderSimpleRows(
             "Payments & Withdrawals",
             ["ID", "Type", "Amount", "Date", "Status"],
-            provider.payoutRows.map((row) => [row.id, row.type, row.amount, row.date, row.status])
+            detail.payoutRows.map((row) => [row.id, row.type, row.amount, row.date, row.status])
           )
         : null}
       {activeTab === "Reviews"
@@ -581,10 +808,10 @@ export function ProviderProfilePage() {
             "Reviews",
             ["Metric", "Value"],
             [
-              ["Average Rating", provider.averageRating],
-              ["Total Reviews", provider.totalReviews],
-              ["On-time Rate", provider.onTimeRate],
-              ["Repeat Customers", provider.repeatCustomers],
+              ["Average Rating", detail.averageRating],
+              ["Total Reviews", detail.totalReviews],
+              ["On-time Rate", detail.onTimeRate],
+              ["Repeat Customers", detail.repeatCustomers],
             ]
           )
         : null}
@@ -592,13 +819,13 @@ export function ProviderProfilePage() {
         <SurfaceCard title="Profile & Documents">
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="space-y-4">
-              <InfoRow label="Provider Name" value={provider.name} icon={<UserCircle2 className="size-4" />} />
-              <InfoRow label="Service Type" value={provider.serviceType} icon={<BriefcaseBusiness className="size-4" />} />
-              <InfoRow label="Email" value={provider.email} icon={<Mail className="size-4" />} />
-              <InfoRow label="Phone" value={provider.phone} icon={<Phone className="size-4" />} />
+              <InfoRow label="Provider Name" value={detail.name} icon={<UserCircle2 className="size-4" />} />
+              <InfoRow label="Service Type" value={detail.serviceType} icon={<BriefcaseBusiness className="size-4" />} />
+              <InfoRow label="Email" value={detail.email} icon={<Mail className="size-4" />} />
+              <InfoRow label="Phone" value={detail.phone} icon={<Phone className="size-4" />} />
             </div>
             <div className="space-y-3">
-              {provider.documents.map((document) => (
+              {detail.documents.map((document) => (
                 <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
                   <div className="flex items-center gap-3 text-sm text-slate-700">
                     <FileText className="size-4 text-slate-400" />
@@ -614,7 +841,7 @@ export function ProviderProfilePage() {
       {activeTab === "Service Areas" ? (
         <SurfaceCard title="Service Areas">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {provider.serviceAreas.map((area) => (
+            {detail.serviceAreas.map((area) => (
               <div key={area.id} className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2">
@@ -635,7 +862,7 @@ export function ProviderProfilePage() {
       {activeTab === "Activity Log" ? (
         <SurfaceCard title="Activity Log">
           <div className="space-y-4">
-            {provider.activityLog.map((item) => (
+            {detail.activityLog.map((item) => (
               <div key={item.id} className="rounded-2xl bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold text-slate-900">{item.title}</p>
                 <p className="mt-1 text-[13px] text-slate-500">{item.note}</p>

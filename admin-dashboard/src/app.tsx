@@ -1,8 +1,8 @@
 import { Suspense, lazy } from "react";
-import { Link, Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
+import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
 import { AdminShell } from "./components/admin-shell";
-import { complaints, payments, providers, reviews, bookings } from "./data/mock-data";
+import { complaints, payments, providers as mockProviders, reviews, bookings } from "./data/mock-data";
 
 const DashboardPage = lazy(async () => {
   const module = await import("./pages/dashboard-page");
@@ -42,6 +42,11 @@ const UserProfilePage = lazy(async () => {
 const ProviderProfilePage = lazy(async () => {
   const module = await import("./pages/provider-profile-page");
   return { default: module.ProviderProfilePage };
+});
+
+const ProvidersPage = lazy(async () => {
+  const module = await import("./pages/providers-page");
+  return { default: module.ProvidersPage };
 });
 
 const UsersPage = lazy(async () => {
@@ -119,40 +124,7 @@ const router = createBrowserRouter([
       },
       {
         path: "service-providers",
-        element: withSuspense((
-          <ResourcePage
-            title="Service Providers"
-            description="Provider health, approval state, and geographic coverage."
-            rows={providers}
-            columns={[
-              {
-                key: "id",
-                label: "ID",
-                render: (row) => (
-                  <Link
-                    to={`/service-providers/${row.id}`}
-                    className="font-semibold text-emerald-700 hover:text-emerald-800"
-                  >
-                    {String(row.id)}
-                  </Link>
-                ),
-              },
-              { key: "provider", label: "Provider" },
-              { key: "service", label: "Service" },
-              { key: "rating", label: "Rating" },
-              { key: "status", label: "Status" },
-              { key: "zone", label: "Zone" },
-              { key: "verification", label: "Verification" },
-            ]}
-            statusKey="status"
-            searchPlaceholder="Search providers, zones, or service types..."
-            stats={[
-              { label: "Approved", value: "2,105", note: "Visible in the marketplace" },
-              { label: "Pending", value: "132", note: "Waiting for manual review" },
-              { label: "Paused", value: "113", note: "Temporarily hidden or inactive" },
-            ]}
-          />
-        )),
+        element: withSuspense(<ProvidersPage />),
       },
       {
         path: "service-providers/:providerId",
@@ -164,7 +136,7 @@ const router = createBrowserRouter([
           <ResourcePage
             title="Provider Approvals"
             description="Pending provider and listing approval decisions."
-            rows={providers.filter((provider) => provider.status !== "Approved")}
+            rows={mockProviders.filter((provider) => provider.status !== "Approved")}
             columns={[
               { key: "id", label: "ID" },
               { key: "provider", label: "Provider" },
