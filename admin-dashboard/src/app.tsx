@@ -1,8 +1,8 @@
 import { Suspense, lazy } from "react";
-import { Link, Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
+import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
 import { AdminShell } from "./components/admin-shell";
-import { complaints, payments, providers, reviews, users, bookings } from "./data/mock-data";
+import { complaints, payments, providers, reviews, bookings } from "./data/mock-data";
 
 const DashboardPage = lazy(async () => {
   const module = await import("./pages/dashboard-page");
@@ -37,6 +37,11 @@ const SettingsPage = lazy(async () => {
 const UserProfilePage = lazy(async () => {
   const module = await import("./pages/user-profile-page");
   return { default: module.UserProfilePage };
+});
+
+const UsersPage = lazy(async () => {
+  const module = await import("./pages/users-page");
+  return { default: module.UsersPage };
 });
 
 function RouteLoader() {
@@ -101,40 +106,7 @@ const router = createBrowserRouter([
       },
       {
         path: "users",
-        element: withSuspense((
-          <ResourcePage
-            title="Users"
-            description="Customer, provider, and internal user management at a glance."
-            rows={users}
-            columns={[
-              {
-                key: "id",
-                label: "ID",
-                render: (row) => (
-                  <Link
-                    to={`/users/${row.id}`}
-                    className="font-semibold text-emerald-700 hover:text-emerald-800"
-                  >
-                    {String(row.id)}
-                  </Link>
-                ),
-              },
-              { key: "name", label: "Name" },
-              { key: "email", label: "Email" },
-              { key: "role", label: "Role" },
-              { key: "status", label: "Status" },
-              { key: "city", label: "City" },
-              { key: "joined", label: "Joined" },
-            ]}
-            statusKey="status"
-            searchPlaceholder="Search users by name, email, or role..."
-            stats={[
-              { label: "Active users", value: "9,856", note: "76.7% of total users" },
-              { label: "Internal admins", value: "48", note: "Operational and support staff" },
-              { label: "Suspended", value: "844", note: "Accounts needing review" },
-            ]}
-          />
-        )),
+        element: withSuspense(<UsersPage />),
       },
       {
         path: "users/:userId",

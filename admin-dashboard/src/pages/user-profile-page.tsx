@@ -20,8 +20,8 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   InfoRow,
   MetricTile,
@@ -33,8 +33,14 @@ import {
   TimelineItem,
   VerificationDot,
 } from "../components/user-detail-ui";
-import { bookings, payments } from "../data/mock-data";
 import { userDetailRecords } from "../data/user-detail-mocks";
+import {
+  deleteUserRecord,
+  getUserProfileWithFallback,
+  setUserSuspended,
+  updateUserProfile,
+} from "../lib/admin-users";
+import type { DashboardBooking, PaymentRow, UserDetailRecord } from "../types";
 
 const tabs = [
   "Overview",
@@ -79,38 +85,71 @@ function avatarGradient(name: string) {
   return palette[index];
 }
 
-function isUserBooking(recordName: string, role: string, customer: string, provider: string) {
-  return role === "provider"
-    ? provider.trim().toLowerCase() === recordName.trim().toLowerCase()
-    : customer.trim().toLowerCase() === recordName.trim().toLowerCase();
-}
-
 export function UserProfilePage() {
   const { userId = "" } = useParams();
-  const record = userDetailRecords[userId];
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>("Overview");
+  const [record, setRecord] = useState<UserDetailRecord | null>(userDetailRecords[userId] ?? null);
+  const [relatedBookings, setRelatedBookings] = useState<DashboardBooking[]>([]);
+  const [relatedPayments, setRelatedPayments] = useState<PaymentRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(record?.status ?? "Active");
   const [message, setMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    name: record?.name ?? "",
+    email: record?.email ?? "",
+    phone: record?.phone ?? "",
+  });
 
-  const relatedBookings = useMemo(() => {
-    if (!record) {
-      return [];
+  useEffect(() => {
+    let active = true;
+
+    setActiveTab("Overview");
+    setMessage(null);
+    setLoading(true);
+
+    async function loadUser() {
+      const fallbackRecord = userDetailRecords[userId] ?? null;
+
+      if (active) {
+        setRecord(fallbackRecord);
+        setStatus(fallbackRecord?.status ?? "Active");
+      }
+
+      const payload = await getUserProfileWithFallback(userId);
+
+      if (!active) {
+        return;
+      }
+
+      setRecord(payload.detail);
+      setRelatedBookings(payload.relatedBookings);
+      setRelatedPayments(payload.relatedPayments);
+      setStatus(payload.detail?.status ?? "Active");
+      setForm({
+        name: payload.detail?.name ?? "",
+        email: payload.detail?.email ?? "",
+        phone: payload.detail?.phone ?? "",
+      });
+      setLoading(false);
     }
 
-    return bookings.filter((booking) =>
-      isUserBooking(record.name, record.role, booking.customer, booking.provider)
-    );
-  }, [record]);
+    void loadUser();
 
-  const relatedPayments = useMemo(() => {
-    if (!record) {
-      return [];
-    }
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
-    return payments.filter((payment) =>
-      isUserBooking(record.name, record.role, payment.customer, payment.provider)
+  if (loading && !record) {
+    return (
+      <div className="grid min-h-[40vh] place-items-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+      </div>
     );
-  }, [record]);
+  }
 
   if (!record) {
     return (
@@ -127,10 +166,81 @@ export function UserProfilePage() {
     setMessage(nextMessage);
   }
 
-  function handleSuspend() {
+  async function handleSuspend() {
+    if (!record || saving) {
+      return;
+    }
+
     const nextStatus = status === "Suspended" ? "Active" : "Suspended";
+    setSaving(true);
+    const result = await setUserSuspended(record.userId, nextStatus === "Suspended");
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
     setStatus(nextStatus);
+    setRecord((current) => (current ? { ...current, status: nextStatus } : current));
     flash(nextStatus === "Suspended" ? "User suspended." : "User restored.");
+  }
+
+  async function handleSaveProfile() {
+    if (!record || saving) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await updateUserProfile(record.userId, {
+      full_name: form.name,
+      email: form.email,
+      phone: form.phone,
+    });
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    setRecord((current) =>
+      current
+        ? {
+            ...current,
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+          }
+        : current
+    );
+    setEditing(false);
+    flash("User details updated.");
+  }
+
+  async function handleDeleteUser() {
+    if (!record || saving) {
+      return;
+    }
+
+    const confirmed = window.confirm("Delete this user?");
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await deleteUserRecord(record.userId);
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    flash(result.mode === "soft-deleted" ? "User marked as deleted." : "User deleted.");
+    window.setTimeout(() => {
+      navigate("/users");
+    }, 500);
   }
 
   function renderOverview() {
@@ -143,21 +253,75 @@ export function UserProfilePage() {
               action={
                 <button
                   type="button"
-                  onClick={() => flash("Edit mode opened.")}
+                  onClick={() => setEditing((current) => !current)}
                   className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700"
                 >
-                  Edit
+                  {editing ? "Cancel" : "Edit"}
                 </button>
               }
             >
               <div className="space-y-4">
-                <InfoRow label="Full Name" value={detail.name} icon={<UserCircle2 className="size-4" />} />
-                <InfoRow label="Email Address" value={detail.email} icon={<Mail className="size-4" />} />
-                <InfoRow label="Phone Number" value={detail.phone} icon={<Phone className="size-4" />} />
+                <InfoRow
+                  label="Full Name"
+                  value={
+                    editing ? (
+                      <input
+                        value={form.name}
+                        onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.name
+                    )
+                  }
+                  icon={<UserCircle2 className="size-4" />}
+                />
+                <InfoRow
+                  label="Email Address"
+                  value={
+                    editing ? (
+                      <input
+                        value={form.email}
+                        onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.email
+                    )
+                  }
+                  icon={<Mail className="size-4" />}
+                />
+                <InfoRow
+                  label="Phone Number"
+                  value={
+                    editing ? (
+                      <input
+                        value={form.phone}
+                        onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.phone
+                    )
+                  }
+                  icon={<Phone className="size-4" />}
+                />
                 <InfoRow label="Date of Birth" value={detail.dob} icon={<CalendarDays className="size-4" />} />
                 <InfoRow label="Gender" value={detail.gender} icon={<Shield className="size-4" />} />
                 <InfoRow label="City" value={detail.city} icon={<MapPin className="size-4" />} />
               </div>
+              {editing ? (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveProfile}
+                    disabled={saving}
+                    className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              ) : null}
             </SurfaceCard>
 
             <SurfaceCard
@@ -482,7 +646,8 @@ export function UserProfilePage() {
           <div className="flex flex-wrap gap-3 xl:max-w-[580px] xl:justify-end">
             <button
               type="button"
-              onClick={() => flash("Edit user panel opened.")}
+              onClick={() => setEditing(true)}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700"
             >
               <Edit3 className="size-4" />
@@ -491,6 +656,7 @@ export function UserProfilePage() {
             <button
               type="button"
               onClick={handleSuspend}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 px-5 py-3 text-sm font-semibold text-amber-700"
             >
               <Ban className="size-4" />
@@ -499,6 +665,7 @@ export function UserProfilePage() {
             <button
               type="button"
               onClick={() => flash("Password reset link sent.")}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 px-5 py-3 text-sm font-semibold text-blue-700"
             >
               <KeyRound className="size-4" />
@@ -506,7 +673,8 @@ export function UserProfilePage() {
             </button>
             <button
               type="button"
-              onClick={() => flash("User deleted from mock state.")}
+              onClick={handleDeleteUser}
+              disabled={saving}
               className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 px-5 py-3 text-sm font-semibold text-rose-600"
             >
               <Trash2 className="size-4" />
