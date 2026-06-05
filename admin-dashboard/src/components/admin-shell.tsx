@@ -83,7 +83,7 @@ export function AdminShell() {
           }`}
         >
           <div className="flex items-center justify-between px-2">
-            <Link to="/" className="font-display text-[2.15rem] font-extrabold tracking-tight text-[#22C06B]">
+            <Link to="/" className="font-display text-[2.15rem] font-extrabold tracking-tight text-white">
               DELLA
             </Link>
             <button
@@ -109,18 +109,18 @@ export function AdminShell() {
                   to={item.to}
                   end={item.to === "/"}
                   onClick={() => setMenuOpen(false)}
-                  className={`flex items-center justify-between rounded-[14px] px-3 py-3 text-[15px] font-medium transition ${
+                  className={`flex items-center justify-between rounded-[14px] px-3 py-3 text-[15px] font-semibold transition ${
                     isActive
                       ? "bg-[#0E6A45] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                      : "text-white/88 hover:bg-white/6"
+                      : "text-white hover:bg-white/8"
                   }`}
                 >
-                  <span className="flex items-center gap-3">
-                    <Icon className="size-4.5" />
+                  <span className="flex items-center gap-3 text-white">
+                    <Icon className="size-4.5 shrink-0 text-white" />
                     {item.label}
                   </span>
                   {item.count ? (
-                    <span className="rounded-full bg-white/12 px-2 py-0.5 text-[11px]">
+                    <span className="rounded-full bg-white/18 px-2 py-0.5 text-[11px] text-white">
                       {item.count}
                     </span>
                   ) : null}
