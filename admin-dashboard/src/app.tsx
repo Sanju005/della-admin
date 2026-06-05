@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
+import { Link, Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
 import { AdminShell } from "./components/admin-shell";
 import { complaints, payments, providers, reviews, bookings } from "./data/mock-data";
@@ -37,6 +37,11 @@ const SettingsPage = lazy(async () => {
 const UserProfilePage = lazy(async () => {
   const module = await import("./pages/user-profile-page");
   return { default: module.UserProfilePage };
+});
+
+const ProviderProfilePage = lazy(async () => {
+  const module = await import("./pages/provider-profile-page");
+  return { default: module.ProviderProfilePage };
 });
 
 const UsersPage = lazy(async () => {
@@ -120,7 +125,18 @@ const router = createBrowserRouter([
             description="Provider health, approval state, and geographic coverage."
             rows={providers}
             columns={[
-              { key: "id", label: "ID" },
+              {
+                key: "id",
+                label: "ID",
+                render: (row) => (
+                  <Link
+                    to={`/service-providers/${row.id}`}
+                    className="font-semibold text-emerald-700 hover:text-emerald-800"
+                  >
+                    {String(row.id)}
+                  </Link>
+                ),
+              },
               { key: "provider", label: "Provider" },
               { key: "service", label: "Service" },
               { key: "rating", label: "Rating" },
@@ -137,6 +153,10 @@ const router = createBrowserRouter([
             ]}
           />
         )),
+      },
+      {
+        path: "service-providers/:providerId",
+        element: withSuspense(<ProviderProfilePage />),
       },
       {
         path: "provider-approvals",

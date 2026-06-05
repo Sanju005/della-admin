@@ -209,3 +209,99 @@ export type UserDetailRecord = {
   recentReviews: UserReviewItem[];
   metrics: UserMetric[];
 };
+
+export type ProviderServiceArea = {
+  id: string;
+  label: string;
+  tag?: string;
+};
+
+export type ProviderSkill = {
+  id: string;
+  label: string;
+};
+
+export type ProviderDocumentItem = {
+  id: string;
+  label: string;
+  status: string;
+};
+
+export type ProviderTaskRow = {
+  id: string;
+  service: string;
+  customer: string;
+  date: string;
+  amount: string;
+  status: string;
+};
+
+export type ProviderUpcomingTaskRow = {
+  id: string;
+  service: string;
+  customer: string;
+  schedule: string;
+  amount: string;
+  status: string;
+};
+
+export type ProviderPayoutRow = {
+  id: string;
+  type: string;
+  amount: string;
+  date: string;
+  status: string;
+};
+
+export type ProviderDetailRecord = {
+  providerId: string;
+  name: string;
+  email: string;
+  status: string;
+  roleBadge: string;
+  joinedAt: string;
+  lastLogin: string;
+  serviceType: string;
+  serviceArea: string;
+  rating: string;
+  ratingNote: string;
+  phone: string;
+  dob: string;
+  gender: string;
+  language: string;
+  nationalId: string;
+  emergencyContact: string;
+  address: string;
+  about: string;
+  approvalStatus: string;
+  backgroundCheck: string;
+  kycStatus: string;
+  memberSince: string;
+  device: string;
+  completedJobs: string;
+  cancellationRate: string;
+  responseRate: string;
+  averageRating: string;
+  totalReviews: string;
+  onTimeRate: string;
+  repeatCustomers: string;
+  workingDays: string;
+  workingHours: string;
+  totalTasks: string;
+  completedTasks: string;
+  upcomingTasks: string;
+  activeTime: string;
+  areaCount: string;
+  totalEarnings: string;
+  withdrawn: string;
+  reviewsCount: string;
+  metrics: UserMetric[];
+  serviceAreas: ProviderServiceArea[];
+  skills: ProviderSkill[];
+  documents: ProviderDocumentItem[];
+  completedTaskRows: ProviderTaskRow[];
+  upcomingTaskRows: ProviderUpcomingTaskRow[];
+  payoutRows: ProviderPayoutRow[];
+  recentActions: UserActionItem[];
+  activityLog: UserTimelineItem[];
+};

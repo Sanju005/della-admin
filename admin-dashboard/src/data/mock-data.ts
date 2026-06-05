@@ -241,6 +241,15 @@ export const users: UserRow[] = [
 
 export const providers: ProviderRow[] = [
   {
+    id: "PRV-2034",
+    provider: "Ahmad Bin Hassan",
+    service: "Home Cleaning",
+    rating: "4.8",
+    status: "Active",
+    zone: "Kuala Lumpur",
+    verification: "Verified",
+  },
+  {
     id: "PRO-2001",
     provider: "Maya Devi",
     service: "Home Cleaning",
