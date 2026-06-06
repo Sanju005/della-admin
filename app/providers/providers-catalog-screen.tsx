@@ -55,6 +55,7 @@ type CatalogScreenListing = {
   availabilityLabel: string;
   href: string;
   portraitSrc: string;
+  isApproved: boolean;
 };
 
 type CatalogScreenData = {
@@ -159,7 +160,7 @@ export function ProvidersCatalogScreen({ data }: { data: CatalogScreenData }) {
                 <div className="mt-4 grid grid-cols-3 gap-3 text-[12px] leading-5 text-[#344054]">
                   <TrustBadge
                     icon={<ShieldCheck className="h-4.5 w-4.5 text-[#16A34A]" />}
-                    label="Verified & Background Checked"
+                    label="Approval badge after admin review"
                   />
                   <TrustBadge
                     icon={<Star className="h-4.5 w-4.5 fill-[#16A34A] text-[#16A34A]" />}
@@ -229,10 +230,10 @@ export function ProvidersCatalogScreen({ data }: { data: CatalogScreenData }) {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-[15px] font-extrabold tracking-[-0.03em] text-[#17803D]">
-                  All {serviceLower}s are verified
+                  Listings go live before approval
                 </h2>
                 <p className="mt-1.5 text-[13px] leading-5 text-[#475467]">
-                  Background checked, experienced, and highly rated.
+                  Providers can publish now. Verified badges appear after admin review.
                 </p>
               </div>
               <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[16px]">
@@ -359,7 +360,9 @@ function ProviderCard({ listing }: { listing: CatalogScreenListing }) {
             <div className="min-w-0 flex-1">
               <h3 className="flex min-w-0 items-center gap-2 text-[15px] font-extrabold tracking-[-0.03em] text-[#0F172A]">
                 <span className="truncate">{listing.name}</span>
-                <BadgeCheck className="h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
+                {listing.isApproved ? (
+                  <BadgeCheck className="h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
+                ) : null}
               </h3>
               {listing.providerName && listing.providerName !== listing.name ? (
                 <p className="mt-1 truncate text-[12px] font-semibold text-[#16A34A]">
@@ -409,39 +412,41 @@ function ProviderCard({ listing }: { listing: CatalogScreenListing }) {
         </div>
       </div>
 
-      <div className="mt-4 border-t border-[#E9EEEA] pt-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex items-center gap-2 rounded-[16px] bg-[#F8FCF9] px-3 py-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF9F1] text-[#16A34A]">
-              <IdCard className="h-4.5 w-4.5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[#98A2B3]">
-                Verified
-              </p>
-              <p className="text-[12px] font-semibold text-[#0F172A]">
-                ID Verified
-              </p>
+      {listing.isApproved ? (
+        <div className="mt-4 border-t border-[#E9EEEA] pt-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex items-center gap-2 rounded-[16px] bg-[#F8FCF9] px-3 py-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF9F1] text-[#16A34A]">
+                <IdCard className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[#98A2B3]">
+                  Verified
+                </p>
+                <p className="text-[12px] font-semibold text-[#0F172A]">
+                  ID Verified
+                </p>
+              </div>
+              <BadgeCheck className="h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
             </div>
-            <BadgeCheck className="h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
-          </div>
 
-          <div className="flex items-center gap-2 rounded-[16px] bg-[#F8FCF9] px-3 py-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF9F1] text-[#16A34A]">
-              <Phone className="h-4.5 w-4.5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[#98A2B3]">
-                Contact
-              </p>
-              <p className="text-[12px] font-semibold text-[#0F172A]">
-                Phone Verified
-              </p>
+            <div className="flex items-center gap-2 rounded-[16px] bg-[#F8FCF9] px-3 py-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF9F1] text-[#16A34A]">
+                <Phone className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[#98A2B3]">
+                  Contact
+                </p>
+                <p className="text-[12px] font-semibold text-[#0F172A]">
+                  Phone Verified
+                </p>
+              </div>
+              <BadgeCheck className="h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
             </div>
-            <BadgeCheck className="h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
           </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="mt-4 flex items-end justify-between gap-3 border-t border-[#E9EEEA] pt-4">
         <div className="min-w-0">

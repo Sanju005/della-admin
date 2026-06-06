@@ -89,6 +89,7 @@ async function writeRegistrations(records: ProviderRegistrationRecord[]) {
 
 export async function createProviderRegistration(
   data: ProviderRegistrationData,
+  idOverride?: string,
 ) {
   const records = await readRegistrations();
   const now = new Date().toISOString();
@@ -96,7 +97,7 @@ export async function createProviderRegistration(
   const emailOtp = data.verification.emailOtp.join("");
 
   const record: ProviderRegistrationRecord = {
-    id: crypto.randomUUID(),
+    id: idOverride ?? crypto.randomUUID(),
     createdAt: now,
     updatedAt: now,
     status: "pending_admin_approval",

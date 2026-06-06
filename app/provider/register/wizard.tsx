@@ -781,7 +781,7 @@ function SuccessStep({
       </div>
 
       <Link
-        href={registrationId ? `/provider/dashboard/${registrationId}` : "/provider/dashboard"}
+        href="/provider/dashboard"
         className="inline-flex h-12 w-full items-center justify-center rounded-[12px] bg-[#16a34a] text-[15px] font-extrabold text-white shadow-[0_16px_30px_rgba(22,163,74,0.2)]"
       >
         Go to Dashboard

@@ -88,7 +88,9 @@ export default async function ProviderDetailPage(props: {
                 <h1 className="text-[15px] font-extrabold text-[#0F172A]">
                   {detail.name}
                 </h1>
-                <BadgeCheck className="mt-0.5 h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
+                {detail.verified ? (
+                  <BadgeCheck className="mt-0.5 h-4.5 w-4.5 shrink-0 fill-[#16A34A] text-[#16A34A]" />
+                ) : null}
               </div>
               <p className="mt-1 text-[13px] text-[#475467]">{detail.title}</p>
 
@@ -112,8 +114,16 @@ export default async function ProviderDetailPage(props: {
               </div>
 
               <div className="mt-3 grid grid-cols-3 gap-2 text-left text-[11px] text-[#344054]">
-                <InfoPill icon={<ShieldCheck className="h-4.5 w-4.5 text-[#16A34A]" />} label="Verified" />
-                <InfoPill icon={<CheckCheck className="h-4.5 w-4.5 text-[#16A34A]" />} label="Background Checked" />
+                {detail.verified ? (
+                  <InfoPill icon={<ShieldCheck className="h-4.5 w-4.5 text-[#16A34A]" />} label="Verified" />
+                ) : (
+                  <InfoPill icon={<ShieldCheck className="h-4.5 w-4.5 text-[#98A2B3]" />} label="Pending Review" />
+                )}
+                {detail.backgroundChecked ? (
+                  <InfoPill icon={<CheckCheck className="h-4.5 w-4.5 text-[#16A34A]" />} label="Background Checked" />
+                ) : (
+                  <InfoPill icon={<CheckCheck className="h-4.5 w-4.5 text-[#98A2B3]" />} label="Review in Progress" />
+                )}
                 <InfoPill icon={<BadgeCheck className="h-4.5 w-4.5 text-[#16A34A]" />} label={detail.yearsExperience} />
               </div>
             </div>

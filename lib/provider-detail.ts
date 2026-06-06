@@ -322,8 +322,8 @@ function buildDetailFromListing(listing: ProviderListing): ProviderDetail {
     jobsCompleted: Math.max(listing.reviews, 12),
     locationFull: `${listing.location}, Malaysia`,
     online: true,
-    verified: true,
-    backgroundChecked: true,
+    verified: listing.isApproved,
+    backgroundChecked: listing.isApproved,
     about: providerDescriptions[listing.serviceKey],
     specialties: mergeSpecialties(listing),
     gallery: [

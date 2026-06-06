@@ -251,7 +251,6 @@ export const getHomeFeedData = cache(async (): Promise<HomeFeedData> => {
           )
         `
       )
-      .eq("approval_status", "approved")
       .eq("is_visible", true)
       .order("average_rating", { ascending: false })
       .limit(8),

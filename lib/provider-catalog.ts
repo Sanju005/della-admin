@@ -21,6 +21,10 @@ type ProviderServiceSpecialtyRow = {
   specialty: string | null;
 };
 
+type ProviderVerificationRow = {
+  email_verified: boolean | null;
+};
+
 type ProviderCatalogRow = {
   id: string;
   marketing_name: string | null;
@@ -28,6 +32,8 @@ type ProviderCatalogRow = {
   average_rating: number | null;
   total_reviews: number | null;
   bio: string | null;
+  approval_status: string | null;
+  provider_verifications: ProviderVerificationRow | ProviderVerificationRow[] | null;
   provider_services:
     | Array<{
         service_type: string;
@@ -58,6 +64,7 @@ export type ProviderListing = {
   bio: string;
   availabilityLabel: string;
   imageTone: string;
+  isApproved: boolean;
 };
 
 export type ProviderCatalogData = {
@@ -377,6 +384,7 @@ function mock(
     bio,
     availabilityLabel,
     imageTone: imageTones[imageToneIndex % imageTones.length],
+    isApproved: true,
   };
 }
 
@@ -413,6 +421,10 @@ export const getProviderCatalog = cache(
           average_rating,
           total_reviews,
           bio,
+          approval_status,
+          provider_verifications (
+            email_verified
+          ),
           provider_services (
             service_type,
             hourly_rate,
@@ -424,7 +436,6 @@ export const getProviderCatalog = cache(
           )
         `
       )
-      .eq("approval_status", "approved")
       .eq("is_visible", true)
       .order("average_rating", { ascending: false });
 
@@ -440,6 +451,10 @@ export const getProviderCatalog = cache(
           if (serviceKey && serviceRow.service_type !== serviceKey) {
             return [];
           }
+
+          const verificationRow = Array.isArray(row.provider_verifications)
+            ? row.provider_verifications[0]
+            : row.provider_verifications;
 
           return [
             {
@@ -465,6 +480,9 @@ export const getProviderCatalog = cache(
               bio: row.bio ?? "Trusted services available through DELLA.",
               availabilityLabel: "Available Today",
               imageTone: imageTones[rowIndex % imageTones.length],
+              isApproved:
+                row.approval_status === "approved" &&
+                Boolean(verificationRow?.email_verified),
             } satisfies ProviderListing,
           ];
         })

@@ -17,6 +17,7 @@ type ProviderServiceRow = {
 
 type ProviderVerificationRow = {
   phone_verified: boolean | null;
+  email_verified: boolean | null;
   identity_verified: boolean | null;
 };
 
@@ -28,6 +29,7 @@ type ProviderRow = {
   bio: string | null;
   average_rating: number | null;
   total_reviews: number | null;
+  approval_status: string | null;
   provider_services: ProviderServiceRow[] | null;
   provider_verifications: ProviderVerificationRow | ProviderVerificationRow[] | null;
 };
@@ -47,6 +49,7 @@ export type MarketplaceProvider = {
   specialties: string[];
   phoneVerified: boolean;
   identityVerified: boolean;
+  isApproved: boolean;
 };
 
 export type MarketplaceData = {
@@ -112,6 +115,7 @@ export const getMarketplaceData = cache(async (): Promise<MarketplaceData> => {
         bio,
         average_rating,
         total_reviews,
+        approval_status,
         provider_services (
           id,
           service_type,
@@ -124,11 +128,11 @@ export const getMarketplaceData = cache(async (): Promise<MarketplaceData> => {
         ),
         provider_verifications (
           phone_verified,
+          email_verified,
           identity_verified
         )
       `,
     )
-    .eq("approval_status", "approved")
     .eq("is_visible", true)
     .order("average_rating", { ascending: false });
 
@@ -175,8 +179,16 @@ export const getMarketplaceData = cache(async (): Promise<MarketplaceData> => {
             ?.map((item) => item.specialty)
             .filter((item): item is string => Boolean(item))
             .slice(0, 3) ?? [],
-        phoneVerified: Boolean(verificationRow?.phone_verified),
-        identityVerified: Boolean(verificationRow?.identity_verified),
+        phoneVerified:
+          row.approval_status === "approved" &&
+          Boolean(verificationRow?.email_verified) &&
+          Boolean(verificationRow?.phone_verified),
+        identityVerified:
+          row.approval_status === "approved" &&
+          Boolean(verificationRow?.email_verified) &&
+          Boolean(verificationRow?.identity_verified),
+        isApproved:
+          row.approval_status === "approved" && Boolean(verificationRow?.email_verified),
       };
     })
     .filter((provider): provider is MarketplaceProvider => provider !== null);

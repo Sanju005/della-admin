@@ -1,5 +1,9 @@
+ "use client";
+
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -9,8 +13,96 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, startTransition] = useTransition();
+
+  useEffect(() => {
+    let active = true;
+
+    async function continueSession() {
+      if (!supabase) {
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!active || !session) {
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (!active) {
+        return;
+      }
+
+      if (profile?.role === "provider") {
+        router.replace("/provider/dashboard");
+        return;
+      }
+
+      router.replace(searchParams.get("next") ?? "/home");
+    }
+
+    void continueSession();
+
+    return () => {
+      active = false;
+    };
+  }, [router, searchParams]);
+
+  function handleSubmit() {
+    startTransition(async () => {
+      setError("");
+
+      if (!supabase) {
+        setError("Supabase is not configured yet.");
+        return;
+      }
+
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError || !data.user) {
+        setError(signInError?.message || "Unable to sign in.");
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        setError(profileError.message || "Unable to load your account.");
+        return;
+      }
+
+      if (profile?.role === "provider") {
+        router.replace("/provider/dashboard");
+        return;
+      }
+
+      router.replace(searchParams.get("next") ?? "/home");
+    });
+  }
+
   return (
     <main className="min-h-[100dvh] overflow-x-hidden bg-[#F6FFF8]">
       <div className="mx-auto min-h-[100dvh] w-full max-w-[430px] bg-[#F6FFF8] px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
@@ -65,8 +157,10 @@ export default function LoginPage() {
               <div className="mt-3 flex h-[58px] items-center rounded-[18px] border border-[#DDE5E0] bg-white px-5 shadow-[0_4px_10px_rgba(15,23,42,0.02)]">
                 <User className="mr-4 h-5 w-5 text-[#16A34A]" />
                 <input
-                  type="text"
+                  type="email"
                   placeholder="Enter email or phone number"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   className="h-full flex-1 border-0 bg-transparent text-[16px] text-[#0F172A] outline-none placeholder:text-[#94A3B8]"
                 />
               </div>
@@ -81,6 +175,8 @@ export default function LoginPage() {
                 <input
                   type="password"
                   placeholder="Enter password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   className="h-full flex-1 border-0 bg-transparent text-[16px] text-[#0F172A] outline-none placeholder:text-[#94A3B8]"
                 />
                 <button
@@ -99,12 +195,20 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            <Link
-              href="/home"
+            {error ? (
+              <p className="mt-4 rounded-[14px] border border-[#fecaca] bg-[#fff1f2] px-4 py-3 text-[13px] font-semibold text-[#dc2626]">
+                {error}
+              </p>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
               className="mt-8 inline-flex h-[56px] w-full items-center justify-center rounded-[20px] bg-[#16A34A] text-[18px] font-extrabold text-white shadow-[0_14px_28px_rgba(22,163,74,0.16)]"
             >
-              Continue
-            </Link>
+              {isSubmitting ? "Signing in..." : "Continue"}
+            </button>
 
             <div className="mt-8 flex items-center gap-5">
               <div className="h-px flex-1 bg-[#E2E8F0]" />
