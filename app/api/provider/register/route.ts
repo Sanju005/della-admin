@@ -13,6 +13,20 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function toSignupErrorMessage(errorMessage?: string) {
+  const normalizedMessage = errorMessage?.trim().toLowerCase() ?? "";
+
+  if (normalizedMessage.includes("email rate limit exceeded")) {
+    return "Too many verification emails were requested. Please wait a few minutes and try again.";
+  }
+
+  if (normalizedMessage.includes("user already registered")) {
+    return "An account with this email already exists. Try logging in instead.";
+  }
+
+  return errorMessage || "Unable to create provider account.";
+}
+
 function getPublicSupabaseClient() {
   const url = getSupabaseUrl();
   const anonKey = getSupabasePublishableKey();
@@ -182,7 +196,7 @@ export async function POST(request: Request) {
 
     if (authError || !authData.user) {
       return NextResponse.json(
-        { error: authError?.message || "Unable to create provider account." },
+        { error: toSignupErrorMessage(authError?.message) },
         { status: 400 }
       );
     }

@@ -18,6 +18,20 @@ type CustomerSignupPayload = {
   confirmPassword?: string;
 };
 
+function toSignupErrorMessage(errorMessage?: string) {
+  const normalizedMessage = errorMessage?.trim().toLowerCase() ?? "";
+
+  if (normalizedMessage.includes("email rate limit exceeded")) {
+    return "Too many verification emails were requested. Please wait a few minutes and try again.";
+  }
+
+  if (normalizedMessage.includes("user already registered")) {
+    return "An account with this email already exists. Try logging in instead.";
+  }
+
+  return errorMessage || "Unable to create your account.";
+}
+
 function getPublicSupabaseClient() {
   const url = getSupabaseUrl();
   const anonKey = getSupabasePublishableKey();
@@ -124,7 +138,7 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json(
-      { error: error.message || "Unable to create your account." },
+      { error: toSignupErrorMessage(error.message) },
       { status: 400 }
     );
   }
