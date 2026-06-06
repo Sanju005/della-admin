@@ -47,6 +47,12 @@ type UserProfileUpdateInput = {
   status?: string;
 };
 
+type ProfileNameRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
 type LiveBookingRow = {
   id: string;
   booking_status?: string | null;
@@ -86,6 +92,8 @@ type LiveReviewRow = {
   provider_profiles?: ProfileRelation;
 };
 
+type ProfileNameMap = Map<string, string>;
+
 function relationNode(value?: ProfileRelation) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -100,6 +108,57 @@ function relationItem<T>(value: T | T[] | null | undefined) {
   }
 
   return value ?? null;
+}
+
+async function fetchProfileNameMap(ids: Array<string | null | undefined>) {
+  if (!supabase) {
+    return new Map<string, string>();
+  }
+
+  const uniqueIds = [...new Set(ids.filter((value): value is string => Boolean(value?.trim())))];
+
+  if (uniqueIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", uniqueIds);
+
+  if (error || !data) {
+    return new Map<string, string>();
+  }
+
+  return new Map(
+    (data as ProfileNameRow[]).map((row) => [
+      row.id,
+      row.full_name?.trim() ||
+        row.email?.split("@")[0]?.replace(/[._-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) ||
+        "User",
+    ])
+  );
+}
+
+async function fetchRelatedProfileNamesForUser(userId: string, role: string) {
+  if (!supabase) {
+    return new Map<string, string>();
+  }
+
+  const column = role === "provider" ? "provider_id" : "customer_id";
+
+  const [bookingsResult, paymentsResult, reviewsResult] = await Promise.all([
+    supabase.from("bookings").select("customer_id, provider_id").eq(column, userId).limit(24),
+    supabase.from("payments").select("customer_id, provider_id").eq(column, userId).limit(24),
+    supabase.from("reviews").select("customer_id, provider_id").eq(column, userId).limit(24),
+  ]);
+
+  return fetchProfileNameMap([
+    userId,
+    ...((bookingsResult.data ?? []).flatMap((row) => [row.customer_id, row.provider_id])),
+    ...((paymentsResult.data ?? []).flatMap((row) => [row.customer_id, row.provider_id])),
+    ...((reviewsResult.data ?? []).flatMap((row) => [row.customer_id, row.provider_id])),
+  ]);
 }
 
 function toTitleCase(value: string) {
@@ -310,7 +369,7 @@ function mapBookingStatus(status?: string | null) {
   return toTitleCase(normalized);
 }
 
-async function tryFetchLiveBookings(userId: string, role: string) {
+async function tryFetchLiveBookings(userId: string, role: string, profileNames: ProfileNameMap) {
   if (!supabase) {
     return null;
   }
@@ -345,12 +404,14 @@ async function tryFetchLiveBookings(userId: string, role: string) {
   return (data as LiveBookingRow[]).map((row) => {
     const providerProfile = relationNode(row.provider_profiles);
     const providerService = relationItem(row.provider_services);
+    const customerName = profileNames.get(row.customer_id ?? "");
+    const providerName = providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "");
 
     return {
       id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
       service: humanizeServiceType(providerService?.service_type),
-      provider: providerProfile?.marketing_name?.trim() || "DELLA Provider",
-      customer: "",
+      provider: providerName || "DELLA Provider",
+      customer: customerName || "Customer",
       status: mapBookingStatus(row.booking_status),
       amount: formatCurrency(row.total_amount ?? 0),
       schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
@@ -358,7 +419,7 @@ async function tryFetchLiveBookings(userId: string, role: string) {
   });
 }
 
-async function tryFetchLivePayments(userId: string, role: string) {
+async function tryFetchLivePayments(userId: string, role: string, profileNames: ProfileNameMap) {
   if (!supabase) {
     return null;
   }
@@ -384,18 +445,23 @@ async function tryFetchLivePayments(userId: string, role: string) {
     return null;
   }
 
-  return (data as LivePaymentRow[]).map((row) => ({
-    id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
-    customer: "",
-    provider: "",
-    amount: formatCurrency(row.amount ?? 0),
-    method: row.payment_method?.trim() || "Online",
-    status: mapBookingStatus(row.status),
-    date: formatDate(row.created_at),
-  }));
+  return (data as LivePaymentRow[]).map((row) => {
+    const customerName = profileNames.get(row.customer_id ?? "");
+    const providerName = profileNames.get(row.provider_id ?? "");
+
+    return {
+      id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+      customer: customerName || "Customer",
+      provider: providerName || "Provider",
+      amount: formatCurrency(row.amount ?? 0),
+      method: row.payment_method?.trim() || "Online",
+      status: mapBookingStatus(row.status),
+      date: formatDate(row.created_at),
+    };
+  });
 }
 
-async function tryFetchLiveReviews(userId: string, role: string) {
+async function tryFetchLiveReviews(userId: string, role: string, profileNames: ProfileNameMap) {
   if (!supabase) {
     return null;
   }
@@ -425,10 +491,14 @@ async function tryFetchLiveReviews(userId: string, role: string) {
 
   return (data as LiveReviewRow[]).map((row) => {
     const providerProfile = relationNode(row.provider_profiles);
+    const reviewerName = profileNames.get(row.customer_id ?? "");
 
     return {
       id: row.id,
-      provider: providerProfile?.marketing_name?.trim() || (role === "provider" ? "Customer Review" : "DELLA Provider"),
+      provider:
+        role === "provider"
+          ? reviewerName || "Customer Review"
+          : providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "") || "DELLA Provider",
       rating: Math.max(1, Math.min(5, Math.round(row.rating ?? 5))),
       review: row.comment?.trim() || "Shared feedback",
       date: formatDate(row.created_at),
@@ -639,9 +709,10 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
   const role = liveProfile.role?.trim() || mockDetail?.role || "customer";
   const status = formatStatus(liveProfile.status, role);
   const city = extractCity(liveProfile) || mockDetail?.city || "Malaysia";
-  const liveBookings = await tryFetchLiveBookings(userId, role);
-  const livePayments = await tryFetchLivePayments(userId, role);
-  const liveReviews = await tryFetchLiveReviews(userId, role);
+  const profileNames = await fetchRelatedProfileNamesForUser(userId, role);
+  const liveBookings = await tryFetchLiveBookings(userId, role, profileNames);
+  const livePayments = await tryFetchLivePayments(userId, role, profileNames);
+  const liveReviews = await tryFetchLiveReviews(userId, role, profileNames);
   const relatedBookings = liveBookings?.length ? liveBookings : getMockBookings(name, role);
   const relatedPayments = livePayments?.length ? livePayments : getMockPayments(name, role);
   const defaultDetail = Object.values(userDetailRecords)[0]!;
