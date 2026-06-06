@@ -399,8 +399,8 @@ function AccountDetailsStep({
           </div>
         </div>
       </div>
-      <InputField label="Password" value={data.account.password} onChange={(value) => updateAccount("password", value)} rightIcon={<EyeIcon className="h-4 w-4 text-[#6b7280]" />} />
-      <InputField label="Retype Password" value={data.account.confirmPassword} onChange={(value) => updateAccount("confirmPassword", value)} rightIcon={<EyeIcon className="h-4 w-4 text-[#6b7280]" />} />
+      <InputField label="Password" value={data.account.password} onChange={(value) => updateAccount("password", value)} rightIcon={<EyeIcon className="h-4 w-4 text-[#6b7280]" />} type="password" />
+      <InputField label="Retype Password" value={data.account.confirmPassword} onChange={(value) => updateAccount("confirmPassword", value)} rightIcon={<EyeIcon className="h-4 w-4 text-[#6b7280]" />} type="password" />
     </div>
   );
 }
@@ -823,6 +823,7 @@ function InputField({
   hint,
   rightIcon,
   compact = false,
+  type = "text",
 }: {
   label: string;
   value: string;
@@ -830,7 +831,11 @@ function InputField({
   hint?: string;
   rightIcon?: React.ReactNode;
   compact?: boolean;
+  type?: string;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPasswordField = type === "password";
+
   return (
     <label className="block">
       <span className="mb-2 block text-[13px] font-semibold text-[#111827]">
@@ -839,11 +844,25 @@ function InputField({
       {hint ? <p className="-mt-1 mb-2 text-[11px] text-[#6b7280]">{hint}</p> : null}
       <div className="flex items-center rounded-[12px] border border-[#dfe8e2] px-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
         <input
+          type={isPasswordField && showPassword ? "text" : type}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={`${compact ? "h-10" : "h-11"} w-full border-0 bg-transparent text-[14px] text-[#111827] outline-none`}
         />
-        {rightIcon ? <span className="ml-3">{rightIcon}</span> : null}
+        {rightIcon ? (
+          <button
+            type="button"
+            aria-label={isPasswordField && showPassword ? "Hide password" : "Show password"}
+            onClick={() => {
+              if (isPasswordField) {
+                setShowPassword((current) => !current);
+              }
+            }}
+            className="ml-3"
+          >
+            {rightIcon}
+          </button>
+        ) : null}
       </div>
     </label>
   );

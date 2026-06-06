@@ -9,11 +9,11 @@
        case 319: d(require("./chunks/319.js")); break;
        case 3445: d(require("./chunks/3445.js")); break;
        case 6218: d(require("./chunks/6218.js")); break;
-       case 647: d(require("./chunks/647.js")); break;
        case 6730: d(require("./chunks/6730.js")); break;
        case 7389: d(require("./chunks/7389.js")); break;
        case 7408: d(require("./chunks/7408.js")); break;
        case 7897: d(require("./chunks/7897.js")); break;
+       case 9521: d(require("./chunks/9521.js")); break;
        case 9785: d(require("./chunks/9785.js")); break;
        case 9854: d(require("./chunks/9854.js")); break;
        case 7311: c[a] = 1; break;

@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 type ShellProps = {
   children: ReactNode;
@@ -105,6 +107,9 @@ export function Field({
   rightIcon,
   type = "text",
 }: FieldProps) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPasswordField = type === "password";
+
   return (
     <label className="block">
       <span className="mb-2 block text-[15px] font-semibold text-[#111827]">
@@ -113,12 +118,23 @@ export function Field({
       <div className="flex h-13 items-center rounded-[14px] border border-[#d9e2dd] bg-white px-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
         <span className="mr-3 text-[#16a34a]">{icon}</span>
         <input
-          type={type}
+          type={isPasswordField && showPassword ? "text" : type}
           placeholder={placeholder}
           className="h-full flex-1 border-0 bg-transparent text-[15px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
         />
         {rightIcon ? (
-          <span className="ml-3 text-[#6b7280]">{rightIcon}</span>
+          <button
+            type="button"
+            aria-label={isPasswordField && showPassword ? "Hide password" : "Show password"}
+            onClick={() => {
+              if (isPasswordField) {
+                setShowPassword((current) => !current);
+              }
+            }}
+            className="ml-3 text-[#6b7280]"
+          >
+            {rightIcon}
+          </button>
         ) : null}
       </div>
     </label>

@@ -19,6 +19,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, startTransition] = useTransition();
 
@@ -184,7 +185,7 @@ export default function LoginPage() {
               <div className="mt-3 flex h-[58px] items-center rounded-[18px] border border-[#DDE5E0] bg-white px-5 shadow-[0_4px_10px_rgba(15,23,42,0.02)]">
                 <Lock className="mr-4 h-5 w-5 text-[#16A34A]" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Enter password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -192,7 +193,8 @@ export default function LoginPage() {
                 />
                 <button
                   type="button"
-                  aria-label="Hide password"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((current) => !current)}
                   className="ml-4 text-[#94A3B8]"
                 >
                   <EyeOff className="h-5 w-5" />
