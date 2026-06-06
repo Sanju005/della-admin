@@ -90,6 +90,11 @@ async function writeRegistrations(records: ProviderRegistrationRecord[]) {
 export async function createProviderRegistration(
   data: ProviderRegistrationData,
   idOverride?: string,
+  verificationOverrides?: {
+    phoneVerified?: boolean;
+    emailVerified?: boolean;
+    identityVerified?: boolean;
+  },
 ) {
   const records = await readRegistrations();
   const now = new Date().toISOString();
@@ -101,13 +106,15 @@ export async function createProviderRegistration(
     createdAt: now,
     updatedAt: now,
     status: "pending_admin_approval",
-    phoneVerified: phoneOtp === expectedOtp,
-    emailVerified: emailOtp === expectedOtp,
-    identityVerified: Boolean(
-      data.verification.documentType &&
-        data.verification.frontImageName &&
-        data.verification.backImageName,
-    ),
+    phoneVerified: verificationOverrides?.phoneVerified ?? phoneOtp === expectedOtp,
+    emailVerified: verificationOverrides?.emailVerified ?? emailOtp === expectedOtp,
+    identityVerified:
+      verificationOverrides?.identityVerified ??
+      Boolean(
+        data.verification.documentType &&
+          data.verification.frontImageName &&
+          data.verification.backImageName,
+      ),
     data,
   };
 

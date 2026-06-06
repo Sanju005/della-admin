@@ -1,8 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import {
-  getAppBaseUrl,
-  getSupabasePublishableKey,
   getSupabaseServiceKey,
   getSupabaseUrl,
 } from "@/lib/supabase-env";
@@ -30,22 +28,6 @@ function toSignupErrorMessage(errorMessage?: string) {
   }
 
   return errorMessage || "Unable to create your account.";
-}
-
-function getPublicSupabaseClient() {
-  const url = getSupabaseUrl();
-  const anonKey = getSupabasePublishableKey();
-
-  if (!url || !anonKey) {
-    return null;
-  }
-
-  return createClient(url, anonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
 }
 
 function getAdminSupabaseClient() {
@@ -108,31 +90,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const publicClient = getPublicSupabaseClient();
   const adminClient = getAdminSupabaseClient();
 
-  if (!publicClient || !adminClient) {
+  if (!adminClient) {
     return NextResponse.json(
       { error: "Supabase is not configured yet." },
       { status: 500 }
     );
   }
 
-  const appBaseUrl = getAppBaseUrl();
-  const emailRedirectTo = new URL(
-    "/login",
-    appBaseUrl ?? request.url
-  ).toString();
-
-  const { data, error } = await publicClient.auth.signUp({
+  const { data, error } = await adminClient.auth.admin.createUser({
     email,
     password,
-    options: {
-      emailRedirectTo,
-      data: {
-        full_name: fullName,
-        role: "customer",
-      },
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      role: "customer",
     },
   });
 
@@ -148,6 +121,22 @@ export async function POST(request: Request) {
       { error: "Unable to create your account." },
       { status: 500 }
     );
+  }
+
+  if (!data.user.email_confirmed_at) {
+    const { error: confirmError } = await adminClient.auth.admin.updateUserById(
+      data.user.id,
+      {
+        email_confirm: true,
+      }
+    );
+
+    if (confirmError) {
+      return NextResponse.json(
+        { error: "Account created, but email confirmation setup failed." },
+        { status: 500 }
+      );
+    }
   }
 
   const normalizedPhone = normalizePhone(phoneNumber);
@@ -190,6 +179,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     success: true,
     email,
-    requiresEmailVerification: true,
+    requiresEmailVerification: false,
   });
 }

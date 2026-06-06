@@ -4,8 +4,6 @@ import { createClient } from "@supabase/supabase-js";
 import { createProviderRegistration } from "@/lib/provider-registration-storage";
 import type { ProviderRegistrationData } from "@/lib/provider-registration-types";
 import {
-  getAppBaseUrl,
-  getSupabasePublishableKey,
   getSupabaseServiceKey,
   getSupabaseUrl,
 } from "@/lib/supabase-env";
@@ -25,22 +23,6 @@ function toSignupErrorMessage(errorMessage?: string) {
   }
 
   return errorMessage || "Unable to create provider account.";
-}
-
-function getPublicSupabaseClient() {
-  const url = getSupabaseUrl();
-  const anonKey = getSupabasePublishableKey();
-
-  if (!url || !anonKey) {
-    return null;
-  }
-
-  return createClient(url, anonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
 }
 
 function getAdminSupabaseClient() {
@@ -168,29 +150,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const publicClient = getPublicSupabaseClient();
     const adminClient = getAdminSupabaseClient();
 
-    if (!publicClient || !adminClient) {
+    if (!adminClient) {
       return NextResponse.json(
         { error: "Supabase is not configured yet." },
         { status: 500 }
       );
     }
 
-    const appBaseUrl = getAppBaseUrl();
-    const emailRedirectTo = new URL("/login", appBaseUrl ?? request.url).toString();
-
-    const { data: authData, error: authError } = await publicClient.auth.signUp({
+    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
       email: payload.account.email.trim().toLowerCase(),
       password: payload.account.password,
-      options: {
-        emailRedirectTo,
-        data: {
-          full_name: payload.basicProfile.fullName.trim(),
-          role: "provider",
-          marketing_name: payload.basicProfile.marketingName.trim(),
-        },
+      email_confirm: true,
+      user_metadata: {
+        full_name: payload.basicProfile.fullName.trim(),
+        role: "provider",
+        marketing_name: payload.basicProfile.marketingName.trim(),
       },
     });
 
@@ -201,13 +177,28 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!authData.user.email_confirmed_at) {
+      const { error: confirmError } = await adminClient.auth.admin.updateUserById(
+        authData.user.id,
+        {
+          email_confirm: true,
+        }
+      );
+
+      if (confirmError) {
+        return NextResponse.json(
+          { error: "Account created, but email confirmation setup failed." },
+          { status: 500 }
+        );
+      }
+    }
+
     const providerId = authData.user.id;
     const normalizedPhone = normalizePhone(
       payload.account.phoneCountryCode,
       payload.account.phoneNumber,
     );
     const phoneVerified = payload.verification.phoneOtp.join("") === "123456";
-    const emailVerified = payload.verification.emailOtp.join("") === "123456";
     const identityVerified = Boolean(
       payload.verification.documentType &&
         payload.verification.frontImageName &&
@@ -260,7 +251,7 @@ export async function POST(request: Request) {
       adminClient,
       providerId,
       phoneVerified,
-      Boolean(authData.user.email_confirmed_at),
+      true,
       identityVerified,
     );
 
@@ -328,7 +319,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const record = await createProviderRegistration(payload, providerId);
+    const record = await createProviderRegistration(payload, providerId, {
+      phoneVerified,
+      emailVerified: true,
+      identityVerified,
+    });
 
     return NextResponse.json({
       id: record.id,

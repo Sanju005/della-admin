@@ -64,7 +64,12 @@ export default function SignupUserPage() {
         return;
       }
 
-      router.push(`/signup/check-email?email=${encodeURIComponent(result.email)}`);
+      if (result.requiresEmailVerification) {
+        router.push(`/signup/check-email?email=${encodeURIComponent(result.email)}`);
+        return;
+      }
+
+      router.push("/login");
     });
   };
 
