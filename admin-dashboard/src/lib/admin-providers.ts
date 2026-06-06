@@ -98,6 +98,12 @@ type ProviderProfilePayload = {
   detail: ProviderDetailRecord | null;
 };
 
+type ProfileNameRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -283,6 +289,34 @@ function getMockProviderReviews(name: string) {
       review: review.comment,
       date: review.date,
     })) satisfies UserReviewItem[];
+}
+
+async function fetchProfileNameMap(ids: Array<string | null | undefined>) {
+  if (!supabase) {
+    return new Map<string, string>();
+  }
+
+  const uniqueIds = [...new Set(ids.filter((value): value is string => Boolean(value?.trim())))];
+
+  if (uniqueIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", uniqueIds);
+
+  if (error || !data) {
+    return new Map<string, string>();
+  }
+
+  return new Map(
+    (data as ProfileNameRow[]).map((row) => [
+      row.id,
+      row.full_name?.trim() || row.email?.split("@")[0]?.replace(/[._-]+/g, " ") || "Customer",
+    ])
+  );
 }
 
 async function fetchProviderProfiles() {
@@ -479,7 +513,7 @@ async function tryFetchProviderReviews(providerId: string) {
   return data as LiveReviewRow[];
 }
 
-function buildTaskRows(liveRows: LiveBookingRow[]): {
+function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, string>): {
   completedTaskRows: ProviderTaskRow[];
   upcomingTaskRows: ProviderUpcomingTaskRow[];
 } {
@@ -491,7 +525,7 @@ function buildTaskRows(liveRows: LiveBookingRow[]): {
       return {
         id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
         service: humanizeService(service?.service_type),
-        customer: "Customer",
+        customer: customerNames.get(row.customer_id ?? "") || "Customer",
         date: formatDate(row.scheduled_date),
         amount: formatCurrency(row.total_amount ?? 0),
         status: mapTaskStatus(row.booking_status),
@@ -506,7 +540,7 @@ function buildTaskRows(liveRows: LiveBookingRow[]): {
       return {
         id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
         service: humanizeService(service?.service_type),
-        customer: "Customer",
+        customer: customerNames.get(row.customer_id ?? "") || "Customer",
         schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
         amount: formatCurrency(row.total_amount ?? 0),
         status: mapTaskStatus(row.booking_status),
@@ -526,10 +560,10 @@ function buildPayoutRows(livePayments: LivePaymentRow[]): ProviderPayoutRow[] {
   }));
 }
 
-function buildReviewRows(liveReviews: LiveReviewRow[]): UserReviewItem[] {
+function buildReviewRows(liveReviews: LiveReviewRow[], customerNames: Map<string, string>): UserReviewItem[] {
   return liveReviews.slice(0, 7).map((row) => ({
     id: row.id,
-    provider: "Customer Review",
+    provider: customerNames.get(row.customer_id ?? "") || "Customer Review",
     rating: Math.max(1, Math.min(5, Math.round(row.rating ?? 5))),
     review: row.comment?.trim() || "Shared feedback",
     date: formatDate(row.created_at),
@@ -639,9 +673,17 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const liveTasks = await tryFetchProviderTasks(providerId);
   const livePayments = await tryFetchProviderPayments(providerId);
   const liveReviews = await tryFetchProviderReviews(providerId);
-  const taskRows = liveTasks?.length ? buildTaskRows(liveTasks) : null;
+  const customerNames = await fetchProfileNameMap([
+    ...(liveTasks?.map((row) => row.customer_id) ?? []),
+    ...(liveReviews?.map((row) => row.customer_id) ?? []),
+  ]);
+  const taskRows = liveTasks?.length ? buildTaskRows(liveTasks, customerNames) : null;
   const payoutRows = livePayments?.length ? buildPayoutRows(livePayments) : fallback.payoutRows;
-  const reviewRows = liveReviews?.length ? buildReviewRows(liveReviews) : getMockProviderReviews(fallback.name).length ? getMockProviderReviews(fallback.name) : [];
+  const reviewRows = liveReviews?.length
+    ? buildReviewRows(liveReviews, customerNames)
+    : getMockProviderReviews(fallback.name).length
+      ? getMockProviderReviews(fallback.name)
+      : [];
   const metrics = buildMetrics(
     fallback.metrics,
     liveTasks,
