@@ -1,7 +1,9 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { useEffect, useState } from "react";
 import { bookings, dashboardMetrics, payments, approvalItems, complaints, reviews } from "../data/mock-data";
 import { DataTable } from "../components/data-table";
 import { StatusBadge, statusToTone } from "../components/status-badge";
+import { getDashboardSnapshot } from "../lib/dashboard-metrics";
 
 const bookingColumns = [
   { key: "id", label: "ID" },
@@ -24,10 +26,34 @@ const paymentColumns = [
 ] as const;
 
 export function DashboardPage() {
+  const [metrics, setMetrics] = useState(dashboardMetrics);
+  const [approvals, setApprovals] = useState(approvalItems);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSnapshot() {
+      const snapshot = await getDashboardSnapshot();
+
+      if (!active) {
+        return;
+      }
+
+      setMetrics(snapshot.metrics);
+      setApprovals(snapshot.approvals);
+    }
+
+    void loadSnapshot();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {dashboardMetrics.map((metric) => {
+        {metrics.map((metric) => {
           const Icon = metric.icon;
           const isPositive = metric.trend === "up";
 
@@ -161,7 +187,7 @@ export function DashboardPage() {
               <span className="text-sm font-semibold text-emerald-700">View all</span>
             </div>
             <div className="mt-5 space-y-3">
-              {approvalItems.map((item) => (
+              {approvals.map((item) => (
                 <div
                   key={item.title}
                   className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/90 px-4 py-4"
