@@ -7,6 +7,7 @@
   "/api/location/reverse/route": "app/api/location/reverse/route.js",
   "/api/location/search/route": "app/api/location/search/route.js",
   "/api/provider-media/[service]/[kind]/route": "app/api/provider-media/[service]/[kind]/route.js",
+  "/api/provider/me/route": "app/api/provider/me/route.js",
   "/api/provider/register/[id]/route": "app/api/provider/register/[id]/route.js",
   "/api/provider/register/route": "app/api/provider/register/route.js",
   "/api/providers/[id]/route": "app/api/providers/[id]/route.js",

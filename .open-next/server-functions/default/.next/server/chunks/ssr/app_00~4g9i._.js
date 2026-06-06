@@ -18,7 +18,7 @@ module.exports=[85291,a=>{"use strict";a.s(["LiveLocationChip",()=>b]);let b=(0,
               specialty
             )
           )
-        `).eq("approval_status","approved").eq("is_visible",!0).order("average_rating",{ascending:!1}).limit(8),f.from("bookings").select(`
+        `).eq("is_visible",!0).order("average_rating",{ascending:!1}).limit(8),f.from("bookings").select(`
           id,
           booking_status,
           scheduled_date,

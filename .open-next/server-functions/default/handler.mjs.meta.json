@@ -3718,6 +3718,11 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/api/provider/me/route_client-reference-manifest.js": {
+      "bytes": 320,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/app/api/providers/route_client-reference-manifest.js": {
       "bytes": 318,
       "imports": [],
@@ -3734,7 +3739,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 153876,
+      "bytes": 157791,
       "imports": [
         {
           "path": "path",
@@ -3825,6 +3830,11 @@
           "path": ".open-next/server-functions/default/.next/server/app/api/providers/[id]/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "D:\\della-pwa\\.open-next\\server-functions\\default\\.next\\server\\app\\api\\providers\\[id]\\route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/provider/me/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "D:\\della-pwa\\.open-next\\server-functions\\default\\.next\\server\\app\\api\\provider\\me\\route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/providers/route_client-reference-manifest.js",
@@ -4053,7 +4063,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/provider/register/route.js": {
-      "bytes": 355,
+      "bytes": 439,
       "imports": [
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/[turbopack]_runtime.js",
@@ -4191,6 +4201,17 @@
           "path": ".open-next/server-functions/default/.next/server/chunks/ssr/[turbopack]_runtime.js",
           "kind": "require-call",
           "original": "../../../chunks/ssr/[turbopack]_runtime.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/app/api/provider/me/route.js": {
+      "bytes": 427,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/.next/server/chunks/[turbopack]_runtime.js",
+          "kind": "require-call",
+          "original": "../../../../chunks/[turbopack]_runtime.js"
         }
       ],
       "format": "cjs"
@@ -4482,7 +4503,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/require.js": {
-      "bytes": 15086,
+      "bytes": 15303,
       "imports": [
         {
           "path": "path",
@@ -4648,6 +4669,11 @@
           "path": ".open-next/server-functions/default/.next/server/app/provider/register/page.js",
           "kind": "require-call",
           "original": "D:\\della-pwa\\.open-next\\server-functions\\default\\.next\\server\\app\\provider\\register\\page.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/provider/me/route.js",
+          "kind": "require-call",
+          "original": "D:\\della-pwa\\.open-next\\server-functions\\default\\.next\\server\\app\\api\\provider\\me\\route.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/onboarding/ready/page.js",
@@ -6360,7 +6386,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 102507,
+      "bytes": 102705,
       "imports": [
         {
           "path": "node:module",
@@ -7579,6 +7605,9 @@
         ".open-next/server-functions/default/.next/server/app/api/providers/[id]/route_client-reference-manifest.js": {
           "bytesInOutput": 479
         },
+        ".open-next/server-functions/default/.next/server/app/api/provider/me/route_client-reference-manifest.js": {
+          "bytesInOutput": 473
+        },
         ".open-next/server-functions/default/.next/server/app/api/providers/route_client-reference-manifest.js": {
           "bytesInOutput": 469
         },
@@ -7589,7 +7618,7 @@
           "bytesInOutput": 459
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 126328
+          "bytesInOutput": 129636
         },
         ".open-next/cloudflare-templates/shims/throw.js": {
           "bytesInOutput": 215
@@ -7634,7 +7663,7 @@
           "bytesInOutput": 1187
         },
         ".open-next/server-functions/default/.next/server/app/api/provider/register/route.js": {
-          "bytesInOutput": 480
+          "bytesInOutput": 564
         },
         ".open-next/server-functions/default/.next/server/app/api/location/reverse/route.js": {
           "bytesInOutput": 477
@@ -7671,6 +7700,9 @@
         },
         ".open-next/server-functions/default/.next/server/app/provider/register/page.js": {
           "bytesInOutput": 1109
+        },
+        ".open-next/server-functions/default/.next/server/app/api/provider/me/route.js": {
+          "bytesInOutput": 546
         },
         ".open-next/server-functions/default/.next/server/app/onboarding/ready/page.js": {
           "bytesInOutput": 1106
@@ -7751,7 +7783,7 @@
           "bytesInOutput": 1055
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/require.js": {
-          "bytesInOutput": 7737
+          "bytesInOutput": 7836
         },
         ".open-next/server-functions/default/node_modules/next/dist/lib/interop-default.js": {
           "bytesInOutput": 363
@@ -7958,10 +7990,10 @@
           "bytesInOutput": 5072
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 74197
+          "bytesInOutput": 74373
         }
       },
-      "bytes": 2183015
+      "bytes": 2187701
     }
   }
 }
