@@ -1,9 +1,9 @@
- "use client";
+"use client";
 
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -17,11 +17,19 @@ import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, startTransition] = useTransition();
+
+  function getNextPath() {
+    if (typeof window === "undefined") {
+      return "/home";
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    return params.get("next") ?? "/home";
+  }
 
   useEffect(() => {
     let active = true;
@@ -54,7 +62,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace(searchParams.get("next") ?? "/home");
+      router.replace(getNextPath());
     }
 
     void continueSession();
@@ -62,7 +70,7 @@ export default function LoginPage() {
     return () => {
       active = false;
     };
-  }, [router, searchParams]);
+  }, [router]);
 
   function handleSubmit() {
     startTransition(async () => {
@@ -99,7 +107,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace(searchParams.get("next") ?? "/home");
+      router.replace(getNextPath());
     });
   }
 
