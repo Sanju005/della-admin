@@ -154,14 +154,14 @@ export async function POST(request: Request) {
 
   const { error: profileError } = await adminClient
     .from("profiles")
-    .update({
+    .upsert({
+      id: data.user.id,
       full_name: fullName,
       email,
       role: "customer",
       phone: normalizedPhone,
       status: "pending",
-    })
-    .eq("id", data.user.id);
+    }, { onConflict: "id" });
 
   if (profileError) {
     return NextResponse.json(

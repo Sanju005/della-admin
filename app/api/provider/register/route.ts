@@ -216,14 +216,14 @@ export async function POST(request: Request) {
 
     const { error: profileError } = await adminClient
       .from("profiles")
-      .update({
+      .upsert({
+        id: providerId,
         full_name: payload.basicProfile.fullName.trim(),
         email: payload.account.email.trim().toLowerCase(),
         role: "provider",
         phone: normalizedPhone,
         status: "pending",
-      })
-      .eq("id", providerId);
+      }, { onConflict: "id" });
 
     if (profileError) {
       return NextResponse.json(
