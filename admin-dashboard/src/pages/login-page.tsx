@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/auth-provider";
 
 export function LoginPage() {
-  const { initialized, session, signIn } = useAuth();
+  const { access, initialized, session, signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -17,9 +17,18 @@ export function LoginPage() {
       return;
     }
 
+    if (access === "denied") {
+      navigate("/blocked", { replace: true });
+      return;
+    }
+
+    if (access !== "allowed") {
+      return;
+    }
+
     const from = (location.state as { from?: { pathname?: string } } | null)?.from;
     navigate(from?.pathname ?? "/", { replace: true });
-  }, [initialized, session, location.state, navigate]);
+  }, [access, initialized, session, location.state, navigate]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,9 +39,6 @@ export function LoginPage() {
 
       if (error) {
         setFormError(error);
-      } else {
-        const from = (location.state as { from?: { pathname?: string } } | null)?.from;
-        navigate(from?.pathname ?? "/", { replace: true });
       }
     } finally {
       setSubmitting(false);
@@ -140,7 +146,9 @@ export function LoginPage() {
               disabled={submitting}
               className="w-full rounded-2xl bg-[linear-gradient(135deg,#0f8b3d,#16a34a)] px-4 py-3.5 font-semibold text-white shadow-[0_18px_40px_rgba(15,139,61,0.35)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {submitting ? "Signing in..." : "Sign in to admin"}
+              {submitting || (session && access !== "allowed")
+                ? "Checking access..."
+                : "Sign in to admin"}
             </button>
           </form>
 

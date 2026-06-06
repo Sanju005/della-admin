@@ -7,9 +7,10 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import type { AdminProfile } from "../types";
+import type { AdminProfile, AuthAccess } from "../types";
 
 type AuthContextValue = {
+  access: AuthAccess;
   authError: string | null;
   initialized: boolean;
   profile: AdminProfile | null;
@@ -20,26 +21,62 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const ALLOWED_ADMIN_ROLES = new Set([
+  "super_admin",
+  "admin",
+  "manager",
+  "customer_care",
+]);
+
+const PROFILE_CACHE_KEY = "della-admin-profile";
+
+type CachedAdminProfile = Pick<AdminProfile, "id" | "email" | "full_name" | "role" | "status">;
+
+function isAllowedRole(role: string | null | undefined) {
+  return role ? ALLOWED_ADMIN_ROLES.has(role) : false;
+}
+
+function readCachedProfile(userId: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as CachedAdminProfile | null;
+    if (!parsed || parsed.id !== userId) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedProfile(profile: CachedAdminProfile | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!profile) {
+    window.sessionStorage.removeItem(PROFILE_CACHE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const profile = useMemo<AdminProfile | null>(() => {
-    if (!session) {
-      return null;
-    }
-
-    return {
-      id: session.user.id,
-      full_name:
-        typeof session.user.user_metadata?.full_name === "string"
-          ? session.user.user_metadata.full_name
-          : null,
-      email: session.user.email ?? null,
-      role: null,
-      status: null,
-    };
-  }, [session]);
+  const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [access, setAccess] = useState<AuthAccess>("guest");
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -70,8 +107,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session) {
+      setProfile(null);
+      setAccess("guest");
+      writeCachedProfile(null);
+      return;
+    }
+
+    const fallbackProfile: AdminProfile = {
+      id: session.user.id,
+      full_name:
+        typeof session.user.user_metadata?.full_name === "string"
+          ? session.user.user_metadata.full_name
+          : null,
+      email: session.user.email ?? null,
+      role: null,
+      status: null,
+    };
+
+    const cachedProfile = readCachedProfile(session.user.id);
+    if (cachedProfile) {
+      setProfile(cachedProfile);
+      setAccess(isAllowedRole(cachedProfile.role) ? "allowed" : "denied");
+    } else {
+      setProfile(fallbackProfile);
+      setAccess("guest");
+    }
+
+    if (!supabase) {
+      setProfile(fallbackProfile);
+      setAccess("denied");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadProfile() {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, role, status")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error || !data) {
+        setProfile(fallbackProfile);
+        setAccess("denied");
+        writeCachedProfile(null);
+        return;
+      }
+
+      const liveProfile: AdminProfile = {
+        id: data.id,
+        full_name: data.full_name,
+        email: data.email,
+        role: data.role,
+        status: data.status,
+      };
+
+      setProfile(liveProfile);
+      setAccess(isAllowedRole(liveProfile.role) ? "allowed" : "denied");
+      writeCachedProfile(liveProfile);
+    }
+
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
+      access,
       authError,
       initialized,
       profile,
@@ -102,10 +214,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setSession(null);
+        setProfile(null);
+        setAccess("guest");
+        writeCachedProfile(null);
         await supabase.auth.signOut();
       },
     }),
-    [authError, initialized, profile, session]
+    [access, authError, initialized, profile, session]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
