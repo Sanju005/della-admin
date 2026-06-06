@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,6 +35,8 @@ export default function LoginPage() {
     let active = true;
 
     async function continueSession() {
+      const supabase = getSupabaseClient();
+
       if (!supabase) {
         return;
       }
@@ -75,6 +77,7 @@ export default function LoginPage() {
   function handleSubmit() {
     startTransition(async () => {
       setError("");
+      const supabase = getSupabaseClient();
 
       if (!supabase) {
         setError("Supabase is not configured yet.");

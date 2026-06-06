@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, Lock, ShieldCheck } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -18,6 +18,8 @@ export default function ResetPasswordPage() {
     let active = true;
 
     async function checkSession() {
+      const supabase = getSupabaseClient();
+
       if (!supabase) {
         if (active) {
           setError("Supabase is not configured yet.");
@@ -53,6 +55,7 @@ export default function ResetPasswordPage() {
     startTransition(async () => {
       setError("");
       setNotice("");
+      const supabase = getSupabaseClient();
 
       if (!supabase) {
         setError("Supabase is not configured yet.");

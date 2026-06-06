@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 const userResetRedirectUrl = "https://app.dellaapp.com/reset-password";
 
@@ -17,6 +17,7 @@ export default function ForgotPasswordPage() {
     startTransition(async () => {
       setError("");
       setNotice("");
+      const supabase = getSupabaseClient();
 
       if (!supabase) {
         setError("Supabase is not configured yet.");
