@@ -14,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { requestNotificationPermission, saveFCMToken } from "@/lib/notifications";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -104,6 +105,23 @@ export default function LoginPage() {
       if (profileError) {
         setError(profileError.message || "Unable to load your account.");
         return;
+      }
+
+      try {
+        const fcmToken = await requestNotificationPermission();
+
+        if (fcmToken) {
+          console.log("[FCM] Received token after login.");
+          const saveResult = await saveFCMToken(fcmToken);
+
+          if (!saveResult.success) {
+            console.error("[FCM] Failed to persist token:", saveResult.error);
+          }
+        } else {
+          console.warn("[FCM] No token available after login.");
+        }
+      } catch (notificationError) {
+        console.error("[FCM] Notification setup failed after login:", notificationError);
       }
 
       if (profile?.role === "provider") {
