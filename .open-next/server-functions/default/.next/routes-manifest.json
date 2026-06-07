@@ -23,6 +23,22 @@
   },
   "dynamicRoutes": [
     {
+      "page": "/api/notifications/[id]",
+      "regex": "^/api/notifications/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/notifications/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/provider/bookings/[id]",
+      "regex": "^/api/provider/bookings/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/provider/bookings/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/provider/register/[id]",
       "regex": "^/api/provider/register/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -138,10 +154,22 @@
       "namedRegex": "^/api/location/search(?:/)?$"
     },
     {
+      "page": "/api/notifications",
+      "regex": "^/api/notifications(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/notifications(?:/)?$"
+    },
+    {
       "page": "/api/profile/me",
       "regex": "^/api/profile/me(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/profile/me(?:/)?$"
+    },
+    {
+      "page": "/api/provider/bookings",
+      "regex": "^/api/provider/bookings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/provider/bookings(?:/)?$"
     },
     {
       "page": "/api/provider/me",
@@ -280,6 +308,18 @@
       "regex": "^/profile/favourites(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/profile/favourites(?:/)?$"
+    },
+    {
+      "page": "/profile/messages",
+      "regex": "^/profile/messages(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/profile/messages(?:/)?$"
+    },
+    {
+      "page": "/profile/notifications",
+      "regex": "^/profile/notifications(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/profile/notifications(?:/)?$"
     },
     {
       "page": "/profile/payments",
