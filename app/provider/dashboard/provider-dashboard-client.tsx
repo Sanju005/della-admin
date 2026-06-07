@@ -5,13 +5,18 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
+  Bell,
+  CalendarDays,
   LogOut,
   Mail,
   MapPin,
+  MessageSquareText,
   PencilLine,
   Phone,
+  Route,
   Save,
   ShieldCheck,
+  Wallet,
 } from "lucide-react";
 
 import { getSupabaseClient } from "@/lib/supabase";
@@ -41,6 +46,43 @@ type ProviderDashboardData = {
     dailyRate: number;
     specialties: string[];
   }>;
+};
+
+type ProviderBookingItem = {
+  id: string;
+  customerId: string;
+  customerName: string;
+  serviceLabel: string;
+  serviceKey: string;
+  location: string;
+  bookingMode: "hourly" | "daily";
+  bookingStatus:
+    | "pending"
+    | "accepted"
+    | "on_the_way"
+    | "arrived"
+    | "completed"
+    | "paid"
+    | "review_requested"
+    | "reviewed"
+    | "declined"
+    | "cancelled";
+  statusLabel: string;
+  bucket: "requests" | "active" | "completed" | "closed";
+  schedule: string;
+  customerNote: string;
+  providerResponseNote: string;
+  declineReason: string;
+  quotedAmount: number;
+  createdAt: string;
+};
+
+type ProviderNotificationItem = {
+  id: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
 };
 
 function VerificationPill({
@@ -75,6 +117,10 @@ export function ProviderDashboardClient() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(false);
+  const [bookings, setBookings] = useState<ProviderBookingItem[]>([]);
+  const [notifications, setNotifications] = useState<ProviderNotificationItem[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [actionBookingId, setActionBookingId] = useState("");
   const [isSaving, startTransition] = useTransition();
   const [form, setForm] = useState({
     fullName: "",
@@ -115,8 +161,24 @@ export function ProviderDashboardClient() {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
+      const bookingsResponse = await fetch("/api/provider/bookings", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const notificationsResponse = await fetch("/api/notifications", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
       const result = (await response.json()) as ProviderDashboardData | { error?: string };
+      const bookingsResult = (await bookingsResponse.json()) as
+        | { bookings: ProviderBookingItem[] }
+        | { error?: string };
+      const notificationsResult = (await notificationsResponse.json()) as
+        | { notifications: ProviderNotificationItem[] }
+        | { error?: string };
 
       if (!active) {
         return;
@@ -136,6 +198,13 @@ export function ProviderDashboardClient() {
         serviceRadiusKm: String(result.serviceRadiusKm),
         bio: result.bio,
       });
+      if (bookingsResponse.ok && "bookings" in bookingsResult) {
+        setBookings(bookingsResult.bookings);
+      }
+      if (notificationsResponse.ok && "notifications" in notificationsResult) {
+        setNotifications(notificationsResult.notifications);
+      }
+      setBookingsLoading(false);
       setLoading(false);
     }
 
@@ -156,6 +225,90 @@ export function ProviderDashboardClient() {
         .join(" "),
     })) ?? [];
   }, [data]);
+
+  const bookingGroups = useMemo(
+    () => ({
+      requests: bookings.filter((booking) => booking.bucket === "requests"),
+      active: bookings.filter((booking) => booking.bucket === "active"),
+      completed: bookings.filter((booking) => booking.bucket === "completed"),
+      closed: bookings.filter((booking) => booking.bucket === "closed"),
+    }),
+    [bookings]
+  );
+
+  useEffect(() => {
+    const client = getSupabaseClient();
+
+    if (!client || !data?.providerId) {
+      return;
+    }
+
+    let active = true;
+    let sessionToken = "";
+
+    const channel = client
+      .channel(`provider-notifications-${data.providerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${data.providerId}`,
+        },
+        async () => {
+          if (!active || !sessionToken) {
+            return;
+          }
+
+          const [bookingsResponse, notificationsResponse] = await Promise.all([
+            fetch("/api/provider/bookings", {
+              headers: {
+                Authorization: `Bearer ${sessionToken}`,
+              },
+            }),
+            fetch("/api/notifications", {
+              headers: {
+                Authorization: `Bearer ${sessionToken}`,
+              },
+            }),
+          ]);
+
+          const bookingsResult = (await bookingsResponse.json()) as
+            | { bookings: ProviderBookingItem[] }
+            | { error?: string };
+          const notificationsResult = (await notificationsResponse.json()) as
+            | { notifications: ProviderNotificationItem[] }
+            | { error?: string };
+
+          if (active && bookingsResponse.ok && "bookings" in bookingsResult) {
+            setBookings(bookingsResult.bookings);
+          }
+
+          if (active && notificationsResponse.ok && "notifications" in notificationsResult) {
+            setNotifications(notificationsResult.notifications);
+            const latest = notificationsResult.notifications[0];
+            if (latest && !latest.isRead) {
+              setNotice(latest.title);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    void client.auth.getSession().then(({ data }) => {
+      if (!active) {
+        return;
+      }
+
+      sessionToken = data.session?.access_token ?? "";
+    });
+
+    return () => {
+      active = false;
+      client.removeChannel(channel);
+    };
+  }, [data?.providerId]);
 
   async function handleSignOut() {
     const client = getSupabaseClient();
@@ -214,6 +367,68 @@ export function ProviderDashboardClient() {
       setData(result);
       setEditing(false);
       setNotice("Provider listing updated.");
+    });
+  }
+
+  function handleBookingAction(bookingId: string, status: ProviderBookingItem["bookingStatus"], note = "") {
+    const client = getSupabaseClient();
+
+    startTransition(async () => {
+      setError("");
+      setNotice("");
+      setActionBookingId(bookingId);
+
+      if (!client) {
+        setError("Supabase is not configured yet.");
+        setActionBookingId("");
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+
+      if (!session) {
+        router.replace("/login");
+        setActionBookingId("");
+        return;
+      }
+
+      const response = await fetch(`/api/provider/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          status,
+          note,
+        }),
+      });
+
+      const result = (await response.json()) as { success?: true; error?: string };
+
+      if (!response.ok || !result.success) {
+        setError(result.error || "Unable to update booking.");
+        setActionBookingId("");
+        return;
+      }
+
+      const refreshResponse = await fetch("/api/provider/bookings", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const refreshResult = (await refreshResponse.json()) as
+        | { bookings: ProviderBookingItem[] }
+        | { error?: string };
+
+      if (refreshResponse.ok && "bookings" in refreshResult) {
+        setBookings(refreshResult.bookings);
+      }
+
+      setNotice("Booking updated.");
+      setActionBookingId("");
     });
   }
 
@@ -298,6 +513,151 @@ export function ProviderDashboardClient() {
 
         <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
           <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[18px] font-extrabold text-[#111827]">Live Notifications</h2>
+            <span className="rounded-full bg-[#eef9f1] px-3 py-1 text-[12px] font-bold text-[#16a34a]">
+              {notifications.filter((item) => !item.isRead).length} unread
+            </span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {notifications.length === 0 ? (
+              <EmptyState text="No notifications yet." />
+            ) : (
+              notifications.slice(0, 5).map((item) => (
+                <div
+                  key={item.id}
+                  className={`rounded-[18px] border p-4 ${
+                    item.isRead
+                      ? "border-[#e4ece7] bg-[#fbfffc]"
+                      : "border-[#bbf7d0] bg-[#f6fff8]"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#eef9f1] text-[#16a34a]">
+                      <Bell className="h-4.5 w-4.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-extrabold text-[#111827]">
+                        {item.title}
+                      </p>
+                      <p className="mt-1 text-[13px] leading-6 text-[#4b5563]">
+                        {item.body}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[18px] font-extrabold text-[#111827]">Booking Requests</h2>
+            <span className="rounded-full bg-[#eef9f1] px-3 py-1 text-[12px] font-bold text-[#16a34a]">
+              {bookingGroups.requests.length} pending
+            </span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {bookingsLoading ? (
+              <div className="rounded-[18px] border border-[#e4ece7] bg-[#fbfffc] p-4 text-[13px] text-[#6b7280]">
+                Loading bookings...
+              </div>
+            ) : bookingGroups.requests.length === 0 ? (
+              <EmptyState text="No pending booking requests yet." />
+            ) : (
+              bookingGroups.requests.map((booking) => (
+                <ProviderBookingCard
+                  key={booking.id}
+                  booking={booking}
+                  actionBookingId={actionBookingId}
+                  onAccept={() => handleBookingAction(booking.id, "accepted", "Provider accepted booking")}
+                  onDecline={() => handleBookingAction(booking.id, "declined", "Provider declined booking")}
+                />
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[18px] font-extrabold text-[#111827]">Active Tasks</h2>
+            <span className="rounded-full bg-[#eef9f1] px-3 py-1 text-[12px] font-bold text-[#16a34a]">
+              {bookingGroups.active.length} active
+            </span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {bookingGroups.active.length === 0 ? (
+              <EmptyState text="No active tasks right now." />
+            ) : (
+              bookingGroups.active.map((booking) => (
+                <ProviderBookingCard
+                  key={booking.id}
+                  booking={booking}
+                  actionBookingId={actionBookingId}
+                  onAdvance={() =>
+                    handleBookingAction(
+                      booking.id,
+                      booking.bookingStatus === "accepted"
+                        ? "on_the_way"
+                        : booking.bookingStatus === "on_the_way"
+                          ? "arrived"
+                          : booking.bookingStatus === "arrived"
+                            ? "completed"
+                            : "accepted"
+                    )
+                  }
+                  advanceLabel={
+                    booking.bookingStatus === "accepted"
+                      ? "Mark On the Way"
+                      : booking.bookingStatus === "on_the_way"
+                        ? "Mark Arrived"
+                        : booking.bookingStatus === "arrived"
+                          ? "Mark Completed"
+                          : "Continue"
+                  }
+                />
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[18px] font-extrabold text-[#111827]">Completion & Payment</h2>
+            <span className="rounded-full bg-[#eef9f1] px-3 py-1 text-[12px] font-bold text-[#16a34a]">
+              {bookingGroups.completed.length} to close
+            </span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {bookingGroups.completed.length === 0 ? (
+              <EmptyState text="No completed jobs waiting for payment or review." />
+            ) : (
+              bookingGroups.completed.map((booking) => (
+                <ProviderBookingCard
+                  key={booking.id}
+                  booking={booking}
+                  actionBookingId={actionBookingId}
+                  onAdvance={() =>
+                    handleBookingAction(
+                      booking.id,
+                      booking.bookingStatus === "completed"
+                        ? "paid"
+                        : "review_requested"
+                    )
+                  }
+                  advanceLabel={
+                    booking.bookingStatus === "completed"
+                      ? "Mark Payment Done"
+                      : "Request Review"
+                  }
+                />
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
+          <div className="flex items-center justify-between gap-3">
             <h2 className="text-[18px] font-extrabold text-[#111827]">Manage Listing</h2>
             <button
               type="button"
@@ -360,6 +720,103 @@ export function ProviderDashboardClient() {
         </section>
       </div>
     </main>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-[18px] border border-dashed border-[#dbe8df] bg-[#fbfffc] px-4 py-5 text-[13px] text-[#6b7280]">
+      {text}
+    </div>
+  );
+}
+
+function ProviderBookingCard({
+  booking,
+  actionBookingId,
+  onAccept,
+  onDecline,
+  onAdvance,
+  advanceLabel,
+}: {
+  booking: ProviderBookingItem;
+  actionBookingId: string;
+  onAccept?: () => void;
+  onDecline?: () => void;
+  onAdvance?: () => void;
+  advanceLabel?: string;
+}) {
+  return (
+    <div className="rounded-[18px] border border-[#e4ece7] bg-[#fbfffc] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[15px] font-extrabold text-[#111827]">
+            {booking.serviceLabel}
+          </p>
+          <p className="mt-1 text-[13px] text-[#4b5563]">
+            {booking.customerName}
+          </p>
+        </div>
+        <span className="rounded-full bg-[#eef9f1] px-2.5 py-1 text-[11px] font-bold text-[#16a34a]">
+          {booking.statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-2 text-[13px] text-[#4b5563]">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-[#16a34a]" />
+          <span>{booking.schedule}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-[#16a34a]" />
+          <span>{booking.location}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-[#16a34a]" />
+          <span>RM{booking.quotedAmount.toFixed(2)}</span>
+        </div>
+        {booking.customerNote ? (
+          <div className="flex items-start gap-2">
+            <MessageSquareText className="mt-0.5 h-4 w-4 text-[#16a34a]" />
+            <span>{booking.customerNote}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {onAccept ? (
+          <button
+            type="button"
+            disabled={actionBookingId === booking.id}
+            onClick={onAccept}
+            className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#16a34a] px-4 text-[13px] font-extrabold text-white disabled:opacity-70"
+          >
+            Accept
+          </button>
+        ) : null}
+        {onDecline ? (
+          <button
+            type="button"
+            disabled={actionBookingId === booking.id}
+            onClick={onDecline}
+            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#fecaca] bg-white px-4 text-[13px] font-extrabold text-[#dc2626] disabled:opacity-70"
+          >
+            Decline
+          </button>
+        ) : null}
+        {onAdvance && advanceLabel ? (
+          <button
+            type="button"
+            disabled={actionBookingId === booking.id}
+            onClick={onAdvance}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[12px] border border-[#dbe8df] bg-white px-4 text-[13px] font-extrabold text-[#111827] disabled:opacity-70"
+          >
+            <Route className="h-4 w-4 text-[#16a34a]" />
+            {advanceLabel}
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

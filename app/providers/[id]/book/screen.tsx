@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import type { ProviderDetail } from "@/lib/provider-detail";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type BookingMode = "hourly" | "daily";
 
@@ -117,11 +118,26 @@ export function BookingFormScreen({
     try {
       setPending(true);
       setError(null);
+      const client = getSupabaseClient();
+
+      if (!client) {
+        throw new Error("Supabase is not configured yet.");
+      }
+
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+
+      if (!session) {
+        router.push("/login");
+        return;
+      }
 
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           providerId: detail.id,

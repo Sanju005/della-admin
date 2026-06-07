@@ -44,6 +44,16 @@ export type PaymentHistoryItem = {
   status: "paid" | "refunded";
 };
 
+export type NotificationItem = {
+  id: string;
+  bookingId?: string;
+  type: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+};
+
 export type Address = {
   id: string;
   label: string;

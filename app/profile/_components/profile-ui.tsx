@@ -20,6 +20,7 @@ import type {
   BookingStatus,
   CustomerProfile,
   FavoriteProvider,
+  NotificationItem,
   PaymentHistoryItem,
   ProfileOverviewData,
   SettingGroup,
@@ -62,6 +63,10 @@ type FavoritesProps = {
   providers: FavoriteProvider[];
 };
 
+type NotificationsProps = {
+  initialNotifications?: NotificationItem[];
+};
+
 type BookingDetailProps = {
   booking: Booking;
 };
@@ -96,13 +101,13 @@ export function ProfileShell({
                 <h1 className="text-[18px] font-extrabold">{title}</h1>
               </div>
               {!showBack ? (
-                <button
-                  type="button"
+                <Link
+                  href="/profile/notifications"
                   aria-label="Notifications"
                   className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/95"
                 >
                   <BellIcon className="h-5 w-5" />
-                </button>
+                </Link>
               ) : <span className="h-8 w-8" aria-hidden />}
             </div>
           </div>
@@ -576,11 +581,53 @@ export function AddressesScreen({ addresses }: AddressesProps) {
 }
 
 export function BookingsScreen({ bookings, initialTab = "upcoming" }: BookingsProps) {
+  const [items, setItems] = useState(bookings);
   const [activeTab, setActiveTab] = useState<BookingStatus>(initialTab);
 
+  useEffect(() => {
+    let active = true;
+    const client = getSupabaseClient();
+
+    async function loadLiveBookings() {
+      if (!client) {
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+
+      if (!active || !session) {
+        return;
+      }
+
+      const response = await fetch("/api/bookings", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = (await response.json()) as
+        | { bookings: Booking[] }
+        | { error?: string };
+
+      if (!active || !response.ok || !("bookings" in result)) {
+        return;
+      }
+
+      setItems(result.bookings);
+    }
+
+    void loadLiveBookings();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const filtered = useMemo(
-    () => bookings.filter((booking) => booking.status === activeTab),
-    [activeTab, bookings]
+    () => items.filter((booking) => booking.status === activeTab),
+    [activeTab, items]
   );
 
   return (
@@ -1142,6 +1189,163 @@ export function PaymentsScreen({ payments }: PaymentsProps) {
   );
 }
 
+export function NotificationsScreen({
+  initialNotifications = [],
+}: NotificationsProps) {
+  const [items, setItems] = useState(initialNotifications);
+
+  useEffect(() => {
+    let active = true;
+    const client = getSupabaseClient();
+    let channel: ReturnType<NonNullable<typeof client>["channel"]> | null = null;
+
+    async function loadNotifications() {
+      if (!client) {
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+
+      if (!active || !session) {
+        return;
+      }
+
+      const response = await fetch("/api/notifications", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = (await response.json()) as
+        | { notifications: NotificationItem[] }
+        | { error?: string };
+
+      if (!active || !response.ok || !("notifications" in result)) {
+        return;
+      }
+
+      setItems(result.notifications);
+
+      channel = client
+        .channel(`notifications-${session.user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${session.user.id}`,
+          },
+          async () => {
+            const refreshResponse = await fetch("/api/notifications", {
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+              },
+            });
+
+            const refreshResult = (await refreshResponse.json()) as
+              | { notifications: NotificationItem[] }
+              | { error?: string };
+
+            if (!active || !refreshResponse.ok || !("notifications" in refreshResult)) {
+              return;
+            }
+
+            setItems(refreshResult.notifications);
+          }
+        )
+        .subscribe();
+    }
+
+    void loadNotifications();
+
+    return () => {
+      active = false;
+      if (client && channel) {
+        client.removeChannel(channel);
+      }
+    };
+  }, []);
+
+  async function markAsRead(id: string) {
+    const client = getSupabaseClient();
+    if (!client) {
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await client.auth.getSession();
+
+    if (!session) {
+      return;
+    }
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, isRead: true } : item
+      )
+    );
+
+    await fetch(`/api/notifications/${id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+  }
+
+  return (
+    <ProfileShell title="Notifications" showBack backHref="/profile">
+      <div className="space-y-4">
+        {items.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-[#d9e2dd] bg-white px-4 py-8 text-center text-[14px] text-[#6b7280]">
+            No notifications yet.
+          </div>
+        ) : (
+          items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => void markAsRead(item.id)}
+              className={`w-full rounded-[18px] border p-4 text-left shadow-[0_10px_26px_rgba(15,23,42,0.04)] ${
+                item.isRead
+                  ? "border-[#e4ece7] bg-white"
+                  : "border-[#bbf7d0] bg-[#f6fff8]"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[15px] font-extrabold text-[#111827]">
+                    {item.title}
+                  </p>
+                  <p className="mt-2 text-[13px] leading-6 text-[#4b5563]">
+                    {item.body}
+                  </p>
+                </div>
+                {!item.isRead ? (
+                  <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[#16a34a]" />
+                ) : null}
+              </div>
+              <p className="mt-3 text-[12px] font-semibold text-[#6b7280]">
+                {new Intl.DateTimeFormat("en-MY", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }).format(new Date(item.createdAt))}
+              </p>
+            </button>
+          ))
+        )}
+      </div>
+    </ProfileShell>
+  );
+}
+
 function LocationSettingsCard() {
   const [location, setLocation] = useState<StoredLiveLocation | null>(() =>
     loadStoredLiveLocation()
@@ -1556,7 +1760,7 @@ function BottomNav() {
       <div className="flex items-center justify-between gap-1 text-[10.5px] font-medium text-[#8A94A6]">
         <NavItem href="/home" label="Home" icon={<HomeIcon className="h-5 w-5" />} active={pathname === "/home"} />
         <NavItem href="/profile/bookings" label="Bookings" icon={<CalendarIcon className="h-5 w-5" />} active={pathname.startsWith("/profile/bookings")} />
-        <NavItem href="/profile/messages" label="Messages" icon={<MessageIcon className="h-5 w-5" />} active={pathname.startsWith("/profile/messages")} />
+        <NavItem href="/profile/notifications" label="Alerts" icon={<BellIcon className="h-5 w-5" />} active={pathname.startsWith("/profile/notifications")} />
         <NavItem href="/profile/favourites" label="Favourite" icon={<UserIcon className="h-5 w-5" />} active={pathname.startsWith("/profile/favourites")} />
         <NavItem href="/profile" label="Profile" icon={<UserIcon className="h-5 w-5" />} active={pathname === "/profile" || pathname.startsWith("/profile/edit") || pathname.startsWith("/profile/addresses") || pathname.startsWith("/profile/settings")} />
       </div>
