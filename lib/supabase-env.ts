@@ -31,3 +31,15 @@ export function getAppBaseUrl() {
     null
   );
 }
+
+export function getFirebaseProjectId() {
+  return process.env.FIREBASE_PROJECT_ID ?? null;
+}
+
+export function getFirebaseClientEmail() {
+  return process.env.FIREBASE_CLIENT_EMAIL ?? null;
+}
+
+export function getFirebasePrivateKey() {
+  return process.env.FIREBASE_PRIVATE_KEY ?? null;
+}

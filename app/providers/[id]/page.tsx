@@ -16,6 +16,7 @@ import {
   Timer,
   ThumbsUp,
 } from "lucide-react";
+import { EmptyState as SharedEmptyState, SectionTitle, StatusBadge } from "@/app/_components/della-ui";
 import { notFound } from "next/navigation";
 
 import { AvailabilityCalendar } from "./availability-calendar";
@@ -43,7 +44,7 @@ export default async function ProviderDetailPage(props: {
           <header className="flex items-center justify-between">
             <Link
               href={searchParams.service ? `/providers?service=${searchParams.service}` : "/providers"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#0F172A]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#f4faf5] text-[#0F172A]"
             >
               <ArrowLeft className="h-6 w-6" />
             </Link>
@@ -66,7 +67,7 @@ export default async function ProviderDetailPage(props: {
           </header>
 
           <section className="mt-4 flex gap-3">
-            <div className="relative h-[10.6rem] w-[8.4rem] shrink-0 overflow-hidden rounded-[22px]">
+            <div className="relative h-[9.8rem] w-[7.3rem] shrink-0 overflow-hidden rounded-[22px] sm:h-[10.6rem] sm:w-[8.4rem]">
               <Image
                 src={detail.profileImage}
                 alt={detail.name}
@@ -85,7 +86,7 @@ export default async function ProviderDetailPage(props: {
 
             <div className="min-w-0 flex-1">
               <div className="flex items-start gap-2">
-                <h1 className="text-[15px] font-extrabold text-[#0F172A]">
+                <h1 className="text-[16px] font-extrabold text-[#0F172A] sm:text-[18px]">
                   {detail.name}
                 </h1>
                 {detail.verified ? (
@@ -182,14 +183,10 @@ export default async function ProviderDetailPage(props: {
           </section>
 
           <section className="mt-5 rounded-[20px] border border-[#E6ECE7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2.5">
-              <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF9F1] text-[#16A34A]">
-                <BadgeCheck className="h-4.5 w-4.5" />
-              </div>
-              <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                {detail.serviceLabel} Service
-              </h2>
-            </div>
+            <SectionTitle
+              title={`${detail.serviceLabel} Service`}
+              action={<StatusBadge label={detail.verified ? "Verified" : "Pending Review"} tone={detail.verified ? "accepted" : "pending"} />}
+            />
 
             <div className="mt-4 rounded-[16px] border border-[#E7ECE7] px-4 py-4">
               <div className="grid grid-cols-2 gap-3">
@@ -226,9 +223,7 @@ export default async function ProviderDetailPage(props: {
           </section>
 
           <section className="mt-5 rounded-[20px] border border-[#E6ECE7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-            <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-              About {detail.name}
-            </h2>
+            <SectionTitle title={`About ${detail.name}`} />
             <p className="mt-3 text-[13px] leading-6 text-[#344054]">{detail.about}</p>
             <button
               type="button"
@@ -246,21 +241,19 @@ export default async function ProviderDetailPage(props: {
           />
 
           <section className="mt-5 rounded-[20px] border border-[#E6ECE7] bg-white p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                  Customer Reviews
-                </h2>
-                <p className="mt-1 text-[12px] text-[#667085]">
-                  Real feedback with ratings and photos
-                </p>
-              </div>
-              <div className="rounded-full bg-[#FFF7E8] px-2.5 py-1 text-[12px] font-bold text-[#B54708]">
-                {detail.rating.toFixed(1)} / 5
-              </div>
-            </div>
+            <SectionTitle
+              title="Customer Reviews"
+              subtitle="Real feedback with ratings and photos"
+              action={<StatusBadge label={`${detail.rating.toFixed(1)} / 5`} tone="pending" />}
+            />
 
             <div className="mt-4 space-y-3">
+              {detail.customerReviews.length === 0 ? (
+                <SharedEmptyState
+                  title="No reviews yet"
+                  description="This provider has not received a customer review yet."
+                />
+              ) : null}
               {detail.customerReviews.map((review) => (
                 <div
                   key={review.id}

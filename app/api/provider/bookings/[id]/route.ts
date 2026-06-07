@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
+import { sendPushNotificationToUser } from "@/lib/push-notifications";
 import {
   getSupabaseServiceKey,
   getSupabaseUrl,
@@ -319,6 +320,13 @@ export async function PATCH(
       notification_type: nextNotificationType,
       title: nextNotificationContent.title,
       body: nextNotificationContent.body,
+    });
+
+    await sendPushNotificationToUser(current.customer_id, {
+      title: nextNotificationContent.title,
+      body: nextNotificationContent.body,
+      bookingId: current.id,
+      path: `/profile/notifications?booking=${current.id}`,
     });
   }
 

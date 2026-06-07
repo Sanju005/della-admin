@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, Lock, ShieldCheck } from "lucide-react";
+import { AppButton, AuthInfoPanel, MobilePage, SecureNotice } from "@/app/_components/della-ui";
 import { getSupabaseClient } from "@/lib/supabase";
 
 export default function ResetPasswordPage() {
@@ -86,9 +87,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <main className="min-h-[100dvh] overflow-x-hidden bg-[#F6FFF8]">
-      <div className="mx-auto min-h-[100dvh] w-full max-w-[430px] bg-[#F6FFF8] px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-        <div className="min-h-[100dvh] py-6">
+    <MobilePage className="min-h-[100dvh] py-6">
           <Link
             href="/login"
             aria-label="Back"
@@ -97,26 +96,15 @@ export default function ResetPasswordPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
 
-          <div className="mt-6 rounded-[32px] bg-white px-6 py-7 shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8F7EA] text-[#16A34A]">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-[13px] font-extrabold uppercase tracking-[0.18em] text-[#16A34A]">
-                  DELLA
-                </p>
-                <h1 className="text-[28px] font-extrabold text-[#0F172A]">
-                  Create new password
-                </h1>
-              </div>
-            </div>
+          <div className="mt-6 space-y-4">
+            <AuthInfoPanel
+              icon={<ShieldCheck className="h-6 w-6" />}
+              title="Create new password"
+              description="Open the recovery link from your email, then set a fresh password for your account."
+            />
 
-            <p className="mt-5 text-[15px] leading-7 text-[#64748B]">
-              Open the recovery link from your email, then set a fresh password for your account.
-            </p>
-
-            <label className="mt-7 block text-[16px] font-extrabold text-[#0F172A]">
+            <div className="rounded-[32px] border border-[#E3ECE5] bg-white px-5 py-6 shadow-[0_16px_36px_rgba(15,23,42,0.08)] sm:px-6 sm:py-7">
+            <label className="block text-[16px] font-extrabold text-[#0F172A]">
               New password
               <div className="mt-3 flex h-[58px] items-center rounded-[18px] border border-[#DDE5E0] bg-white px-5 shadow-[0_4px_10px_rgba(15,23,42,0.02)]">
                 <Lock className="mr-4 h-5 w-5 text-[#16A34A]" />
@@ -158,21 +146,20 @@ export default function ResetPasswordPage() {
               </p>
             ) : null}
 
-            <button
-              type="button"
+            <AppButton
               onClick={handleSubmit}
               disabled={!ready || checking || isSubmitting}
-              className="mt-7 inline-flex h-[56px] w-full items-center justify-center rounded-[20px] bg-[#16A34A] text-[18px] font-extrabold text-white shadow-[0_14px_28px_rgba(22,163,74,0.16)] disabled:cursor-not-allowed disabled:opacity-70"
+              className="mt-7 h-[56px] w-full rounded-[20px] text-[18px] disabled:cursor-not-allowed"
             >
               {checking
                 ? "Checking recovery session..."
                 : isSubmitting
                   ? "Updating password..."
                   : "Update password"}
-            </button>
+            </AppButton>
+            </div>
+            <SecureNotice />
           </div>
-        </div>
-      </div>
-    </main>
+    </MobilePage>
   );
 }

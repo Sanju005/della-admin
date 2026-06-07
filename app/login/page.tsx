@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
+import { FeaturePill, MobilePage, SecureNotice } from "@/app/_components/della-ui";
 import { getSupabaseClient } from "@/lib/supabase";
 import { requestNotificationPermission, saveFCMToken } from "@/lib/notifications";
 
@@ -134,9 +135,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-[100dvh] overflow-x-hidden bg-[#F6FFF8]">
-      <div className="mx-auto min-h-[100dvh] w-full max-w-[430px] bg-[#F6FFF8] px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-        <div className="relative min-h-[100dvh] bg-[#F6FFF8] pb-8">
+    <MobilePage className="relative bg-[#F6FFF8] pb-8">
           <section className="relative overflow-hidden px-1 pt-6">
             <div className="absolute right-[-24%] top-[5%] h-[75%] w-[78%] rounded-full bg-[#ECF8EE]" />
             <div className="absolute left-[45%] top-[34%] h-[55%] w-[72%] rounded-full bg-[#F1FAF3]" />
@@ -159,11 +158,10 @@ export default function LoginPage() {
                 </p>
               </div>
 
-              <div className="mt-8 inline-flex items-center gap-3 rounded-full bg-[#E8F7EA] px-5 py-3 text-[#15803D] shadow-[0_8px_18px_rgba(22,163,74,0.05)]">
-                <BadgeCheck className="h-5 w-5 text-[#16A34A]" />
-                <span className="text-[15px] font-semibold">
-                  Trusted • Verified • Reliable
-                </span>
+              <div className="mt-8 flex flex-wrap gap-2.5">
+                <FeaturePill icon={<BadgeCheck className="h-4 w-4 text-[#16A34A]" />} label="Trusted" />
+                <FeaturePill icon={<ShieldCheck className="h-4 w-4 text-[#16A34A]" />} label="Verified" />
+                <FeaturePill icon={<Headphones className="h-4 w-4 text-[#16A34A]" />} label="Reliable" />
               </div>
 
               <div className="mt-7">
@@ -179,7 +177,7 @@ export default function LoginPage() {
             </div>
           </section>
 
-          <section className="relative z-20 -mt-3 rounded-[28px] bg-white px-6 py-7 shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
+          <section className="relative z-20 -mt-3 rounded-[28px] border border-[#E2EAE4] bg-white px-5 py-6 shadow-[0_16px_36px_rgba(15,23,42,0.08)] sm:px-6 sm:py-7">
             <div>
               <label className="block text-[16px] font-extrabold text-[#0F172A]">
                 Email or Phone
@@ -255,7 +253,7 @@ export default function LoginPage() {
             </p>
           </section>
 
-          <section className="mt-7 rounded-[26px] bg-[#FBFFFC] px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.045)]">
+          <section className="mt-7 rounded-[26px] border border-[#E3ECE5] bg-[#FBFFFC] px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.045)]">
             <div className="grid grid-cols-3 gap-0">
               <TrustItem
                 icon={<ShieldCheck className="h-6 w-6 text-[#16A34A]" />}
@@ -277,13 +275,8 @@ export default function LoginPage() {
             </div>
           </section>
 
-          <div className="mt-7 flex items-center justify-center gap-3 pb-5 text-center text-[15px] text-[#64748B]">
-            <ShieldCheck className="h-5 w-5 text-[#16A34A]" />
-            <span>DELLA is committed to your safety and satisfaction.</span>
-          </div>
-        </div>
-      </div>
-    </main>
+          <SecureNotice />
+    </MobilePage>
   );
 }
 

@@ -21,6 +21,7 @@ import {
   ThumbsUp,
   UserRound,
 } from "lucide-react";
+import { EmptyState as SharedEmptyState, PageHeader, SectionTitle } from "@/app/_components/della-ui";
 
 import { LiveLocationChip } from "@/app/_components/live-location-chip";
 
@@ -135,28 +136,26 @@ export function ProvidersCatalogScreen({ data }: { data: CatalogScreenData }) {
     <main className="min-h-[100dvh] bg-[#f6fff8]">
       <div className="mx-auto min-h-[100dvh] w-full max-w-[430px] bg-white px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         <div className="py-6">
-          <header className="flex items-center justify-between">
+          <header className="flex items-center justify-between gap-3">
             <Link
               href="/home"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#0F172A]"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#f4faf5] text-[#0F172A]"
             >
-              <ArrowLeft className="h-7 w-7" />
+              <ArrowLeft className="h-6 w-6" />
             </Link>
             <LiveLocationChip fallbackLabel="Current location" />
           </header>
 
           <section className="mt-8">
             <div className="flex items-start gap-4">
-              <div className="inline-flex h-28 w-28 shrink-0 items-center justify-center rounded-[24px] bg-[#EEF9F1] text-[#0F172A] shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+              <div className="inline-flex h-24 w-24 shrink-0 items-center justify-center rounded-[24px] bg-[#EEF9F1] text-[#0F172A] shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:h-28 sm:w-28">
                 <Icon className="h-14 w-14 stroke-[1.8]" />
               </div>
               <div className="min-w-0 flex-1 pt-1">
-                <h1 className="text-[30px] font-extrabold tracking-[-0.05em] text-[#0F172A]">
-                  {data.serviceLabel}
-                </h1>
-                <p className="mt-3 text-[16px] leading-7 text-[#344054]">
-                  Find trusted {serviceLower} services near you
-                </p>
+                <PageHeader
+                  title={data.serviceLabel}
+                  subtitle={`Find trusted ${serviceLower} services near you`}
+                />
                 <div className="mt-4 grid grid-cols-3 gap-3 text-[12px] leading-5 text-[#344054]">
                   <TrustBadge
                     icon={<ShieldCheck className="h-4.5 w-4.5 text-[#16A34A]" />}
@@ -256,10 +255,8 @@ export function ProvidersCatalogScreen({ data }: { data: CatalogScreenData }) {
           ) : null}
 
           <section className="mt-8">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[18px] font-extrabold tracking-[-0.04em] text-[#0F172A]">
-                {filteredListings.length} {data.serviceLabel} services found
-              </h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <SectionTitle title={`${filteredListings.length} ${data.serviceLabel} services found`} />
               <label className="flex items-center gap-3 text-[14px] text-[#475467]">
                 <span>Sort by</span>
                 <span className="relative">
@@ -278,6 +275,12 @@ export function ProvidersCatalogScreen({ data }: { data: CatalogScreenData }) {
             </div>
 
             <div className="mt-5 space-y-4">
+              {filteredListings.length === 0 ? (
+                <SharedEmptyState
+                  title="No providers matched this filter"
+                  description="Try a different keyword, work mode, or sort option to see more nearby providers."
+                />
+              ) : null}
               {filteredListings.map((listing) => (
                 <ProviderCard key={listing.id} listing={listing} />
               ))}

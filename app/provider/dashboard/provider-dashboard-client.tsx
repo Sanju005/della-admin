@@ -19,6 +19,14 @@ import {
   Wallet,
 } from "lucide-react";
 
+import {
+  disablePushNotifications,
+  getPushSetupState,
+  requestNotificationPermission,
+  saveFCMToken,
+  type PushSetupState,
+} from "@/lib/notifications";
+import { AppButton, EmptyState as SharedEmptyState, LoadingState as SharedLoadingState, StatusBadge as SharedStatusBadge } from "@/app/_components/della-ui";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type ProviderDashboardData = {
@@ -122,6 +130,11 @@ export function ProviderDashboardClient() {
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [actionBookingId, setActionBookingId] = useState("");
   const [isSaving, startTransition] = useTransition();
+  const [pushState, setPushState] = useState<PushSetupState>({
+    permission: "default",
+    hasSavedToken: false,
+  });
+  const [pushBusy, setPushBusy] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     marketingName: "",
@@ -203,6 +216,10 @@ export function ProviderDashboardClient() {
       }
       if (notificationsResponse.ok && "notifications" in notificationsResult) {
         setNotifications(notificationsResult.notifications);
+      }
+      const nextPushState = await getPushSetupState();
+      if (active) {
+        setPushState(nextPushState);
       }
       setBookingsLoading(false);
       setLoading(false);
@@ -432,11 +449,73 @@ export function ProviderDashboardClient() {
     });
   }
 
+  function handleEnablePush() {
+    setPushBusy(true);
+    setNotice("");
+
+    startTransition(async () => {
+      try {
+        const token = await requestNotificationPermission();
+
+        if (!token) {
+          const state = await getPushSetupState();
+          setPushState(state);
+          setNotice(
+            state.permission === "denied"
+              ? "Push is blocked in this browser. Please allow notifications in browser settings."
+              : "Push permission was not granted."
+          );
+          return;
+        }
+
+        const result = await saveFCMToken(token);
+
+        if (!result.success) {
+          setError(result.error || "Unable to save push token.");
+          return;
+        }
+
+        setPushState({
+          permission: "granted",
+          hasSavedToken: true,
+        });
+        setNotice("Push notifications enabled on this device.");
+      } finally {
+        setPushBusy(false);
+      }
+    });
+  }
+
+  function handleDisablePush() {
+    setPushBusy(true);
+    setNotice("");
+
+    startTransition(async () => {
+      try {
+        const result = await disablePushNotifications();
+
+        if (!result.success) {
+          setError(result.error || "Unable to disable push notifications.");
+          return;
+        }
+
+        const state = await getPushSetupState();
+        setPushState(state);
+        setNotice("Push notifications disabled for this device.");
+      } finally {
+        setPushBusy(false);
+      }
+    });
+  }
+
   if (loading) {
     return (
       <main className="min-h-[100dvh] bg-[#f6fff8] px-4 py-6">
-        <div className="mx-auto grid max-w-[430px] min-h-[40vh] place-items-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+        <div className="mx-auto max-w-[430px]">
+          <SharedLoadingState
+            title="Loading provider dashboard"
+            description="We are preparing your live bookings, notifications, and profile details."
+          />
         </div>
       </main>
     );
@@ -513,6 +592,53 @@ export function ProviderDashboardClient() {
 
         <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
           <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[18px] font-extrabold text-[#111827]">Push Notifications</h2>
+            <span
+              className={`rounded-full px-3 py-1 text-[12px] font-bold ${
+                pushState.permission === "granted" && pushState.hasSavedToken
+                  ? "bg-[#eef9f1] text-[#16a34a]"
+                  : "bg-[#eef2f7] text-[#64748b]"
+              }`}
+            >
+              {pushState.permission === "unsupported"
+                ? "Not supported"
+                : pushState.permission === "denied"
+                  ? "Blocked"
+                  : pushState.permission === "granted" && pushState.hasSavedToken
+                    ? "Enabled"
+                    : pushState.permission === "granted"
+                      ? "Ready to enable"
+                      : "Permission needed"}
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] leading-6 text-[#4b5563]">
+            Get booking requests and status updates even when the app is closed.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={pushBusy || pushState.permission === "unsupported"}
+              onClick={handleEnablePush}
+              className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#16a34a] px-4 text-[13px] font-extrabold text-white disabled:opacity-60"
+            >
+              {pushBusy ? "Updating..." : "Enable Push"}
+            </button>
+            <button
+              type="button"
+              disabled={
+                pushBusy ||
+                (pushState.permission !== "granted" || !pushState.hasSavedToken)
+              }
+              onClick={handleDisablePush}
+              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#dbe8df] bg-white px-4 text-[13px] font-extrabold text-[#111827] disabled:opacity-60"
+            >
+              Disable Push
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
+          <div className="flex items-center justify-between gap-3">
             <h2 className="text-[18px] font-extrabold text-[#111827]">Live Notifications</h2>
             <span className="rounded-full bg-[#eef9f1] px-3 py-1 text-[12px] font-bold text-[#16a34a]">
               {notifications.filter((item) => !item.isRead).length} unread
@@ -520,7 +646,10 @@ export function ProviderDashboardClient() {
           </div>
           <div className="mt-4 space-y-3">
             {notifications.length === 0 ? (
-              <EmptyState text="No notifications yet." />
+              <SharedEmptyState
+                title="No notifications yet"
+                description="New booking requests and task updates will appear here."
+              />
             ) : (
               notifications.slice(0, 5).map((item) => (
                 <div
@@ -563,7 +692,10 @@ export function ProviderDashboardClient() {
                 Loading bookings...
               </div>
             ) : bookingGroups.requests.length === 0 ? (
-              <EmptyState text="No pending booking requests yet." />
+              <SharedEmptyState
+                title="No pending booking requests"
+                description="When a customer books you, the request will appear here for acceptance or decline."
+              />
             ) : (
               bookingGroups.requests.map((booking) => (
                 <ProviderBookingCard
@@ -587,7 +719,10 @@ export function ProviderDashboardClient() {
           </div>
           <div className="mt-4 space-y-3">
             {bookingGroups.active.length === 0 ? (
-              <EmptyState text="No active tasks right now." />
+              <SharedEmptyState
+                title="No active tasks right now"
+                description="Accepted bookings will move here once you start handling them."
+              />
             ) : (
               bookingGroups.active.map((booking) => (
                 <ProviderBookingCard
@@ -630,7 +765,10 @@ export function ProviderDashboardClient() {
           </div>
           <div className="mt-4 space-y-3">
             {bookingGroups.completed.length === 0 ? (
-              <EmptyState text="No completed jobs waiting for payment or review." />
+              <SharedEmptyState
+                title="Nothing waiting for payment or review"
+                description="Completed jobs will move here until payment and review are handled."
+              />
             ) : (
               bookingGroups.completed.map((booking) => (
                 <ProviderBookingCard
@@ -723,14 +861,6 @@ export function ProviderDashboardClient() {
   );
 }
 
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-[18px] border border-dashed border-[#dbe8df] bg-[#fbfffc] px-4 py-5 text-[13px] text-[#6b7280]">
-      {text}
-    </div>
-  );
-}
-
 function ProviderBookingCard({
   booking,
   actionBookingId,
@@ -757,9 +887,7 @@ function ProviderBookingCard({
             {booking.customerName}
           </p>
         </div>
-        <span className="rounded-full bg-[#eef9f1] px-2.5 py-1 text-[11px] font-bold text-[#16a34a]">
-          {booking.statusLabel}
-        </span>
+        <SharedStatusBadge label={booking.statusLabel} tone={providerStatusTone(booking.bookingStatus)} />
       </div>
 
       <div className="mt-3 space-y-2 text-[13px] text-[#4b5563]">
@@ -785,39 +913,55 @@ function ProviderBookingCard({
 
       <div className="mt-4 flex flex-wrap gap-2">
         {onAccept ? (
-          <button
-            type="button"
+          <AppButton
             disabled={actionBookingId === booking.id}
             onClick={onAccept}
-            className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#16a34a] px-4 text-[13px] font-extrabold text-white disabled:opacity-70"
+            className="h-10"
           >
             Accept
-          </button>
+          </AppButton>
         ) : null}
         {onDecline ? (
-          <button
-            type="button"
+          <AppButton
             disabled={actionBookingId === booking.id}
             onClick={onDecline}
-            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#fecaca] bg-white px-4 text-[13px] font-extrabold text-[#dc2626] disabled:opacity-70"
+            tone="danger"
+            className="h-10"
           >
             Decline
-          </button>
+          </AppButton>
         ) : null}
         {onAdvance && advanceLabel ? (
-          <button
-            type="button"
+          <AppButton
             disabled={actionBookingId === booking.id}
             onClick={onAdvance}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-[12px] border border-[#dbe8df] bg-white px-4 text-[13px] font-extrabold text-[#111827] disabled:opacity-70"
+            tone="secondary"
+            icon={<Route className="h-4 w-4 text-[#16a34a]" />}
+            className="h-10"
           >
-            <Route className="h-4 w-4 text-[#16a34a]" />
             {advanceLabel}
-          </button>
+          </AppButton>
         ) : null}
       </div>
     </div>
   );
+}
+
+function providerStatusTone(status: ProviderBookingItem["bookingStatus"]) {
+  switch (status) {
+    case "accepted":
+    case "paid":
+    case "review_requested":
+      return "accepted" as const;
+    case "declined":
+      return "declined" as const;
+    case "completed":
+      return "completed" as const;
+    case "cancelled":
+      return "cancelled" as const;
+    default:
+      return "pending" as const;
+  }
 }
 
 function Field({

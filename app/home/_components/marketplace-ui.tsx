@@ -1,6 +1,4 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Bell,
   BookOpen,
@@ -9,11 +7,9 @@ import {
   CircleUserRound,
   CookingPot,
   House,
-  MapPin,
   MessageCircleMore,
   Search,
   SprayCan,
-  Star,
   UserRound,
   Wrench,
   Baby,
@@ -22,6 +18,7 @@ import {
   Heart,
   CalendarDays,
 } from "lucide-react";
+import { BottomNav, EmptyState, ProviderCard as SharedProviderCard, SectionTitle, StatusBadge } from "@/app/_components/della-ui";
 
 import { LiveLocationChip } from "@/app/_components/live-location-chip";
 import type { HomeFeedData, HomeServiceCategory } from "@/lib/home-feed";
@@ -116,17 +113,17 @@ export function MarketplaceScreen({
           />
 
           <section className="mt-8">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-[18px] font-extrabold tracking-[-0.04em] text-[#0F172A]">
-                Upcoming booking
-              </h2>
-              <Link
-                href="/profile/bookings"
-                className="text-[14px] font-extrabold text-[#16A34A]"
-              >
-                See all bookings
-              </Link>
-            </div>
+            <SectionTitle
+              title="Upcoming booking"
+              action={
+                <Link
+                  href="/profile/bookings"
+                  className="text-[14px] font-extrabold text-[#16A34A]"
+                >
+                  See all bookings
+                </Link>
+              }
+            />
 
             <div className="rounded-[22px] border border-[#E5EBE6] bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
               {upcomingBooking ? (
@@ -147,14 +144,8 @@ export function MarketplaceScreen({
                       <CalendarDays className="h-4 w-4 text-[#16A34A]" />
                       <span className="truncate">{upcomingBooking.scheduleLabel}</span>
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-[14px] text-[#475467]">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#86EFAC]" />
-                      <span>
-                        Status:{" "}
-                        <span className="font-bold text-[#F59E0B]">
-                          {upcomingBooking.statusLabel}
-                        </span>
-                      </span>
+                    <div className="mt-3">
+                      <StatusBadge label={upcomingBooking.statusLabel} tone="pending" />
                     </div>
                   </div>
 
@@ -167,22 +158,23 @@ export function MarketplaceScreen({
                   </Link>
                 </div>
               ) : (
-                <div className="text-[14px] leading-7 text-[#475467]">
-                  No upcoming booking yet.
-                </div>
+                <EmptyState
+                  title="No upcoming booking yet"
+                  description="Your next confirmed service will appear here for quick access."
+                />
               )}
             </div>
           </section>
 
-          <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[430px] border-t border-[#E8ECE8] bg-white/97 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur">
-            <div className="flex items-center justify-between gap-1">
-              <BottomNavLink href="/home" label="Home" active icon={<House className="h-5 w-5 stroke-[1.9]" />} />
-              <BottomNavLink href="/profile/bookings" label="Bookings" icon={<BookOpen className="h-5 w-5 stroke-[1.9]" />} />
-              <BottomNavLink href="/profile/messages" label="Messages" icon={<MessageCircleMore className="h-5 w-5 stroke-[1.9]" />} />
-              <BottomNavLink href="/profile/favourites" label="Favourite" icon={<Heart className="h-5 w-5 stroke-[1.9]" />} />
-              <BottomNavLink href="/profile" label="Profile" icon={<CircleUserRound className="h-5 w-5 stroke-[1.9]" />} />
-            </div>
-          </nav>
+          <BottomNav
+            items={[
+              { href: "/home", label: "Home", active: true, icon: <House className="h-5 w-5 stroke-[1.9]" /> },
+              { href: "/profile/bookings", label: "Bookings", icon: <BookOpen className="h-5 w-5 stroke-[1.9]" /> },
+              { href: "/profile/messages", label: "Messages", icon: <MessageCircleMore className="h-5 w-5 stroke-[1.9]" /> },
+              { href: "/profile/favourites", label: "Favourite", icon: <Heart className="h-5 w-5 stroke-[1.9]" /> },
+              { href: "/profile", label: "Profile", icon: <CircleUserRound className="h-5 w-5 stroke-[1.9]" /> },
+            ]}
+          />
         </div>
       </div>
     </main>
@@ -216,70 +208,25 @@ function ProviderSliderSection({
       <div className="-mx-5 overflow-x-auto px-5 pb-2">
         <div className="flex gap-4">
           {providers.map((provider) => (
-            <article
-              key={`${title}-${provider.id}`}
-              className="w-[15.8rem] shrink-0 overflow-hidden rounded-[20px] border border-[#E5EBE6] bg-white shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
-            >
-              <div className="relative h-36 overflow-hidden bg-[#EEF4EF]">
-                <Image
-                  src={buildProviderPortraitSrc({
-                    name: provider.name,
-                    serviceKey: provider.serviceKey,
-                  })}
-                  alt={provider.name}
-                  fill
-                  sizes="252px"
-                  className="object-cover"
-                />
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0F172A]/28 to-transparent" />
-                <div className="absolute left-3 top-3 rounded-[8px] bg-[#16A34A] px-2.5 py-1 text-[11px] font-bold text-white">
-                  {provider.statusLabel}
-                </div>
-                <button
-                  type="button"
-                  aria-label="Save provider"
-                  className="absolute right-3 top-3 text-white drop-shadow-[0_2px_8px_rgba(15,23,42,0.22)]"
-                >
-                  <Heart className="h-7 w-7" />
-                </button>
-              </div>
-
-              <div className="px-4 py-3">
-                <h3 className="text-[16px] font-extrabold tracking-[-0.03em] text-[#0F172A]">
-                  {provider.name}
-                </h3>
-                <p className="mt-1 text-[14px] text-[#0F172A]">{provider.service}</p>
-
-                <div className="mt-2 flex items-center gap-1 text-[14px] text-[#0F172A]">
-                  <Star className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
-                  <span className="font-semibold">{provider.rating.toFixed(1)}</span>
-                  <span className="text-[#475467]">({provider.reviews})</span>
-                </div>
-
-                <div className="mt-2 flex items-center gap-1 text-[14px] text-[#475467]">
-                  <MapPin className="h-4 w-4 text-[#16A34A]" />
-                  <span>{provider.distanceKm} km away</span>
-                </div>
-
-                <div className="mt-3 border-t border-[#E8ECE8] pt-3">
-                  <p className="text-[14px] text-[#475467]">From</p>
-                  <div className="mt-1 flex items-center justify-between gap-3">
-                    <p className="text-[18px] font-extrabold text-[#16A34A]">
-                      {provider.priceLabel}
-                    </p>
-                    <Link
-                      href={buildProviderDetailHref({
-                        id: provider.id,
-                        serviceKey: provider.serviceKey,
-                      })}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#16A34A] text-white"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </article>
+            <div key={`${title}-${provider.id}`} className="w-[15.8rem] shrink-0">
+              <SharedProviderCard
+                href={buildProviderDetailHref({
+                  id: provider.id,
+                  serviceKey: provider.serviceKey,
+                })}
+                name={provider.name}
+                service={provider.service}
+                priceLabel={provider.priceLabel}
+                rating={provider.rating.toFixed(1)}
+                reviews={`${provider.reviews} reviews`}
+                distanceLabel={`${provider.distanceKm} km away`}
+                portraitSrc={buildProviderPortraitSrc({
+                  name: provider.name,
+                  serviceKey: provider.serviceKey,
+                })}
+                badge={<StatusBadge label={provider.statusLabel} tone="accepted" />}
+              />
+            </div>
           ))}
         </div>
       </div>
@@ -324,37 +271,6 @@ function CategoryIcon({ kind }: { kind: string }) {
     default:
       return <UserRound className="h-[1.55rem] w-[1.55rem] stroke-[1.8]" />;
   }
-}
-
-function BottomNavLink({
-  href,
-  label,
-  icon,
-  active = false,
-}: {
-  href: string;
-  label: string;
-  icon: ReactNode;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`flex min-w-[3.1rem] flex-col items-center gap-1 text-[10.5px] font-medium ${
-        active ? "text-[#16A34A]" : "text-[#8A94A6]"
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-      <span className="flex h-3 items-end">
-        <span
-          className={`rounded-full transition-all ${
-            active ? "h-[3px] w-10 bg-[#16A34A]" : "h-[3px] w-6 bg-transparent"
-          }`}
-        />
-      </span>
-    </Link>
-  );
 }
 
 function timePrefix() {

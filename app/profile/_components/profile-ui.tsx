@@ -4,8 +4,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  AppButton,
+  BookingCard as SharedBookingCard,
+  EmptyState as SharedEmptyState,
+  MessagePlaceholderCard,
+  StatusBadge as SharedStatusBadge,
+} from "@/app/_components/della-ui";
 
 import { LiveLocationChip } from "@/app/_components/live-location-chip";
+import {
+  disablePushNotifications,
+  getPushSetupState,
+  requestNotificationPermission,
+  saveFCMToken,
+  type PushSetupState,
+} from "@/lib/notifications";
 import { getSupabaseClient } from "@/lib/supabase";
 import {
   loadSavedPlaces,
@@ -124,7 +138,9 @@ export function ProfileShell({
 }
 
 export function ProfileOverviewScreen({ initialData }: OverviewProps) {
-  const [profile, setProfile] = useState(initialData.profile);
+  const [profile, setProfile] = useState(
+    () => loadStoredCustomerProfile() ?? initialData.profile
+  );
   const [bookingSummary, setBookingSummary] = useState(initialData.bookingSummary);
   const [paymentSummary, setPaymentSummary] = useState(initialData.paymentSummary);
 
@@ -132,11 +148,6 @@ export function ProfileOverviewScreen({ initialData }: OverviewProps) {
 
   useEffect(() => {
     let active = true;
-    const storedProfile = loadStoredCustomerProfile();
-
-    if (storedProfile) {
-      setProfile(storedProfile);
-    }
 
     async function loadLiveProfile() {
       const client = getSupabaseClient();
@@ -650,91 +661,65 @@ export function BookingsScreen({ bookings, initialTab = "upcoming" }: BookingsPr
       </div>
 
       <div className="space-y-4">
+        {filtered.length === 0 ? (
+          <SharedEmptyState
+            title={`No ${activeTab} bookings yet`}
+            description="When you create or finish bookings, they will appear here with live status updates."
+            action={<AppButton href="/providers">Find Providers</AppButton>}
+          />
+        ) : null}
         {filtered.map((booking) => (
-          <div
+          <SharedBookingCard
             key={booking.id}
-            className="rounded-[18px] border border-[#e4ece7] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.04)]"
-          >
-            <div className="flex gap-3">
-              <BookingThumb kind={booking.thumbnail} imageSrc={booking.imageSrc} service={booking.service} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-[15px] font-extrabold text-[#111827]">
-                      {booking.service}
-                    </h3>
-                    <p className="mt-1 text-[14px] text-[#4b5563]">
-                      {booking.provider}
-                    </p>
-                  </div>
-                  <ChevronRightIcon className="mt-0.5 h-5 w-5 text-[#6b7280]" />
+            title={booking.service}
+            provider={booking.provider}
+            schedule={booking.schedule}
+            location={booking.location}
+            statusLabel={booking.statusLabel}
+            statusTone={bookingTone(booking)}
+            image={<BookingThumb kind={booking.thumbnail} imageSrc={booking.imageSrc} service={booking.service} />}
+            notes={
+              booking.status === "cancelled" ? (
+                <div className="space-y-1.5 rounded-[14px] bg-[#f8fafc] px-3 py-2.5 text-[12px] leading-5 text-[#475569]">
+                  <p>
+                    <span className="font-extrabold text-[#111827]">Cancelled by:</span>{" "}
+                    {booking.cancelledBy ?? "Not specified"}
+                  </p>
+                  <p>
+                    <span className="font-extrabold text-[#111827]">Reason:</span>{" "}
+                    {booking.cancellationReason ?? "No reason shared."}
+                  </p>
                 </div>
-                <div className="mt-3 space-y-2 text-[13px] text-[#4b5563]">
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4 text-[#6b7280]" />
-                    {booking.schedule}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <PinIcon className="h-4 w-4 text-[#6b7280]" />
-                    {booking.location}
-                  </div>
-                </div>
-                <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${badgeToneClass(booking.badgeTone)}`}>
-                  {booking.statusLabel}
-                </span>
-
-                {booking.status === "cancelled" ? (
-                  <div className="mt-3 space-y-1.5 rounded-[14px] bg-[#f8fafc] px-3 py-2.5 text-[12px] leading-5 text-[#475569]">
-                    <p>
-                      <span className="font-extrabold text-[#111827]">Cancelled by:</span>{" "}
-                      {booking.cancelledBy ?? "Not specified"}
-                    </p>
-                    <p>
-                      <span className="font-extrabold text-[#111827]">Reason:</span>{" "}
-                      {booking.cancellationReason ?? "No reason shared."}
-                    </p>
-                  </div>
-                ) : null}
-
-                {booking.status === "upcoming" ? (
-                  <div className="mt-4 flex gap-3">
-                    <button
-                      type="button"
-                      className="inline-flex h-10 flex-1 items-center justify-center rounded-[12px] border border-[#d9e2dd] bg-white text-[13px] font-extrabold text-[#111827]"
-                    >
-                      Message
-                    </button>
-                    <Link
-                      href={`/profile/bookings/${booking.id}`}
-                      className="inline-flex h-10 flex-1 items-center justify-center rounded-[12px] bg-[#16a34a] text-[13px] font-extrabold text-white"
-                    >
-                      See Details
-                    </Link>
-                  </div>
-                ) : null}
-
-                {booking.status === "completed" ? (
-                  <div className="mt-4 flex justify-end">
-                    <Link
-                      href={`/profile/bookings/${booking.id}/review`}
-                      className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#16a34a] px-4 text-[13px] font-extrabold text-white"
-                    >
-                      Review
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
+              ) : undefined
+            }
+            secondaryAction={
+              booking.status === "upcoming" ? (
+                <AppButton href="/profile/messages" tone="secondary" className="flex-1">
+                  Message
+                </AppButton>
+              ) : undefined
+            }
+            primaryAction={
+              booking.status === "upcoming" ? (
+                <AppButton href={`/profile/bookings/${booking.id}`} className="flex-1">
+                  See Details
+                </AppButton>
+              ) : booking.status === "completed" ? (
+                <AppButton href={`/profile/bookings/${booking.id}/review`}>
+                  Review
+                </AppButton>
+              ) : undefined
+            }
+          />
         ))}
       </div>
 
-      <button
+      <AppButton
         type="button"
-        className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-[12px] bg-[#16a34a] text-[15px] font-extrabold text-white shadow-[0_16px_30px_rgba(22,163,74,0.22)]"
+        className="mt-5 w-full"
       >
         View All Bookings
-      </button>
+      </AppButton>
     </ProfileShell>
   );
 }
@@ -1193,6 +1178,12 @@ export function NotificationsScreen({
   initialNotifications = [],
 }: NotificationsProps) {
   const [items, setItems] = useState(initialNotifications);
+  const [pushState, setPushState] = useState<PushSetupState>({
+    permission: "default",
+    hasSavedToken: false,
+  });
+  const [pushNotice, setPushNotice] = useState("");
+  const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -1260,6 +1251,11 @@ export function NotificationsScreen({
     }
 
     void loadNotifications();
+    void getPushSetupState().then((state) => {
+      if (active) {
+        setPushState(state);
+      }
+    });
 
     return () => {
       active = false;
@@ -1297,13 +1293,76 @@ export function NotificationsScreen({
     });
   }
 
+  async function handleEnablePush() {
+    setPushBusy(true);
+    setPushNotice("");
+
+    try {
+      const token = await requestNotificationPermission();
+
+      if (!token) {
+        const state = await getPushSetupState();
+        setPushState(state);
+        setPushNotice(
+          state.permission === "denied"
+            ? "Push is blocked in this browser. Please allow notifications in browser settings."
+            : "Push permission was not granted."
+        );
+        return;
+      }
+
+      const result = await saveFCMToken(token);
+
+      if (!result.success) {
+        setPushNotice(result.error || "Unable to save push token.");
+        return;
+      }
+
+      setPushState({
+        permission: "granted",
+        hasSavedToken: true,
+      });
+      setPushNotice("Push notifications enabled on this device.");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function handleDisablePush() {
+    setPushBusy(true);
+    setPushNotice("");
+
+    try {
+      const result = await disablePushNotifications();
+
+      if (!result.success) {
+        setPushNotice(result.error || "Unable to disable push notifications.");
+        return;
+      }
+
+      const state = await getPushSetupState();
+      setPushState(state);
+      setPushNotice("Push notifications disabled for this device.");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   return (
     <ProfileShell title="Notifications" showBack backHref="/profile">
       <div className="space-y-4">
+        <PushNotificationCard
+          pushState={pushState}
+          notice={pushNotice}
+          busy={pushBusy}
+          onEnable={handleEnablePush}
+          onDisable={handleDisablePush}
+        />
         {items.length === 0 ? (
-          <div className="rounded-[18px] border border-dashed border-[#d9e2dd] bg-white px-4 py-8 text-center text-[14px] text-[#6b7280]">
-            No notifications yet.
-          </div>
+          <SharedEmptyState
+            title="No notifications yet"
+            description="Booking updates, provider decisions, and payment alerts will show up here in real time."
+          />
         ) : (
           items.map((item) => (
             <button
@@ -1324,6 +1383,12 @@ export function NotificationsScreen({
                   <p className="mt-2 text-[13px] leading-6 text-[#4b5563]">
                     {item.body}
                   </p>
+                  <div className="mt-3">
+                    <SharedStatusBadge
+                      label={item.isRead ? "Read" : "Unread"}
+                      tone={item.isRead ? "cancelled" : "info"}
+                    />
+                  </div>
                 </div>
                 {!item.isRead ? (
                   <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[#16a34a]" />
@@ -1343,6 +1408,94 @@ export function NotificationsScreen({
         )}
       </div>
     </ProfileShell>
+  );
+}
+
+export function MessagesScreen() {
+  return (
+    <ProfileShell title="Messages" showBack backHref="/profile">
+      <div className="space-y-4">
+        <SharedEmptyState
+          title="No conversations yet"
+          description="When booking chat is enabled for a provider, your conversation threads will appear here."
+          action={<AppButton href="/profile/bookings">Open My Bookings</AppButton>}
+        />
+        <MessagePlaceholderCard />
+      </div>
+    </ProfileShell>
+  );
+}
+
+function PushNotificationCard({
+  pushState,
+  notice,
+  busy,
+  onEnable,
+  onDisable,
+}: {
+  pushState: PushSetupState;
+  notice: string;
+  busy: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
+}) {
+  const enabled = pushState.permission === "granted" && pushState.hasSavedToken;
+  const statusLabel =
+    pushState.permission === "unsupported"
+      ? "Not supported"
+      : pushState.permission === "denied"
+        ? "Blocked"
+        : enabled
+          ? "Enabled"
+          : pushState.permission === "granted"
+            ? "Ready to enable"
+            : "Permission needed";
+
+  return (
+    <div className="rounded-[18px] border border-[#dbe8df] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.04)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[15px] font-extrabold text-[#111827]">
+            Push Notifications
+          </p>
+          <p className="mt-1 text-[13px] leading-6 text-[#4b5563]">
+            Get booking updates even when this app is closed.
+          </p>
+        </div>
+        <span
+          className={`rounded-full px-3 py-1 text-[11px] font-bold ${
+            enabled
+              ? "bg-[#e9f9ec] text-[#16a34a]"
+              : "bg-[#eef2f7] text-[#64748b]"
+          }`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy || pushState.permission === "unsupported"}
+          onClick={onEnable}
+          className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#16a34a] px-4 text-[13px] font-extrabold text-white disabled:opacity-60"
+        >
+          {busy ? "Updating..." : enabled ? "Enable Again" : "Enable Push"}
+        </button>
+        <button
+          type="button"
+          disabled={busy || (!enabled && pushState.permission !== "granted")}
+          onClick={onDisable}
+          className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#dbe8df] bg-white px-4 text-[13px] font-extrabold text-[#111827] disabled:opacity-60"
+        >
+          Disable Push
+        </button>
+      </div>
+
+      {notice ? (
+        <p className="mt-3 text-[12px] font-semibold text-[#4b5563]">{notice}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1850,6 +2003,26 @@ function badgeToneClass(tone: Booking["badgeTone"]) {
   }
 
   return "bg-[#eef2f7] text-[#64748b]";
+}
+
+function bookingTone(booking: Booking) {
+  if (booking.status === "cancelled") {
+    return "cancelled" as const;
+  }
+
+  if (booking.status === "completed") {
+    return "completed" as const;
+  }
+
+  if (booking.statusLabel.toLowerCase().includes("confirm")) {
+    return "accepted" as const;
+  }
+
+  if (booking.statusLabel.toLowerCase().includes("declin")) {
+    return "declined" as const;
+  }
+
+  return "pending" as const;
 }
 
 function SettingIcon({

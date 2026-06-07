@@ -61,32 +61,30 @@ export function LiveLocationChip({
   onLocationChange,
   onLocationClear,
 }: LiveLocationChipProps) {
-  const [location, setLocation] = useState<StoredLiveLocation | null>(null);
+  const [location, setLocation] = useState<StoredLiveLocation | null>(() =>
+    loadStoredLiveLocation()
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   useEffect(() => {
-    const storedLocation = loadStoredLiveLocation();
-    if (storedLocation) {
-      setLocation(storedLocation);
-    }
+    const timerId = window.setTimeout(() => {
+      setIsLoading(true);
 
-    void refreshLocation();
-  }, []);
+      void resolveCurrentLiveLocation(fallbackLabel)
+        .then((nextLocation) => {
+          if (nextLocation) {
+            setLocation(nextLocation);
+            onLocationChange?.(nextLocation);
+          }
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    }, 0);
 
-  async function refreshLocation() {
-    setIsLoading(true);
-
-    try {
-      const nextLocation = await resolveCurrentLiveLocation(fallbackLabel);
-      if (nextLocation) {
-        setLocation(nextLocation);
-        onLocationChange?.(nextLocation);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
+    return () => window.clearTimeout(timerId);
+  }, [fallbackLabel, onLocationChange]);
 
   const activeLabel = location?.label ?? fallbackLabel;
   const locationTitle = location
@@ -184,10 +182,9 @@ function LocationPickerModal({
 
   useEffect(() => {
     const trimmedQuery = query.trim();
+    const shouldSearch = trimmedQuery.length >= 2;
 
-    if (trimmedQuery.length < 2) {
-      setResults([]);
-      setIsSearching(false);
+    if (!shouldSearch) {
       return;
     }
 
@@ -381,7 +378,7 @@ function LocationPickerModal({
               ) : null}
             </div>
 
-            {results.length > 0 ? (
+            {query.trim().length >= 2 && results.length > 0 ? (
               <div className="mt-3 overflow-hidden rounded-[18px] border border-[#e4ece7] bg-white">
                 {results.map((result, index) => (
                   <button

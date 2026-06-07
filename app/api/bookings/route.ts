@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 import type { Booking } from "@/lib/profile-types";
+import { sendPushNotificationToUser } from "@/lib/push-notifications";
 import { buildProviderPortraitSrc, type ProviderCategoryKey } from "@/lib/provider-catalog";
 import {
   getSupabaseServiceKey,
@@ -569,6 +570,13 @@ export async function POST(request: Request) {
     notification_type: "booking_created",
     title: "New booking request",
     body: `${verified.profile.full_name?.trim() || "A customer"} requested ${payload.serviceLabel} service.`,
+  });
+
+  await sendPushNotificationToUser(payload.providerId, {
+    title: "New booking request",
+    body: `${verified.profile.full_name?.trim() || "A customer"} requested ${payload.serviceLabel} service.`,
+    bookingId: insertedBooking.id,
+    path: `/provider/dashboard?booking=${insertedBooking.id}`,
   });
 
   const booking = mapLiveBookingToUi(
