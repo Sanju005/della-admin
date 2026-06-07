@@ -138,6 +138,12 @@
       "namedRegex": "^/api/location/search(?:/)?$"
     },
     {
+      "page": "/api/profile/me",
+      "regex": "^/api/profile/me(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/profile/me(?:/)?$"
+    },
+    {
       "page": "/api/provider/me",
       "regex": "^/api/provider/me(?:/)?$",
       "routeKeys": {},

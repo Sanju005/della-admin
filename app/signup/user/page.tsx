@@ -15,7 +15,9 @@ import {
 export default function SignupUserPage() {
   const router = useRouter();
   const [isSubmitting, startTransition] = useTransition();
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [sex, setSex] = useState<"" | "Male" | "Female">("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +26,7 @@ export default function SignupUserPage() {
   const [error, setError] = useState("");
 
   const handleSubmit = () => {
-    if (!fullName || !email || !phoneNumber || !password || !confirmPassword) {
+    if (!firstName || !lastName || !sex || !email || !phoneNumber || !password || !confirmPassword) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -43,7 +45,9 @@ export default function SignupUserPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fullName,
+          firstName,
+          lastName,
+          sex,
           email,
           phoneNumber,
           password,
@@ -83,11 +87,25 @@ export default function SignupUserPage() {
 
       <div className="mt-8 space-y-4">
         <ControlledField
-          label="Full Name"
-          placeholder="Enter your full name"
-          value={fullName}
-          onChange={setFullName}
+          label="First Name"
+          placeholder="Enter your first name"
+          value={firstName}
+          onChange={setFirstName}
           icon={<Icons.User className="h-5 w-5" />}
+        />
+        <ControlledField
+          label="Last Name"
+          placeholder="Enter your last name"
+          value={lastName}
+          onChange={setLastName}
+          icon={<Icons.User className="h-5 w-5" />}
+        />
+        <ControlledSelectField
+          label="Sex"
+          value={sex}
+          onChange={(value) => setSex(value as "" | "Male" | "Female")}
+          icon={<Icons.User className="h-5 w-5" />}
+          options={["Male", "Female"]}
         />
         <ControlledField
           label="Email"
@@ -167,6 +185,46 @@ export default function SignupUserPage() {
         </Link>
       </p>
     </RegisterShell>
+  );
+}
+
+function ControlledSelectField({
+  label,
+  value,
+  onChange,
+  icon,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  icon: ReactNode;
+  options: string[];
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[15px] font-semibold text-[#111827]">
+        {label}
+      </span>
+      <div className="flex h-13 items-center rounded-[14px] border border-[#d9e2dd] bg-white px-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
+        <span className="mr-3 text-[#16a34a]">{icon}</span>
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-full flex-1 appearance-none border-0 bg-transparent text-[15px] text-[#111827] outline-none"
+        >
+          <option value="">Select sex</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <span className="ml-3 text-[#6b7280]">
+          <ChevronDownIcon className="h-5 w-5" />
+        </span>
+      </div>
+    </label>
   );
 }
 
@@ -288,6 +346,14 @@ function MalaysiaFlagIcon({ className }: { className?: string }) {
         d="m10.2 2.4.6 1.5 1.6.1-1.2 1 .4 1.5-1.4-.8-1.4.8.4-1.5-1.2-1 1.6-.1.6-1.5Z"
         fill="#facc15"
       />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="m5 7 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

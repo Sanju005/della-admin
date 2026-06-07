@@ -5,6 +5,31 @@ import type { CustomerProfile } from "./profile-types";
 
 const PROFILE_STORAGE_KEY = "della.customer.profile";
 
+function normalizeStoredCustomerProfile(value: unknown): CustomerProfile | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const raw = value as Partial<CustomerProfile>;
+
+  return {
+    firstName: raw.firstName ?? "",
+    lastName: raw.lastName ?? "",
+    sex: raw.sex === "Male" || raw.sex === "Female" ? raw.sex : "",
+    dateOfBirth: raw.dateOfBirth ?? "",
+    email: raw.email ?? "",
+    phoneNumber: raw.phoneNumber ?? "",
+    countryCode: raw.countryCode ?? "+60",
+    city: raw.city ?? "",
+    region: raw.region ?? "Malaysia",
+    verified: Boolean(raw.verified),
+    completion:
+      typeof raw.completion === "number" && Number.isFinite(raw.completion)
+        ? raw.completion
+        : 80,
+  };
+}
+
 export function loadStoredCustomerProfile() {
   if (typeof window === "undefined") {
     return null;
@@ -16,7 +41,7 @@ export function loadStoredCustomerProfile() {
   }
 
   try {
-    return JSON.parse(raw) as CustomerProfile;
+    return normalizeStoredCustomerProfile(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -33,20 +58,26 @@ export async function saveCustomerProfile(profile: CustomerProfile) {
   }
 
   try {
-    await client.from("customer_profiles").upsert({
-      id: "demo-customer",
-      first_name: profile.firstName,
-      last_name: profile.lastName,
-      date_of_birth: profile.dateOfBirth,
-      email: profile.email,
-      phone_number: profile.phoneNumber,
-      country_code: profile.countryCode,
-      city: profile.city,
-      region: profile.region,
-      verified: profile.verified,
-      completion: profile.completion,
-      updated_at: new Date().toISOString(),
+    const {
+      data: { session },
+    } = await client.auth.getSession();
+
+    if (!session) {
+      return { mode: "local" as const };
+    }
+
+    const response = await fetch("/api/profile/me", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(profile),
     });
+
+    if (!response.ok) {
+      return { mode: "local" as const };
+    }
 
     return { mode: "supabase" as const };
   } catch {

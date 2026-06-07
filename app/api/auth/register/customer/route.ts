@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type CustomerSignupPayload = {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  sex?: string;
   email?: string;
   phoneNumber?: string;
   password?: string;
@@ -63,13 +65,16 @@ function normalizePhone(phoneNumber: string) {
 export async function POST(request: Request) {
   const payload = (await request.json()) as CustomerSignupPayload;
 
-  const fullName = payload.fullName?.trim() ?? "";
+  const firstName = payload.firstName?.trim() ?? "";
+  const lastName = payload.lastName?.trim() ?? "";
+  const sex = payload.sex === "Male" || payload.sex === "Female" ? payload.sex : "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
   const email = payload.email?.trim().toLowerCase() ?? "";
   const phoneNumber = payload.phoneNumber?.trim() ?? "";
   const password = payload.password ?? "";
   const confirmPassword = payload.confirmPassword ?? "";
 
-  if (!fullName || !email || !phoneNumber || !password || !confirmPassword) {
+  if (!firstName || !lastName || !sex || !email || !phoneNumber || !password || !confirmPassword) {
     return NextResponse.json(
       { error: "Please fill in all required fields." },
       { status: 400 }
@@ -105,6 +110,9 @@ export async function POST(request: Request) {
     email_confirm: true,
     user_metadata: {
       full_name: fullName,
+      first_name: firstName,
+      last_name: lastName,
+      sex,
       role: "customer",
     },
   });
@@ -164,6 +172,8 @@ export async function POST(request: Request) {
     .upsert(
       {
         id: data.user.id,
+        first_name: firstName,
+        last_name: lastName,
         country: "Malaysia",
       },
       { onConflict: "id" }

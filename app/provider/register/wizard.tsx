@@ -7,6 +7,7 @@ import {
   availabilityDays,
   createDefaultProviderRegistration,
   documentTypes,
+  sexOptions,
   serviceIcons,
   serviceSpecialties,
   timePresets,
@@ -342,7 +343,9 @@ function BasicProfileStep({
         </div>
       </div>
 
-      <InputField label="Full Name" value={data.basicProfile.fullName} onChange={(value) => updateBasic("fullName", value)} />
+      <InputField label="First Name" value={data.basicProfile.firstName} onChange={(value) => updateBasic("firstName", value)} />
+      <InputField label="Last Name" value={data.basicProfile.lastName} onChange={(value) => updateBasic("lastName", value)} />
+      <SelectField label="Sex" value={data.basicProfile.sex} onChange={(value) => updateBasic("sex", value)} options={sexOptions} placeholder="Select sex" />
       <InputField label="Marketing Name" hint="e.g. Ex Chef Amina" value={data.basicProfile.marketingName} onChange={(value) => updateBasic("marketingName", value)} />
       <InputField label="Date of Birth" value={data.basicProfile.dateOfBirth} onChange={(value) => updateBasic("dateOfBirth", value)} rightIcon={<CalendarIcon className="h-4 w-4 text-[#6b7280]" />} />
       <InputField label="Residential Address" value={data.basicProfile.residentialAddress} onChange={(value) => updateBasic("residentialAddress", value)} />
@@ -619,7 +622,8 @@ function ReviewStep({ data }: { data: ProviderRegistrationData }) {
   return (
     <div className="space-y-5">
       <ReviewCard title="Profile">
-        <ReviewLine icon={<UserIcon className="h-4 w-4" />} text={`${data.basicProfile.fullName} (${data.basicProfile.marketingName})`} />
+        <ReviewLine icon={<UserIcon className="h-4 w-4" />} text={`${getProviderFullName(data)} (${data.basicProfile.marketingName})`} />
+        <ReviewLine icon={<UserIcon className="h-4 w-4" />} text={`Sex: ${data.basicProfile.sex || "Not selected"}`} />
         <ReviewLine icon={<PhoneIcon className="h-4 w-4" />} text={`${data.account.phoneCountryCode} ${data.account.phoneNumber}`} />
         <ReviewLine icon={<PinIcon className="h-4 w-4" />} text={data.basicProfile.serviceLocation} />
         <ReviewLine icon={<RangeIcon className="h-4 w-4" />} text={`${data.providerLocation.radius} KM`} />
@@ -873,11 +877,13 @@ function SelectField({
   value,
   onChange,
   options,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: string[];
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -888,6 +894,9 @@ function SelectField({
           onChange={(event) => onChange(event.target.value)}
           className="h-11 w-full appearance-none border-0 bg-transparent text-[14px] text-[#111827] outline-none"
         >
+          {placeholder ? (
+            <option value="">{placeholder}</option>
+          ) : null}
           {options.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -1166,6 +1175,13 @@ function buttonLabel(step: FlowStep) {
     default:
       return "Continue";
   }
+}
+
+function getProviderFullName(data: ProviderRegistrationData) {
+  return [data.basicProfile.firstName, data.basicProfile.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 }
 
 function screenHeading(step: FlowStep) {

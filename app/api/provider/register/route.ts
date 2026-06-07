@@ -74,6 +74,13 @@ function buildProviderBio(payload: ProviderRegistrationData) {
   return `Provider for ${services} in ${payload.basicProfile.serviceLocation}.${specialtyLabel}`;
 }
 
+function getProviderFullName(payload: ProviderRegistrationData) {
+  return [payload.basicProfile.firstName, payload.basicProfile.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+}
+
 async function upsertProviderVerification(
   adminClient: ReturnType<typeof getAdminSupabaseClient>,
   providerId: string,
@@ -121,8 +128,12 @@ async function upsertProviderVerification(
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as ProviderRegistrationData;
+    const fullName = getProviderFullName(payload);
+    const sex = payload.basicProfile.sex === "Male" || payload.basicProfile.sex === "Female"
+      ? payload.basicProfile.sex
+      : "";
 
-    if (!payload.basicProfile.fullName || !payload.account.email) {
+    if (!payload.basicProfile.firstName || !payload.basicProfile.lastName || !sex || !payload.account.email) {
       return NextResponse.json(
         { error: "Missing required registration fields." },
         { status: 400 }
@@ -164,7 +175,10 @@ export async function POST(request: Request) {
       password: payload.account.password,
       email_confirm: true,
       user_metadata: {
-        full_name: payload.basicProfile.fullName.trim(),
+        full_name: fullName,
+        first_name: payload.basicProfile.firstName.trim(),
+        last_name: payload.basicProfile.lastName.trim(),
+        sex,
         role: "provider",
         marketing_name: payload.basicProfile.marketingName.trim(),
       },
@@ -209,7 +223,7 @@ export async function POST(request: Request) {
       .from("profiles")
       .upsert({
         id: providerId,
-        full_name: payload.basicProfile.fullName.trim(),
+        full_name: fullName,
         email: payload.account.email.trim().toLowerCase(),
         role: "provider",
         phone: normalizedPhone,

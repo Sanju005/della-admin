@@ -49,6 +49,8 @@ export const documentTypes = [
   "National ID",
 ];
 
+export const sexOptions = ["Male", "Female"];
+
 export function createEmptyServiceDetails(): ProviderRegistrationData["serviceDetails"] {
   return {
     Chef: {
@@ -129,7 +131,9 @@ export function createEmptyServiceDetails(): ProviderRegistrationData["serviceDe
 export function createDefaultProviderRegistration(): ProviderRegistrationData {
   return {
     basicProfile: {
-      fullName: "Amina Khalid",
+      firstName: "Amina",
+      lastName: "Khalid",
+      sex: "Female",
       profileImageName: "profile.jpg",
       marketingName: "Ex Chef Amina",
       dateOfBirth: "15/04/1995",

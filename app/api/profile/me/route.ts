@@ -1,0 +1,418 @@
+import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+
+import {
+  getSupabaseServiceKey,
+  getSupabaseUrl,
+} from "@/lib/supabase-env";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type ProfileRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+  phone: string | null;
+};
+
+type CustomerProfileRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  date_of_birth: string | null;
+  phone_number: string | null;
+  country_code: string | null;
+  city: string | null;
+  region: string | null;
+  state: string | null;
+  country: string | null;
+  verified: boolean | null;
+  completion: number | null;
+};
+
+type BookingAggregateRow = {
+  booking_status: string | null;
+};
+
+type PaymentAggregateRow = {
+  amount: number | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+  service_title?: string | null;
+};
+
+function getAdminSupabaseClient() {
+  const url = getSupabaseUrl();
+  const serviceRoleKey = getSupabaseServiceKey();
+
+  if (!url || !serviceRoleKey) {
+    return null;
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+function splitFullName(fullName: string | null | undefined) {
+  const trimmed = fullName?.trim() ?? "";
+
+  if (!trimmed) {
+    return {
+      firstName: "",
+      lastName: "",
+    };
+  }
+
+  const parts = trimmed.split(/\s+/);
+
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function normalizePhoneParts(phone: string | null | undefined, phoneNumber: string | null | undefined, countryCode: string | null | undefined) {
+  if (phoneNumber?.trim()) {
+    return {
+      countryCode: countryCode?.trim() || "+60",
+      phoneNumber: phoneNumber.trim(),
+    };
+  }
+
+  const trimmed = phone?.trim() ?? "";
+  if (!trimmed) {
+    return {
+      countryCode: countryCode?.trim() || "+60",
+      phoneNumber: "",
+    };
+  }
+
+  const digits = trimmed.replace(/[^\d+]/g, "");
+  if (!digits.startsWith("+")) {
+    return {
+      countryCode: countryCode?.trim() || "+60",
+      phoneNumber: digits,
+    };
+  }
+
+  if (digits.startsWith("+60")) {
+    return {
+      countryCode: "+60",
+      phoneNumber: digits.slice(3),
+    };
+  }
+
+  const match = digits.match(/^(\+\d{1,3})(.*)$/);
+  return {
+    countryCode: match?.[1] || countryCode?.trim() || "+60",
+    phoneNumber: match?.[2] || "",
+  };
+}
+
+async function verifyCustomerRequest(request: Request) {
+  const adminClient = getAdminSupabaseClient();
+
+  if (!adminClient) {
+    return { error: NextResponse.json({ error: "Supabase is not configured yet." }, { status: 500 }) };
+  }
+
+  const authorization = request.headers.get("authorization");
+  const token = authorization?.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length)
+    : null;
+
+  if (!token) {
+    return { error: NextResponse.json({ error: "Missing auth token." }, { status: 401 }) };
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await adminClient.auth.getUser(token);
+
+  if (userError || !user) {
+    return { error: NextResponse.json({ error: "Invalid session." }, { status: 401 }) };
+  }
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("id, full_name, email, role, status, phone")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    return { error: NextResponse.json({ error: "Customer profile was not found." }, { status: 404 }) };
+  }
+
+  if (profile.role === "provider") {
+    return { error: NextResponse.json({ error: "This account is a provider account." }, { status: 403 }) };
+  }
+
+  return {
+    adminClient,
+    authUser: user,
+    profile: profile as ProfileRow,
+  };
+}
+
+function buildCustomerProfile(
+  profile: ProfileRow,
+  customerProfile: CustomerProfileRow | null,
+  fallbackSex?: string,
+) {
+  const fallbackName = splitFullName(profile.full_name);
+  const phoneParts = normalizePhoneParts(
+    profile.phone,
+    customerProfile?.phone_number,
+    customerProfile?.country_code,
+  );
+
+  return {
+    firstName: customerProfile?.first_name?.trim() || fallbackName.firstName,
+    lastName: customerProfile?.last_name?.trim() || fallbackName.lastName,
+    sex: fallbackSex === "Male" || fallbackSex === "Female" ? fallbackSex : "",
+    dateOfBirth: customerProfile?.date_of_birth?.trim() || "",
+    email: profile.email?.trim() || "",
+    phoneNumber: phoneParts.phoneNumber,
+    countryCode: phoneParts.countryCode,
+    city: customerProfile?.city?.trim() || "",
+    region:
+      customerProfile?.region?.trim() ||
+      customerProfile?.state?.trim() ||
+      customerProfile?.country?.trim() ||
+      "Malaysia",
+    verified: Boolean(customerProfile?.verified) || profile.status?.toLowerCase() === "active",
+    completion: customerProfile?.completion ?? 80,
+  };
+}
+
+function mapBookingSummary(rows: BookingAggregateRow[]) {
+  let upcoming = 0;
+  let completed = 0;
+  let cancelled = 0;
+
+  for (const row of rows) {
+    const status = row.booking_status?.trim().toLowerCase() ?? "";
+
+    if (status === "cancelled" || status === "canceled") {
+      cancelled += 1;
+      continue;
+    }
+
+    if (status === "completed" || status === "confirmed") {
+      completed += 1;
+      continue;
+    }
+
+    upcoming += 1;
+  }
+
+  return {
+    upcoming,
+    completed,
+    cancelled,
+  };
+}
+
+function buildPaymentSummary(rows: PaymentAggregateRow[]) {
+  const totalPaid = rows.reduce(
+    (sum, row) => sum + (typeof row.amount === "number" ? row.amount : 0),
+    0,
+  );
+
+  const latestPayment = rows[0];
+  const latestDate = latestPayment?.paid_at || latestPayment?.created_at;
+  const latestLabel =
+    latestDate && !Number.isNaN(new Date(latestDate).getTime())
+      ? `Latest payment on ${new Intl.DateTimeFormat("en-MY", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(new Date(latestDate))}`
+      : "No payment yet";
+
+  return {
+    totalPaid,
+    lastPaymentLabel: latestLabel,
+  };
+}
+
+export async function GET(request: Request) {
+  const verified = await verifyCustomerRequest(request);
+
+  if ("error" in verified) {
+    return verified.error;
+  }
+
+  const [customerProfileResult, bookingsResult, paymentsResult] = await Promise.all([
+    verified.adminClient
+      .from("customer_profiles")
+      .select("id, first_name, last_name, date_of_birth, phone_number, country_code, city, region, state, country, verified, completion")
+      .eq("id", verified.profile.id)
+      .maybeSingle(),
+    verified.adminClient
+      .from("bookings")
+      .select("booking_status")
+      .eq("customer_id", verified.profile.id)
+      .limit(200),
+    verified.adminClient
+      .from("payments")
+      .select("amount, paid_at, created_at, service_title")
+      .eq("customer_id", verified.profile.id)
+      .order("paid_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false, nullsFirst: false })
+      .limit(200),
+  ]);
+
+  const customerProfile = customerProfileResult.data as CustomerProfileRow | null;
+  const bookingRows = (bookingsResult.data ?? []) as BookingAggregateRow[];
+  const paymentRows = (paymentsResult.data ?? []) as PaymentAggregateRow[];
+
+  return NextResponse.json({
+    profile: buildCustomerProfile(
+      verified.profile,
+      customerProfile,
+      typeof verified.authUser.user_metadata?.sex === "string"
+        ? verified.authUser.user_metadata.sex
+        : "",
+    ),
+    bookingSummary: mapBookingSummary(bookingRows),
+    paymentSummary: buildPaymentSummary(paymentRows),
+  });
+}
+
+type UpdatePayload = {
+  firstName?: string;
+  lastName?: string;
+  sex?: "" | "Male" | "Female";
+  dateOfBirth?: string;
+  email?: string;
+  phoneNumber?: string;
+  countryCode?: string;
+  city?: string;
+  region?: string;
+  verified?: boolean;
+  completion?: number;
+};
+
+export async function PATCH(request: Request) {
+  const verified = await verifyCustomerRequest(request);
+
+  if ("error" in verified) {
+    return verified.error;
+  }
+
+  const payload = (await request.json()) as UpdatePayload;
+  const firstName = payload.firstName?.trim() ?? "";
+  const lastName = payload.lastName?.trim() ?? "";
+  const sex = payload.sex === "Male" || payload.sex === "Female" ? payload.sex : "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const email = payload.email?.trim().toLowerCase() ?? "";
+  const countryCode = payload.countryCode?.trim() || "+60";
+  const phoneNumber = payload.phoneNumber?.trim() ?? "";
+  const normalizedPhone = phoneNumber
+    ? `${countryCode}${phoneNumber}`.replace(/\s+/g, "")
+    : null;
+
+  const profilePayload = Object.fromEntries(
+    Object.entries({
+      full_name: fullName || undefined,
+      email: email || undefined,
+      phone: normalizedPhone || undefined,
+    }).filter(([, value]) => value !== undefined),
+  );
+
+  if (Object.keys(profilePayload).length > 0) {
+    const { error } = await verified.adminClient
+      .from("profiles")
+      .update(profilePayload)
+      .eq("id", verified.profile.id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message || "Unable to update profile." }, { status: 500 });
+    }
+  }
+
+  const currentMetadata =
+    verified.authUser.user_metadata && typeof verified.authUser.user_metadata === "object"
+      ? verified.authUser.user_metadata
+      : {};
+
+  const { error: authUpdateError } = await verified.adminClient.auth.admin.updateUserById(
+    verified.profile.id,
+    {
+      user_metadata: {
+        ...currentMetadata,
+        full_name: fullName,
+        first_name: firstName,
+        last_name: lastName,
+        sex,
+      },
+    },
+  );
+
+  if (authUpdateError) {
+    return NextResponse.json({ error: authUpdateError.message || "Unable to update profile." }, { status: 500 });
+  }
+
+  const customerProfilePayload = {
+    id: verified.profile.id,
+    first_name: firstName || null,
+    last_name: lastName || null,
+    date_of_birth: payload.dateOfBirth?.trim() || null,
+    phone_number: phoneNumber || null,
+    country_code: countryCode,
+    city: payload.city?.trim() || null,
+    region: payload.region?.trim() || null,
+    verified: payload.verified ?? false,
+    completion:
+      typeof payload.completion === "number" && Number.isFinite(payload.completion)
+        ? payload.completion
+        : 80,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error: customerProfileError } = await verified.adminClient
+    .from("customer_profiles")
+    .upsert(customerProfilePayload, { onConflict: "id" });
+
+  if (customerProfileError) {
+    return NextResponse.json(
+      { error: customerProfileError.message || "Unable to update customer profile." },
+      { status: 500 },
+    );
+  }
+
+  const refreshedProfileResult = await verified.adminClient
+    .from("profiles")
+    .select("id, full_name, email, role, status, phone")
+    .eq("id", verified.profile.id)
+    .maybeSingle();
+
+  const refreshedCustomerProfileResult = await verified.adminClient
+    .from("customer_profiles")
+    .select("id, first_name, last_name, date_of_birth, phone_number, country_code, city, region, state, country, verified, completion")
+    .eq("id", verified.profile.id)
+    .maybeSingle();
+
+  if (refreshedProfileResult.error || !refreshedProfileResult.data) {
+    return NextResponse.json({ error: "Unable to load updated profile." }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    profile: {
+      ...buildCustomerProfile(
+        refreshedProfileResult.data as ProfileRow,
+        (refreshedCustomerProfileResult.data as CustomerProfileRow | null) ?? null,
+        sex,
+      ),
+    },
+  });
+}

@@ -5,6 +5,7 @@
     "/api/home": {},
     "/api/location/reverse": {},
     "/api/location/search": {},
+    "/api/profile/me": {},
     "/api/provider/me": {},
     "/api/provider/register": {},
     "/api/provider/register/[id]": {},

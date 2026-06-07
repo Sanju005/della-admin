@@ -23,7 +23,9 @@ export type ProviderServiceDetails = {
 
 export type ProviderRegistrationData = {
   basicProfile: {
-    fullName: string;
+    firstName: string;
+    lastName: string;
+    sex: "" | "Male" | "Female";
     profileImageName: string;
     marketingName: string;
     dateOfBirth: string;

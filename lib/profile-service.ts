@@ -17,6 +17,7 @@ import {
 const mockProfile: CustomerProfile = {
   firstName: "Sanju",
   lastName: "Kumar",
+  sex: "Male",
   dateOfBirth: "15/04/1995",
   email: "sanju@gmail.com",
   phoneNumber: "12-345 6789",
