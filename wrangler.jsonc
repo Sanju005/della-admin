@@ -1,12 +1,17 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "della-pwa",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2026-05-31",
-  "compatibility_flags": ["nodejs_compat"],
-  "keep_vars": true,
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "della-admin-dashboard",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-04",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "admin.dellaapp.com",
+      "custom_domain": true
+    }
+  ],
   "assets": {
-    "directory": ".open-next/assets",
+    "directory": "./dist",
     "binding": "ASSETS"
   },
   "observability": {
