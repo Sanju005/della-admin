@@ -468,7 +468,7 @@ export function EditProfileScreen({ initialProfile }: EditProps) {
         <div className="mb-5 flex flex-col items-center">
           <div className="relative">
             <AvatarCircle
-              initials={`${form.firstName[0] ?? "S"}${form.lastName[0] ?? "K"}`}
+              initials={customerInitials(form)}
               size="xl"
               accent="from-emerald-500 to-green-700"
             />
@@ -1681,7 +1681,7 @@ function ProfileSummaryCard({
     <div className="rounded-[18px] border border-[#e4ece7] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.04)]">
       <div className="flex items-center gap-4">
         <AvatarCircle
-          initials={`${profile.firstName[0] ?? "S"}${profile.lastName[0] ?? "K"}`}
+          initials={customerInitials(profile)}
           size="lg"
           accent="from-emerald-500 to-green-700"
         />
@@ -2023,6 +2023,25 @@ function bookingTone(booking: Booking) {
   }
 
   return "pending" as const;
+}
+
+function customerInitials(profile: CustomerProfile) {
+  const first = profile.firstName.trim();
+  const last = profile.lastName.trim();
+
+  if (first && last) {
+    return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
+  }
+
+  if (first.length >= 2) {
+    return first.slice(0, 2).toUpperCase();
+  }
+
+  if (first) {
+    return first[0].toUpperCase();
+  }
+
+  return "DE";
 }
 
 function SettingIcon({

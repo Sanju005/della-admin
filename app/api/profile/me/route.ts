@@ -78,6 +78,17 @@ function splitFullName(fullName: string | null | undefined) {
   };
 }
 
+function pickNameFallback(options: Array<string | null | undefined>) {
+  for (const option of options) {
+    const trimmed = option?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return "";
+}
+
 function normalizePhoneParts(phone: string | null | undefined, phoneNumber: string | null | undefined, countryCode: string | null | undefined) {
   if (phoneNumber?.trim()) {
     return {
@@ -165,6 +176,8 @@ async function verifyCustomerRequest(request: Request) {
 function buildCustomerProfile(
   profile: ProfileRow,
   customerProfile: CustomerProfileRow | null,
+  fallbackFirstName?: string,
+  fallbackLastName?: string,
   fallbackSex?: string,
 ) {
   const fallbackName = splitFullName(profile.full_name);
@@ -175,8 +188,16 @@ function buildCustomerProfile(
   );
 
   return {
-    firstName: customerProfile?.first_name?.trim() || fallbackName.firstName,
-    lastName: customerProfile?.last_name?.trim() || fallbackName.lastName,
+    firstName: pickNameFallback([
+      customerProfile?.first_name,
+      fallbackFirstName,
+      fallbackName.firstName,
+    ]),
+    lastName: pickNameFallback([
+      customerProfile?.last_name,
+      fallbackLastName,
+      fallbackName.lastName,
+    ]),
     sex: fallbackSex === "Male" || fallbackSex === "Female" ? fallbackSex : "",
     dateOfBirth: customerProfile?.date_of_birth?.trim() || "",
     email: profile.email?.trim() || "",
@@ -279,6 +300,16 @@ export async function GET(request: Request) {
     profile: buildCustomerProfile(
       verified.profile,
       customerProfile,
+      typeof verified.authUser.user_metadata?.first_name === "string"
+        ? verified.authUser.user_metadata.first_name
+        : typeof verified.authUser.user_metadata?.full_name === "string"
+          ? splitFullName(verified.authUser.user_metadata.full_name).firstName
+          : "",
+      typeof verified.authUser.user_metadata?.last_name === "string"
+        ? verified.authUser.user_metadata.last_name
+        : typeof verified.authUser.user_metadata?.full_name === "string"
+          ? splitFullName(verified.authUser.user_metadata.full_name).lastName
+          : "",
       typeof verified.authUser.user_metadata?.sex === "string"
         ? verified.authUser.user_metadata.sex
         : "",
@@ -411,6 +442,8 @@ export async function PATCH(request: Request) {
       ...buildCustomerProfile(
         refreshedProfileResult.data as ProfileRow,
         (refreshedCustomerProfileResult.data as CustomerProfileRow | null) ?? null,
+        firstName,
+        lastName,
         sex,
       ),
     },
