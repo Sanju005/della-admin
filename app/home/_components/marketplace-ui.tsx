@@ -24,12 +24,12 @@ import {
 import { BottomNav, EmptyState, ProviderCard as SharedProviderCard, SectionTitle, StatusBadge } from "@/app/_components/della-ui";
 
 import { LiveLocationChip } from "@/app/_components/live-location-chip";
-import { getSupabaseClient } from "@/lib/supabase";
-import type { HomeFeedData, HomeServiceCategory } from "@/lib/home-feed";
 import {
   buildProviderDetailHref,
   buildProviderPortraitSrc,
-} from "@/lib/provider-catalog";
+} from "@/lib/provider-catalog-shared";
+import { getSupabaseClient } from "@/lib/supabase";
+import type { HomeFeedData, HomeServiceCategory } from "@/lib/home-feed";
 import type { CustomerProfile } from "@/lib/profile-types";
 
 export function MarketplaceScreen({
