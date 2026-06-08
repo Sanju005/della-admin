@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -21,11 +24,13 @@ import {
 import { BottomNav, EmptyState, ProviderCard as SharedProviderCard, SectionTitle, StatusBadge } from "@/app/_components/della-ui";
 
 import { LiveLocationChip } from "@/app/_components/live-location-chip";
+import { getSupabaseClient } from "@/lib/supabase";
 import type { HomeFeedData, HomeServiceCategory } from "@/lib/home-feed";
 import {
   buildProviderDetailHref,
   buildProviderPortraitSrc,
 } from "@/lib/provider-catalog";
+import type { CustomerProfile } from "@/lib/profile-types";
 
 export function MarketplaceScreen({
   greetingName,
@@ -37,6 +42,69 @@ export function MarketplaceScreen({
   upcomingBooking,
   errorMessage,
 }: HomeFeedData) {
+  const [displayName, setDisplayName] = useState(greetingName);
+  const [displayLocation, setDisplayLocation] = useState(locationLabel);
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateViewerProfile() {
+      const client = getSupabaseClient();
+
+      if (!client) {
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+
+      if (!active || !session) {
+        return;
+      }
+
+      const response = await fetch("/api/profile/me", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = (await response.json()) as
+        | {
+            profile: CustomerProfile;
+          }
+        | { error?: string };
+
+      if (!active || !response.ok || !("profile" in result)) {
+        return;
+      }
+
+      const fullName = [result.profile.firstName, result.profile.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      if (fullName) {
+        setDisplayName(fullName);
+      }
+
+      const nextLocation = [result.profile.city, result.profile.region]
+        .filter(Boolean)
+        .join(", ")
+        .trim();
+
+      if (nextLocation) {
+        setDisplayLocation(nextLocation);
+      }
+    }
+
+    void hydrateViewerProfile();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <main className="min-h-[100dvh] overflow-x-hidden bg-[#f6fff8]">
       <div className="mx-auto min-h-[100dvh] w-full max-w-[430px] bg-white px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
@@ -52,11 +120,11 @@ export function MarketplaceScreen({
                 <h1 className="mt-7 text-[28px] font-extrabold leading-[1.12] tracking-[-0.05em] text-[#0F172A]">
                   {timePrefix()}{" "}
                   <span className="inline-flex items-center gap-1">
-                    {greetingName} <span aria-hidden>👋</span>
+                    {displayName} <span aria-hidden>👋</span>
                   </span>
                 </h1>
                 <div className="mt-3">
-                  <LiveLocationChip fallbackLabel={locationLabel} />
+                  <LiveLocationChip fallbackLabel={displayLocation} />
                 </div>
               </div>
 
