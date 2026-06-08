@@ -27,7 +27,7 @@ import {
   resolveCurrentLiveLocation,
   type StoredLiveLocation,
 } from "@/lib/live-location";
-import { loadStoredCustomerProfile, saveCustomerProfile } from "@/lib/profile-browser";
+import { saveCustomerProfile } from "@/lib/profile-browser";
 import type {
   Address,
   Booking,
@@ -138,9 +138,7 @@ export function ProfileShell({
 }
 
 export function ProfileOverviewScreen({ initialData }: OverviewProps) {
-  const [profile, setProfile] = useState(
-    () => loadStoredCustomerProfile() ?? initialData.profile
-  );
+  const [profile, setProfile] = useState(initialData.profile);
   const [bookingSummary, setBookingSummary] = useState(initialData.bookingSummary);
   const [paymentSummary, setPaymentSummary] = useState(initialData.paymentSummary);
 
@@ -394,7 +392,7 @@ export function EditProfileScreen({ initialProfile }: EditProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [savedMessage, setSavedMessage] = useState("");
-  const [form, setForm] = useState(() => loadStoredCustomerProfile() ?? initialProfile);
+  const [form, setForm] = useState(initialProfile);
 
   useEffect(() => {
     let active = true;
