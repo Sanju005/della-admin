@@ -74,6 +74,11 @@ const metricAccents: Record<string, string> = {
   green: "bg-green-50 text-green-600",
 };
 
+function isVerifiedLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.includes("verified") && !normalized.includes("not yet");
+}
+
 function avatarGradient(name: string) {
   const palette = [
     "from-emerald-300 via-teal-200 to-white",
@@ -353,17 +358,19 @@ export function UserProfilePage() {
 
             <SurfaceCard title="Verification & Security">
               <div className="grid gap-3 sm:grid-cols-3">
-                {[
+                {([
                   ["Email Verified", detail.emailVerifiedAt],
                   ["Phone Verified", detail.phoneVerifiedAt],
                   ["KYC Verified", detail.kycVerifiedAt],
-                ].map(([label, date]) => (
+                ] as Array<[string, string]>).map(([label, date]) => (
                   <div key={label} className="rounded-2xl bg-slate-50 px-4 py-3">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <VerificationDot status="Verified" />
+                      <VerificationDot status={isVerifiedLabel(date) ? "Verified" : "Pending"} />
                       {label}
                     </div>
-                    <p className="mt-1 text-[12px] text-slate-500">Verified on {date}</p>
+                    <p className="mt-1 text-[12px] text-slate-500">
+                      {isVerifiedLabel(date) ? `Verified on ${date}` : date}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -597,9 +604,15 @@ export function UserProfilePage() {
               <p className="mt-1 text-sm text-slate-500">User ID: {detail.userId}</p>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <PillBadge tone="emerald"><BadgeCheck className="size-3.5" /> Email Verified</PillBadge>
-                <PillBadge tone="emerald"><Phone className="size-3.5" /> Phone Verified</PillBadge>
-                <PillBadge tone="emerald"><ScanFace className="size-3.5" /> KYC Verified</PillBadge>
+                <PillBadge tone={isVerifiedLabel(detail.emailVerifiedAt) ? "emerald" : "slate"}>
+                  <BadgeCheck className="size-3.5" /> {isVerifiedLabel(detail.emailVerifiedAt) ? "Email Verified" : "Email Pending"}
+                </PillBadge>
+                <PillBadge tone={isVerifiedLabel(detail.phoneVerifiedAt) ? "emerald" : "slate"}>
+                  <Phone className="size-3.5" /> {isVerifiedLabel(detail.phoneVerifiedAt) ? "Phone Verified" : "Phone Pending"}
+                </PillBadge>
+                <PillBadge tone={isVerifiedLabel(detail.kycVerifiedAt) ? "emerald" : "slate"}>
+                  <ScanFace className="size-3.5" /> {isVerifiedLabel(detail.kycVerifiedAt) ? "KYC Verified" : "KYC Pending"}
+                </PillBadge>
                 <PillBadge tone="blue">{detail.accountType}</PillBadge>
               </div>
 

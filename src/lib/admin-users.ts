@@ -11,6 +11,23 @@ type ProfileRelation =
       marketing_name?: string | null;
       service_location?: string | null;
       approval_status?: string | null;
+      date_of_birth?: string | null;
+      sex?: string | null;
+      residential_address?: string | null;
+      provider_verifications?:
+        | {
+            phone_verified?: boolean | null;
+            email_verified?: boolean | null;
+            identity_verified?: boolean | null;
+            kyc_verified?: boolean | null;
+          }
+        | Array<{
+            phone_verified?: boolean | null;
+            email_verified?: boolean | null;
+            identity_verified?: boolean | null;
+            kyc_verified?: boolean | null;
+          }>
+        | null;
     }
   | Array<{
       city?: string | null;
@@ -19,6 +36,23 @@ type ProfileRelation =
       marketing_name?: string | null;
       service_location?: string | null;
       approval_status?: string | null;
+      date_of_birth?: string | null;
+      sex?: string | null;
+      residential_address?: string | null;
+      provider_verifications?:
+        | {
+            phone_verified?: boolean | null;
+            email_verified?: boolean | null;
+            identity_verified?: boolean | null;
+            kyc_verified?: boolean | null;
+          }
+        | Array<{
+            phone_verified?: boolean | null;
+            email_verified?: boolean | null;
+            identity_verified?: boolean | null;
+            kyc_verified?: boolean | null;
+          }>
+        | null;
     }>
   | null;
 
@@ -224,6 +258,133 @@ function formatDateTime(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatDateOfBirth(value: string | null | undefined) {
+  if (!value?.trim()) {
+    return "Not provided";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const now = new Date();
+  let age = now.getFullYear() - date.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < date.getMonth() ||
+    (now.getMonth() === date.getMonth() && now.getDate() < date.getDate());
+
+  if (beforeBirthday) {
+    age -= 1;
+  }
+
+  return `${new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date)}${age >= 0 ? ` (${age} years)` : ""}`;
+}
+
+function verificationLabel(verified: boolean, fallback = "Not yet verified") {
+  return verified ? "Verified" : fallback;
+}
+
+function buildGeneratedUserDetail(
+  liveProfile: ProfileRow,
+  role: string,
+  city: string,
+  fallbackMetrics: UserMetric[],
+): UserDetailRecord {
+  const providerProfile = relationNode(liveProfile.provider_profiles);
+  const verification = relationItem(providerProfile?.provider_verifications);
+  const createdDate = formatDate(liveProfile.created_at);
+  const createdDateTime = formatDateTime(liveProfile.created_at);
+  const accountType = role === "provider" ? "Service Provider" : toTitleCase(role);
+
+  return {
+    userId: liveProfile.id,
+    name: extractName(liveProfile),
+    email: liveProfile.email?.trim() || "No email",
+    role,
+    status: formatStatus(liveProfile.status, role),
+    phone: liveProfile.phone?.trim() || "Not provided",
+    dob: role === "provider" ? formatDateOfBirth(providerProfile?.date_of_birth) : "Not provided",
+    gender: role === "provider" ? providerProfile?.sex?.trim() || "Not provided" : "Not provided",
+    city,
+    joined: createdDate,
+    lastLogin: "Recently active",
+    registeredAt: createdDateTime,
+    device: "Unknown device",
+    ipAddress: "Unavailable",
+    referrer: "Unavailable",
+    accountType,
+    loginCount: "Unavailable",
+    failedLogins: "Unavailable",
+    twoFactorAuth: "Unknown",
+    walletBalance: "RM0.00",
+    totalSpent: "RM0.00",
+    reviewsGiven: "0",
+    reportsSubmitted: "0",
+    completionRate: "0.0%",
+    cancellationRate: "0.0%",
+    averageRating: "0.0",
+    emailVerifiedAt: verificationLabel(Boolean(verification?.email_verified)),
+    phoneVerifiedAt: verificationLabel(Boolean(verification?.phone_verified)),
+    kycVerifiedAt: verificationLabel(
+      Boolean(verification?.kyc_verified || verification?.identity_verified),
+      "Pending review",
+    ),
+    addresses: role === "provider" && providerProfile?.residential_address?.trim()
+      ? [
+          {
+            id: "live-address-1",
+            label: "Residential Address",
+            line1: providerProfile.residential_address.trim(),
+            line2: city,
+            tag: "Primary",
+          },
+        ]
+      : [],
+    timeline: [
+      {
+        id: "live-timeline-1",
+        title: "Account Registered",
+        note: `${accountType} account created`,
+        time: createdDateTime,
+        tone: "emerald",
+      },
+    ],
+    recentActions: [],
+    documents:
+      role === "provider"
+        ? [
+            {
+              id: "live-doc-1",
+              label: "Email Verification",
+              status: Boolean(verification?.email_verified) ? "Verified" : "Pending",
+              updated: Boolean(verification?.email_verified) ? createdDate : "Pending",
+            },
+            {
+              id: "live-doc-2",
+              label: "Phone Verification",
+              status: Boolean(verification?.phone_verified) ? "Verified" : "Pending",
+              updated: Boolean(verification?.phone_verified) ? createdDate : "Pending",
+            },
+            {
+              id: "live-doc-3",
+              label: "KYC Verification",
+              status: Boolean(verification?.kyc_verified || verification?.identity_verified) ? "Verified" : "Pending",
+              updated:
+                Boolean(verification?.kyc_verified || verification?.identity_verified) ? createdDate : "Pending",
+            },
+          ]
+        : [],
+    reports: [],
+    recentReviews: [],
+    metrics: fallbackMetrics,
+  };
 }
 
 function formatSchedule(dateValue?: string | null, timeValue?: string | null) {
@@ -591,7 +752,16 @@ async function fetchProfiles() {
       provider_profiles (
         marketing_name,
         service_location,
-        approval_status
+        approval_status,
+        date_of_birth,
+        sex,
+        residential_address,
+        provider_verifications (
+          phone_verified,
+          email_verified,
+          identity_verified,
+          kyc_verified
+        )
       )
     `)
     .order("created_at", { ascending: false })
@@ -627,7 +797,16 @@ async function fetchProfileById(userId: string) {
       provider_profiles (
         marketing_name,
         service_location,
-        approval_status
+        approval_status,
+        date_of_birth,
+        sex,
+        residential_address,
+        provider_verifications (
+          phone_verified,
+          email_verified,
+          identity_verified,
+          kyc_verified
+        )
       )
     `)
     .eq("id", userId)
@@ -713,16 +892,26 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
   const liveBookings = await tryFetchLiveBookings(userId, role, profileNames);
   const livePayments = await tryFetchLivePayments(userId, role, profileNames);
   const liveReviews = await tryFetchLiveReviews(userId, role, profileNames);
-  const relatedBookings = liveBookings?.length ? liveBookings : getMockBookings(name, role);
-  const relatedPayments = livePayments?.length ? livePayments : getMockPayments(name, role);
-  const defaultDetail = Object.values(userDetailRecords)[0]!;
-
-  const baseDetail =
-    mockDetail ??
-    Object.values(userDetailRecords).find((record) => record.role === role) ??
-    defaultDetail;
-
+  const roleTemplate =
+    Object.values(userDetailRecords).find((record) => record.role === role)?.metrics ??
+    Object.values(userDetailRecords)[0]?.metrics ??
+    [];
+  const generatedDetail = buildGeneratedUserDetail(liveProfile, role, city, roleTemplate);
+  const baseDetail = mockDetail ?? generatedDetail;
+  const relatedBookings = liveBookings?.length
+    ? liveBookings
+    : mockDetail
+      ? getMockBookings(name, role)
+      : [];
+  const relatedPayments = livePayments?.length
+    ? livePayments
+    : mockDetail
+      ? getMockPayments(name, role)
+      : [];
   const metrics = buildMetrics(role, relatedBookings, relatedPayments, baseDetail.metrics);
+  const providerProfile = relationNode(liveProfile.provider_profiles);
+  const verification = relationItem(providerProfile?.provider_verifications);
+  const accountType = role === "provider" ? "Service Provider" : toTitleCase(role);
 
   return {
     detail: {
@@ -733,11 +922,46 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
       role,
       status,
       phone: liveProfile.phone?.trim() || baseDetail.phone,
+      dob: role === "provider" ? formatDateOfBirth(providerProfile?.date_of_birth) : baseDetail.dob,
+      gender: role === "provider" ? providerProfile?.sex?.trim() || baseDetail.gender : baseDetail.gender,
       city,
       joined: formatDate(liveProfile.created_at),
       registeredAt: formatDateTime(liveProfile.created_at),
-      lastLogin: baseDetail.lastLogin,
-      accountType: toTitleCase(role),
+      lastLogin: mockDetail ? baseDetail.lastLogin : generatedDetail.lastLogin,
+      device: mockDetail ? baseDetail.device : generatedDetail.device,
+      ipAddress: mockDetail ? baseDetail.ipAddress : generatedDetail.ipAddress,
+      referrer: mockDetail ? baseDetail.referrer : generatedDetail.referrer,
+      loginCount: mockDetail ? baseDetail.loginCount : generatedDetail.loginCount,
+      failedLogins: mockDetail ? baseDetail.failedLogins : generatedDetail.failedLogins,
+      twoFactorAuth: mockDetail ? baseDetail.twoFactorAuth : generatedDetail.twoFactorAuth,
+      accountType,
+      emailVerifiedAt:
+        role === "provider"
+          ? verificationLabel(Boolean(verification?.email_verified), baseDetail.emailVerifiedAt)
+          : baseDetail.emailVerifiedAt,
+      phoneVerifiedAt:
+        role === "provider"
+          ? verificationLabel(Boolean(verification?.phone_verified), baseDetail.phoneVerifiedAt)
+          : baseDetail.phoneVerifiedAt,
+      kycVerifiedAt:
+        role === "provider"
+          ? verificationLabel(
+              Boolean(verification?.kyc_verified || verification?.identity_verified),
+              baseDetail.kycVerifiedAt,
+            )
+          : baseDetail.kycVerifiedAt,
+      addresses:
+        role === "provider" && !mockDetail
+          ? generatedDetail.addresses
+          : baseDetail.addresses,
+      documents:
+        role === "provider" && !mockDetail
+          ? generatedDetail.documents
+          : baseDetail.documents,
+      timeline:
+        !mockDetail && baseDetail.timeline.length === 0
+          ? generatedDetail.timeline
+          : baseDetail.timeline,
       recentReviews: liveReviews?.length ? liveReviews : baseDetail.recentReviews,
       metrics,
     },
