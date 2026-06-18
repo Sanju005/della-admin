@@ -26,7 +26,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { InfoRow, MetricTile, MiniStatus, PillBadge, SurfaceCard, TableShell } from "../components/user-detail-ui";
 import { providerDetailRecords } from "../data/provider-detail-mocks";
 import {
+  approveProviderVerification,
   getProviderProfileWithFallback,
+  providerDocumentRequestOptions,
+  requestProviderVerificationDocuments,
   setProviderSuspended,
   setProviderVisibility,
   updateProviderProfile,
@@ -138,6 +141,10 @@ export function ProviderProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [verificationNote, setVerificationNote] = useState(provider?.verificationNote ?? "");
+  const [selectedDocumentRequests, setSelectedDocumentRequests] = useState<string[]>(
+    provider?.requestedDocuments ?? []
+  );
   const [form, setForm] = useState({
     name: provider?.name ?? "",
     email: provider?.email ?? "",
@@ -167,6 +174,8 @@ export function ProviderProfilePage() {
       }
 
       setProvider(payload.detail);
+      setVerificationNote(payload.detail?.verificationNote ?? "");
+      setSelectedDocumentRequests(payload.detail?.requestedDocuments ?? []);
       setForm({
         name: payload.detail?.name ?? "",
         email: payload.detail?.email ?? "",
@@ -186,6 +195,14 @@ export function ProviderProfilePage() {
 
   function flash(nextMessage: string) {
     setMessage(nextMessage);
+  }
+
+  function toggleRequestedDocument(document: string) {
+    setSelectedDocumentRequests((current) =>
+      current.includes(document)
+        ? current.filter((item) => item !== document)
+        : [...current, document]
+    );
   }
 
   if (loading && !provider) {
@@ -264,6 +281,13 @@ export function ProviderProfilePage() {
     flash(suspended ? "Provider suspended." : "Provider restored.");
   }
 
+  async function refreshProvider() {
+    const payload = await getProviderProfileWithFallback(detail.providerId);
+    setProvider(payload.detail);
+    setVerificationNote(payload.detail?.verificationNote ?? "");
+    setSelectedDocumentRequests(payload.detail?.requestedDocuments ?? []);
+  }
+
   async function handleDeactivate() {
     if (saving) {
       return;
@@ -288,6 +312,51 @@ export function ProviderProfilePage() {
     window.setTimeout(() => {
       navigate("/service-providers");
     }, 500);
+  }
+
+  async function handleRequestDocuments() {
+    if (saving) {
+      return;
+    }
+
+    if (selectedDocumentRequests.length === 0) {
+      flash("Select at least one document to request.");
+      return;
+    }
+
+    setSaving(true);
+    const result = await requestProviderVerificationDocuments(
+      detail.providerId,
+      selectedDocumentRequests,
+      verificationNote,
+    );
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    await refreshProvider();
+    flash("Verification request sent. Admin panel marked this provider for document review.");
+  }
+
+  async function handleApproveVerification() {
+    if (saving) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await approveProviderVerification(detail.providerId, verificationNote);
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    await refreshProvider();
+    flash("Provider verification approved.");
   }
 
   function renderOverview() {
@@ -452,6 +521,50 @@ export function ProviderProfilePage() {
                   <span className="text-slate-500">Response Rate</span>
                   <span className="font-medium text-slate-900">{detail.responseRate}</span>
                 </div>
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Verification Review
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    <div className="space-y-2">
+                      {providerDocumentRequestOptions.map((document) => (
+                        <label key={document} className="flex items-center gap-3 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={selectedDocumentRequests.includes(document)}
+                            onChange={() => toggleRequestedDocument(document)}
+                            className="size-4 rounded border-slate-300 text-emerald-600"
+                          />
+                          <span>{document}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <textarea
+                      value={verificationNote}
+                      onChange={(event) => setVerificationNote(event.target.value)}
+                      placeholder="Add admin note for the provider"
+                      className="min-h-[96px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleRequestDocuments}
+                        disabled={saving}
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
+                      >
+                        {saving ? "Saving..." : "Request IC / Documents"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApproveVerification}
+                        disabled={saving}
+                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        {saving ? "Saving..." : "Approve Verification"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </SurfaceCard>
           </div>
@@ -492,12 +605,14 @@ export function ProviderProfilePage() {
                     <div key={document.id} className="flex items-center justify-between gap-3 text-sm">
                       <div className="flex items-center gap-3 text-slate-700">
                         <FileText className="size-4 text-slate-400" />
-                        <span>{document.label}</span>
+                        <div>
+                          <div>{document.label}</div>
+                          {document.fileName ? (
+                            <div className="text-xs text-slate-400">{document.fileName}</div>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-emerald-700">
-                        <CheckCircle2 className="size-4" />
-                        <span className="text-xs font-semibold">{document.status}</span>
-                      </div>
+                      <MiniStatus status={document.status} />
                     </div>
                   ))}
                 </div>
@@ -655,9 +770,15 @@ export function ProviderProfilePage() {
               <p className="mt-1 text-sm text-slate-500">Provider ID: {detail.providerId}</p>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <PillBadge tone="emerald"><BadgeCheck className="size-3.5" /> Email Verified</PillBadge>
-                <PillBadge tone="emerald"><Phone className="size-3.5" /> Phone Verified</PillBadge>
-                <PillBadge tone="emerald"><ShieldCheck className="size-3.5" /> KYC Verified</PillBadge>
+                <PillBadge tone={detail.emailVerified ? "emerald" : "slate"}>
+                  <BadgeCheck className="size-3.5" /> {detail.emailVerified ? "Email Verified" : "Email Pending"}
+                </PillBadge>
+                <PillBadge tone={detail.phoneVerified ? "emerald" : "slate"}>
+                  <Phone className="size-3.5" /> {detail.phoneVerified ? "Phone Verified" : "Phone Pending"}
+                </PillBadge>
+                <PillBadge tone={detail.identityVerified ? "emerald" : "slate"}>
+                  <ShieldCheck className="size-3.5" /> {detail.identityVerified ? "KYC Verified" : "KYC Pending"}
+                </PillBadge>
                 <PillBadge tone="blue">{detail.roleBadge}</PillBadge>
               </div>
 
@@ -829,7 +950,11 @@ export function ProviderProfilePage() {
                 <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
                   <div className="flex items-center gap-3 text-sm text-slate-700">
                     <FileText className="size-4 text-slate-400" />
-                    <span>{document.label}</span>
+                    <div>
+                      <div>{document.label}</div>
+                      {document.fileName ? <div className="text-xs text-slate-400">{document.fileName}</div> : null}
+                      {document.updated ? <div className="text-xs text-slate-400">Updated {document.updated}</div> : null}
+                    </div>
                   </div>
                   <MiniStatus status={document.status} />
                 </div>

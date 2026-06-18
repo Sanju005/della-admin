@@ -225,6 +225,8 @@ export type ProviderDocumentItem = {
   id: string;
   label: string;
   status: string;
+  updated?: string;
+  fileName?: string;
 };
 
 export type ProviderTaskRow = {
@@ -276,6 +278,12 @@ export type ProviderDetailRecord = {
   approvalStatus: string;
   backgroundCheck: string;
   kycStatus: string;
+  verificationNote: string;
+  requestedDocuments: string[];
+  phoneVerified: boolean;
+  emailVerified: boolean;
+  identityVerified: boolean;
+  backgroundCheckVerified: boolean;
   memberSince: string;
   device: string;
   completedJobs: string;
