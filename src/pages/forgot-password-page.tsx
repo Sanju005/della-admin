@@ -1,15 +1,14 @@
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
-import { supabase } from "../lib/supabase";
-
-const adminResetRedirectUrl = "https://admin.dellaapp.com/reset-password";
+import { getAdminResetRedirectUrl, supabase } from "../lib/supabase";
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const adminResetRedirectUrl = getAdminResetRedirectUrl();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

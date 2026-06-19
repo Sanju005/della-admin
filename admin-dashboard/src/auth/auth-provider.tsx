@@ -79,6 +79,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [access, setAccess] = useState<AuthAccess>("guest");
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const hash = window.location.hash;
+    const isRecoveryLink = hash.includes("type=recovery");
+
+    if (!isRecoveryLink || window.location.pathname === "/reset-password") {
+      return;
+    }
+
+    const nextUrl = `${window.location.origin}/reset-password${hash}`;
+    window.history.replaceState(null, "", nextUrl);
+  }, []);
+
+  useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setAuthError("Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable auth.");
       setInitialized(true);
