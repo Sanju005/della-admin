@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:cf": "npm run build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy"
