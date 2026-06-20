@@ -902,13 +902,9 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     liveProfile.marketing_name ?? liveAccount?.full_name,
     liveAccount?.email
   );
-  const baseDetail = fallback ?? buildGeneratedProviderDetail(providerId, liveProfile, liveAccount, firstService);
-  const serviceAreas = fallback?.serviceAreas.length
-    ? fallback.serviceAreas.map((area, index) => ({
-        ...area,
-        label: index === 0 ? liveProfile.service_location?.trim() || area.label : area.label,
-      }))
-    : [{ id: "live-sa-1", label: liveProfile.service_location?.trim() || "Malaysia", tag: "Primary" }];
+  const generatedDetail = buildGeneratedProviderDetail(providerId, liveProfile, liveAccount, firstService);
+  const baseDetail = generatedDetail;
+  const serviceAreas = [{ id: "live-sa-1", label: liveProfile.service_location?.trim() || "Malaysia", tag: "Primary" }];
 
   const liveTasks = await tryFetchProviderTasks(providerId);
   const livePayments = await tryFetchProviderPayments(providerId);
@@ -1018,7 +1014,6 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
         fileName: verification?.back_image_name?.trim() || undefined,
         updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
       },
-      ...(fallback?.documents.slice(2) ?? []),
     ] satisfies ProviderDocumentItem[],
     completedTaskRows: taskRows?.completedTaskRows.length ? taskRows.completedTaskRows : baseDetail.completedTaskRows,
     upcomingTaskRows: taskRows?.upcomingTaskRows.length ? taskRows.upcomingTaskRows : baseDetail.upcomingTaskRows,
@@ -1041,6 +1036,9 @@ export async function updateProviderProfile(
     status?: string;
     marketing_name?: string;
     service_location?: string;
+    date_of_birth?: string;
+    sex?: string;
+    residential_address?: string;
     bio?: string;
   }
 ) {
@@ -1061,6 +1059,9 @@ export async function updateProviderProfile(
     Object.entries({
       marketing_name: updates.marketing_name,
       service_location: updates.service_location,
+      date_of_birth: updates.date_of_birth,
+      sex: updates.sex,
+      residential_address: updates.residential_address,
       bio: updates.bio,
     }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
   );

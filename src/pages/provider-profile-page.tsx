@@ -86,6 +86,24 @@ function initials(name: string) {
     .join("");
 }
 
+function normalizeEditableDate(value: string) {
+  if (!value || value === "Not provided") {
+    return "";
+  }
+
+  const trimmed = value.split(" (")[0]?.trim() ?? "";
+  const parsed = new Date(trimmed);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function SummaryMetric({
   label,
   value,
@@ -149,7 +167,10 @@ export function ProviderProfilePage() {
     name: provider?.name ?? "",
     email: provider?.email ?? "",
     phone: provider?.phone ?? "",
+    dob: normalizeEditableDate(provider?.dob ?? ""),
+    gender: provider?.gender === "Not provided" ? "" : (provider?.gender ?? ""),
     serviceArea: provider?.serviceArea ?? "",
+    address: provider?.address === "Not provided" ? "" : (provider?.address ?? ""),
     about: provider?.about ?? "",
   });
 
@@ -180,7 +201,10 @@ export function ProviderProfilePage() {
         name: payload.detail?.name ?? "",
         email: payload.detail?.email ?? "",
         phone: payload.detail?.phone ?? "",
+        dob: normalizeEditableDate(payload.detail?.dob ?? ""),
+        gender: payload.detail?.gender === "Not provided" ? "" : (payload.detail?.gender ?? ""),
         serviceArea: payload.detail?.serviceArea ?? "",
+        address: payload.detail?.address === "Not provided" ? "" : (payload.detail?.address ?? ""),
         about: payload.detail?.about ?? "",
       });
       setLoading(false);
@@ -235,6 +259,9 @@ export function ProviderProfilePage() {
       phone: form.phone,
       marketing_name: form.name,
       service_location: form.serviceArea,
+      date_of_birth: form.dob,
+      sex: form.gender,
+      residential_address: form.address,
       bio: form.about,
     });
     setSaving(false);
@@ -251,7 +278,10 @@ export function ProviderProfilePage() {
             name: form.name,
             email: form.email,
             phone: form.phone,
+            dob: form.dob || "Not provided",
+            gender: form.gender || "Not provided",
             serviceArea: form.serviceArea,
+            address: form.address || "Not provided",
             about: form.about,
           }
         : current
@@ -421,12 +451,55 @@ export function ProviderProfilePage() {
                 }
                 icon={<Phone className="size-4" />}
               />
-              <InfoRow label="Date of Birth" value={detail.dob} icon={<CalendarDays className="size-4" />} />
-              <InfoRow label="Gender" value={detail.gender} icon={<ShieldCheck className="size-4" />} />
+              <InfoRow
+                label="Date of Birth"
+                value={
+                  editing ? (
+                    <input
+                      type="date"
+                      value={form.dob}
+                      onChange={(event) => setForm((current) => ({ ...current, dob: event.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : (
+                    detail.dob
+                  )
+                }
+                icon={<CalendarDays className="size-4" />}
+              />
+              <InfoRow
+                label="Gender"
+                value={
+                  editing ? (
+                    <input
+                      value={form.gender}
+                      onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : (
+                    detail.gender
+                  )
+                }
+                icon={<ShieldCheck className="size-4" />}
+              />
               <InfoRow label="Language" value={detail.language} icon={<Languages className="size-4" />} />
               <InfoRow label="NRIC / ID Number" value={detail.nationalId} icon={<FileBadge2 className="size-4" />} />
               <InfoRow label="Emergency Contact" value={detail.emergencyContact} icon={<Phone className="size-4" />} />
-              <InfoRow label="Address" value={<span className="whitespace-pre-line">{detail.address}</span>} icon={<MapPin className="size-4" />} />
+              <InfoRow
+                label="Address"
+                value={
+                  editing ? (
+                    <textarea
+                      value={form.address}
+                      onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+                      className="min-h-[96px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+                    />
+                  ) : (
+                    <span className="whitespace-pre-line">{detail.address}</span>
+                  )
+                }
+                icon={<MapPin className="size-4" />}
+              />
             </div>
             {editing ? (
               <div className="mt-4 flex justify-end">

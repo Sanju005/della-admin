@@ -662,13 +662,9 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     providerDetailRecords["PRV-2034"]!;
 
   const firstService = relationItem(liveProfile.provider_services);
+  const generatedDetail = buildGeneratedProviderDetail(providerId, liveProfile, liveAccount, firstService);
   const verification = relationItem(liveProfile.provider_verifications);
-  const serviceAreas = fallback.serviceAreas.length
-    ? fallback.serviceAreas.map((area, index) => ({
-        ...area,
-        label: index === 0 ? liveProfile.service_location?.trim() || area.label : area.label,
-      }))
-    : [{ id: "live-sa-1", label: liveProfile.service_location?.trim() || "Malaysia", tag: "Primary" }];
+  const serviceAreas = [{ id: "live-sa-1", label: liveProfile.service_location?.trim() || "Malaysia", tag: "Primary" }];
 
   const liveTasks = await tryFetchProviderTasks(providerId);
   const livePayments = await tryFetchProviderPayments(providerId);
@@ -685,7 +681,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
       ? getMockProviderReviews(fallback.name)
       : [];
   const metrics = buildMetrics(
-    fallback.metrics,
+    generatedDetail.metrics,
     liveTasks,
     livePayments,
     serviceAreas.length,
@@ -696,25 +692,35 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const status = formatStatus(liveAccount?.status ?? (liveProfile.is_visible === false ? "paused" : "active"));
 
   const detail: ProviderDetailRecord = {
-    ...fallback,
+    ...generatedDetail,
     providerId,
-    name: liveProfile.marketing_name?.trim() || liveAccount?.full_name?.trim() || fallback.name,
-    email: liveAccount?.email?.trim() || fallback.email,
+    name: liveProfile.marketing_name?.trim() || liveAccount?.full_name?.trim() || generatedDetail.name,
+    email: liveAccount?.email?.trim() || generatedDetail.email,
     status,
-    joinedAt: formatDateTime(liveAccount?.created_at) || fallback.joinedAt,
-    lastLogin: fallback.lastLogin,
+    joinedAt: formatDateTime(liveAccount?.created_at) || generatedDetail.joinedAt,
+    lastLogin: generatedDetail.lastLogin,
     serviceType: humanizeService(firstService?.service_type),
-    serviceArea: liveProfile.service_location?.trim() || fallback.serviceArea,
-    rating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : fallback.rating,
-    ratingNote: `(${liveProfile.total_reviews ?? (Number(fallback.totalReviews) || 0)} reviews)`,
-    phone: liveAccount?.phone?.trim() || fallback.phone,
-    about: liveProfile.bio?.trim() || fallback.about,
-    approvalStatus: formatStatus(liveProfile.approval_status),
-    backgroundCheck: verification?.background_check_verified ? "Verified" : fallback.backgroundCheck,
-    kycStatus: verification?.kyc_verified || verification?.identity_verified ? "Verified" : fallback.kycStatus,
-    memberSince: formatDate(liveAccount?.created_at) || fallback.memberSince,
+    serviceArea: liveProfile.service_location?.trim() || generatedDetail.serviceArea,
+    rating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : generatedDetail.rating,
+    ratingNote: `(${liveProfile.total_reviews ?? (Number(generatedDetail.totalReviews) || 0)} reviews)`,
+    phone: liveAccount?.phone?.trim() || generatedDetail.phone,
+    dob: formatDateOfBirth(liveProfile.date_of_birth) || generatedDetail.dob,
+    gender: liveProfile.sex?.trim() || generatedDetail.gender,
+    address: liveProfile.residential_address?.trim() || generatedDetail.address,
+    nationalId: verification?.document_type?.trim() || generatedDetail.nationalId,
+    about: liveProfile.bio?.trim() || generatedDetail.about,
+    approvalStatus: formatApprovalStatus(liveProfile.approval_status),
+    backgroundCheck: verification?.background_check_verified ? "Verified" : generatedDetail.backgroundCheck,
+    kycStatus: verification?.kyc_verified || verification?.identity_verified ? "Verified" : generatedDetail.kycStatus,
+    verificationNote: verification?.admin_note?.trim() || generatedDetail.verificationNote,
+    requestedDocuments: verification?.requested_documents?.filter(Boolean) ?? generatedDetail.requestedDocuments,
+    phoneVerified: Boolean(verification?.phone_verified),
+    emailVerified: Boolean(verification?.email_verified),
+    identityVerified: Boolean(verification?.identity_verified),
+    backgroundCheckVerified: Boolean(verification?.background_check_verified),
+    memberSince: formatDate(liveAccount?.created_at) || generatedDetail.memberSince,
     completedJobs:
-      taskRows?.completedTaskRows.length ? String(taskRows.completedTaskRows.length) : fallback.completedJobs,
+      taskRows?.completedTaskRows.length ? String(taskRows.completedTaskRows.length) : generatedDetail.completedJobs,
     cancellationRate:
       liveTasks?.length
         ? `${(
@@ -722,18 +728,18 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
               liveTasks.length) *
             100
           ).toFixed(1)}%`
-        : fallback.cancellationRate,
-    averageRating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : fallback.averageRating,
-    totalReviews: String(liveProfile.total_reviews ?? (Number(fallback.totalReviews) || 0)),
-    totalTasks: liveTasks?.length ? String(liveTasks.length) : fallback.totalTasks,
-    completedTasks: taskRows?.completedTaskRows.length ? String(taskRows.completedTaskRows.length) : fallback.completedTasks,
-    upcomingTasks: taskRows?.upcomingTaskRows.length ? String(taskRows.upcomingTaskRows.length) : fallback.upcomingTasks,
+        : generatedDetail.cancellationRate,
+    averageRating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : generatedDetail.averageRating,
+    totalReviews: String(liveProfile.total_reviews ?? (Number(generatedDetail.totalReviews) || 0)),
+    totalTasks: liveTasks?.length ? String(liveTasks.length) : generatedDetail.totalTasks,
+    completedTasks: taskRows?.completedTaskRows.length ? String(taskRows.completedTaskRows.length) : generatedDetail.completedTasks,
+    upcomingTasks: taskRows?.upcomingTaskRows.length ? String(taskRows.upcomingTaskRows.length) : generatedDetail.upcomingTasks,
     areaCount: String(serviceAreas.length),
     totalEarnings:
       livePayments?.length
         ? formatCurrency(livePayments.reduce((sum, row) => sum + (row.amount ?? 0), 0))
-        : fallback.totalEarnings,
-    reviewsCount: String(liveProfile.total_reviews ?? (Number(fallback.reviewsCount) || 0)),
+        : generatedDetail.totalEarnings,
+    reviewsCount: String(liveProfile.total_reviews ?? (Number(generatedDetail.reviewsCount) || 0)),
     metrics,
     serviceAreas,
     documents: [
@@ -741,16 +747,31 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
         id: "live-doc-1",
         label: "Phone Verification",
         status: verification?.phone_verified ? "Verified" : "Pending",
+        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
       },
       {
         id: "live-doc-2",
+        label: "Email Verification",
+        status: verification?.email_verified ? "Verified" : "Pending",
+        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
+      },
+      {
+        id: "live-doc-3",
         label: "Identity Verification",
         status: verification?.identity_verified ? "Verified" : "Pending",
+        fileName: verification?.front_image_name?.trim() || undefined,
+        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
       },
-      ...fallback.documents.slice(2),
+      {
+        id: "live-doc-4",
+        label: "Back of Document",
+        status: verification?.back_image_name?.trim() ? (verification?.identity_verified ? "Verified" : "Pending") : "Pending",
+        fileName: verification?.back_image_name?.trim() || undefined,
+        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
+      },
     ] satisfies ProviderDocumentItem[],
-    completedTaskRows: taskRows?.completedTaskRows.length ? taskRows.completedTaskRows : fallback.completedTaskRows,
-    upcomingTaskRows: taskRows?.upcomingTaskRows.length ? taskRows.upcomingTaskRows : fallback.upcomingTaskRows,
+    completedTaskRows: taskRows?.completedTaskRows.length ? taskRows.completedTaskRows : generatedDetail.completedTaskRows,
+    upcomingTaskRows: taskRows?.upcomingTaskRows.length ? taskRows.upcomingTaskRows : generatedDetail.upcomingTaskRows,
     payoutRows,
   };
 
@@ -770,6 +791,9 @@ export async function updateProviderProfile(
     status?: string;
     marketing_name?: string;
     service_location?: string;
+    date_of_birth?: string;
+    sex?: string;
+    residential_address?: string;
     bio?: string;
   }
 ) {
@@ -790,6 +814,9 @@ export async function updateProviderProfile(
     Object.entries({
       marketing_name: updates.marketing_name,
       service_location: updates.service_location,
+      date_of_birth: updates.date_of_birth,
+      sex: updates.sex,
+      residential_address: updates.residential_address,
       bio: updates.bio,
     }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
   );

@@ -92,6 +92,9 @@ type UserProfileUpdateInput = {
   full_name?: string;
   email?: string;
   phone?: string;
+  dob?: string;
+  gender?: string;
+  city?: string;
   status?: string;
 };
 
@@ -336,6 +339,31 @@ function formatDateOfBirth(value: string | null | undefined) {
 
 function verificationLabel(verified: boolean, fallback = "Not yet verified") {
   return verified ? "Verified" : fallback;
+}
+
+function splitPhoneNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return {
+      countryCode: undefined,
+      phoneNumber: undefined,
+    };
+  }
+
+  if (!trimmed.startsWith("+")) {
+    return {
+      countryCode: undefined,
+      phoneNumber: trimmed,
+    };
+  }
+
+  const [countryCode, ...rest] = trimmed.split(/\s+/);
+  const phoneNumber = rest.join(" ").trim();
+
+  return {
+    countryCode: countryCode || undefined,
+    phoneNumber: phoneNumber || undefined,
+  };
 }
 
 function buildCustomerAddress(customerProfile: ProfileRelation | undefined, fallbackCity: string) {
@@ -1090,18 +1118,85 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
     return { error: "Supabase is not configured." };
   }
 
-  const payload = Object.fromEntries(
-    Object.entries(updates).filter(([, value]) => typeof value === "string" && value.trim() !== "")
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    return { error: profileError?.message || "User profile was not found." };
+  }
+
+  const normalizedPhone = updates.phone?.trim() ?? "";
+  const normalizedDob = updates.dob?.trim() ?? "";
+  const normalizedGender = updates.gender?.trim() ?? "";
+  const normalizedCity = updates.city?.trim() ?? "";
+  const normalizedName = updates.full_name?.trim() ?? "";
+  const normalizedEmail = updates.email?.trim() ?? "";
+  const normalizedStatus = updates.status?.trim() ?? "";
+  const splitPhone = splitPhoneNumber(normalizedPhone);
+
+  const profilePayload = Object.fromEntries(
+    Object.entries({
+      full_name: normalizedName || undefined,
+      email: normalizedEmail || undefined,
+      phone: normalizedPhone || undefined,
+      status: normalizedStatus || undefined,
+    }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
   );
 
-  if (Object.keys(payload).length === 0) {
+  if (Object.keys(profilePayload).length === 0 && !normalizedDob && !normalizedGender && !normalizedCity) {
     return { error: "Nothing to update." };
   }
 
-  const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
+  if (Object.keys(profilePayload).length > 0) {
+    const { error } = await supabase.from("profiles").update(profilePayload).eq("id", userId);
 
-  if (error) {
-    return { error: error.message || "Unable to update user." };
+    if (error) {
+      return { error: error.message || "Unable to update user." };
+    }
+  }
+
+  const role = profile.role?.trim().toLowerCase();
+
+  if (role === "provider") {
+    const providerPayload = Object.fromEntries(
+      Object.entries({
+        date_of_birth: normalizedDob || undefined,
+        sex: normalizedGender || undefined,
+        service_location: normalizedCity || undefined,
+      }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
+    );
+
+    if (Object.keys(providerPayload).length > 0) {
+      const { error } = await supabase.from("provider_profiles").upsert({ id: userId, ...providerPayload });
+
+      if (error) {
+        return { error: error.message || "Unable to update provider profile." };
+      }
+    }
+  } else {
+    const [firstName = "", ...restName] = normalizedName.split(/\s+/).filter(Boolean);
+    const lastName = restName.join(" ");
+    const customerPayload = Object.fromEntries(
+      Object.entries({
+        first_name: firstName || undefined,
+        last_name: lastName || undefined,
+        date_of_birth: normalizedDob || undefined,
+        phone_number: splitPhone.phoneNumber,
+        country_code: splitPhone.countryCode,
+        city: normalizedCity || undefined,
+      }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
+    );
+
+    if (Object.keys(customerPayload).length > 0) {
+      const { error } = await supabase.from("customer_profiles").upsert({ id: userId, ...customerPayload });
+
+      if (error) {
+        return { error: error.message || "Unable to update customer profile." };
+      }
+    }
   }
 
   return { error: null };

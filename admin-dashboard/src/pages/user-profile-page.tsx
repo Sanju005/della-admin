@@ -90,6 +90,24 @@ function avatarGradient(name: string) {
   return palette[index];
 }
 
+function normalizeEditableDate(value: string) {
+  if (!value || value === "Not provided") {
+    return "";
+  }
+
+  const trimmed = value.split(" (")[0]?.trim() ?? "";
+  const parsed = new Date(trimmed);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function UserProfilePage() {
   const { userId = "" } = useParams();
   const navigate = useNavigate();
@@ -106,6 +124,9 @@ export function UserProfilePage() {
     name: record?.name ?? "",
     email: record?.email ?? "",
     phone: record?.phone ?? "",
+    dob: normalizeEditableDate(record?.dob ?? ""),
+    gender: record?.gender === "Not provided" ? "" : (record?.gender ?? ""),
+    city: record?.city === "Malaysia" ? "" : (record?.city ?? ""),
   });
 
   useEffect(() => {
@@ -137,6 +158,9 @@ export function UserProfilePage() {
         name: payload.detail?.name ?? "",
         email: payload.detail?.email ?? "",
         phone: payload.detail?.phone ?? "",
+        dob: normalizeEditableDate(payload.detail?.dob ?? ""),
+        gender: payload.detail?.gender === "Not provided" ? "" : (payload.detail?.gender ?? ""),
+        city: payload.detail?.city === "Malaysia" ? "" : (payload.detail?.city ?? ""),
       });
       setLoading(false);
     }
@@ -201,6 +225,9 @@ export function UserProfilePage() {
       full_name: form.name,
       email: form.email,
       phone: form.phone,
+      dob: form.dob,
+      gender: form.gender,
+      city: form.city,
     });
     setSaving(false);
 
@@ -216,6 +243,9 @@ export function UserProfilePage() {
             name: form.name,
             email: form.email,
             phone: form.phone,
+            dob: form.dob ? form.dob : "Not provided",
+            gender: form.gender || "Not provided",
+            city: form.city || "Malaysia",
           }
         : current
     );
@@ -311,9 +341,52 @@ export function UserProfilePage() {
                   }
                   icon={<Phone className="size-4" />}
                 />
-                <InfoRow label="Date of Birth" value={detail.dob} icon={<CalendarDays className="size-4" />} />
-                <InfoRow label="Gender" value={detail.gender} icon={<Shield className="size-4" />} />
-                <InfoRow label="City" value={detail.city} icon={<MapPin className="size-4" />} />
+                <InfoRow
+                  label="Date of Birth"
+                  value={
+                    editing ? (
+                      <input
+                        type="date"
+                        value={form.dob}
+                        onChange={(event) => setForm((current) => ({ ...current, dob: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.dob
+                    )
+                  }
+                  icon={<CalendarDays className="size-4" />}
+                />
+                <InfoRow
+                  label="Gender"
+                  value={
+                    editing ? (
+                      <input
+                        value={form.gender}
+                        onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.gender
+                    )
+                  }
+                  icon={<Shield className="size-4" />}
+                />
+                <InfoRow
+                  label="City"
+                  value={
+                    editing ? (
+                      <input
+                        value={form.city}
+                        onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.city
+                    )
+                  }
+                  icon={<MapPin className="size-4" />}
+                />
               </div>
               {editing ? (
                 <div className="mt-4 flex justify-end">
