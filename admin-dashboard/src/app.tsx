@@ -49,6 +49,11 @@ const ProvidersPage = lazy(async () => {
   return { default: module.ProvidersPage };
 });
 
+const AdminsPage = lazy(async () => {
+  const module = await import("./pages/admins-page");
+  return { default: module.AdminsPage };
+});
+
 const UsersPage = lazy(async () => {
   const module = await import("./pages/users-page");
   return { default: module.UsersPage };
@@ -153,6 +158,10 @@ const router = createBrowserRouter([
       {
         path: "users",
         element: withSuspense(<UsersPage />),
+      },
+      {
+        path: "admins",
+        element: withSuspense(<AdminsPage />),
       },
       {
         path: "users/:userId",

@@ -1,19 +1,18 @@
-import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ResourcePage } from "./resource-page";
-import { buildUserStats, listUsersWithFallback } from "../lib/admin-users";
+import { buildInternalUserStats, listInternalUsersWithFallback } from "../lib/admin-users";
 import type { UserRow } from "../types";
 
-export function UsersPage() {
+export function AdminsPage() {
   const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
 
-    async function loadUsers() {
+    async function loadAdmins() {
       setLoading(true);
-      const nextRows = await listUsersWithFallback();
+      const nextRows = await listInternalUsersWithFallback();
 
       if (!active) {
         return;
@@ -23,7 +22,7 @@ export function UsersPage() {
       setLoading(false);
     }
 
-    void loadUsers();
+    void loadAdmins();
 
     return () => {
       active = false;
@@ -40,22 +39,11 @@ export function UsersPage() {
 
   return (
     <ResourcePage
-      title="Users"
-      description="Customer accounts only. Service providers and internal staff are managed in their own sections."
+      title="Admins"
+      description="Admin, manager, and customer service accounts from the live Supabase workspace."
       rows={rows}
       columns={[
-        {
-          key: "id",
-          label: "ID",
-          render: (row) => (
-            <Link
-              to={`/users/${row.id}`}
-              className="font-semibold text-emerald-700 hover:text-emerald-800"
-            >
-              {String(row.id)}
-            </Link>
-          ),
-        },
+        { key: "id", label: "ID" },
         { key: "name", label: "Name" },
         { key: "email", label: "Email" },
         { key: "role", label: "Role" },
@@ -64,8 +52,8 @@ export function UsersPage() {
         { key: "joined", label: "Joined" },
       ]}
       statusKey="status"
-      searchPlaceholder="Search users by name, email, or role..."
-      stats={buildUserStats(rows)}
+      searchPlaceholder="Search admins by name, email, or role..."
+      stats={buildInternalUserStats(rows)}
     />
   );
 }

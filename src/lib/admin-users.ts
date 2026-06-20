@@ -88,6 +88,8 @@ type UserProfilePayload = {
   relatedPayments: PaymentRow[];
 };
 
+type UserCategory = "customers" | "providers" | "internal";
+
 type UserProfileUpdateInput = {
   full_name?: string;
   email?: string;
@@ -229,7 +231,7 @@ async function fetchRelatedProfileNamesForUser(userId: string, role: string) {
     return new Map<string, string>();
   }
 
-  const column = role === "provider" ? "provider_id" : "customer_id";
+  const column = isProviderRole(role) ? "provider_id" : "customer_id";
 
   const [bookingsResult, paymentsResult, reviewsResult] = await Promise.all([
     supabase.from("bookings").select("customer_id, provider_id").eq(column, userId).limit(24),
@@ -254,12 +256,43 @@ function toTitleCase(value: string) {
     .join(" ");
 }
 
+function normalizeRole(value: string | null | undefined) {
+  return value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+}
+
+function isProviderRole(role: string | null | undefined) {
+  const normalized = normalizeRole(role);
+  return normalized === "provider" || normalized === "service_provider";
+}
+
+function isInternalRole(role: string | null | undefined) {
+  const normalized = normalizeRole(role);
+  return ["admin", "super_admin", "manager", "customer_care", "customer_service"].includes(normalized);
+}
+
+function isCustomerRole(role: string | null | undefined) {
+  const normalized = normalizeRole(role);
+  return normalized === "customer" || (!isProviderRole(normalized) && !isInternalRole(normalized));
+}
+
+function matchesUserCategory(role: string | null | undefined, category: UserCategory) {
+  if (category === "providers") {
+    return isProviderRole(role);
+  }
+
+  if (category === "internal") {
+    return isInternalRole(role);
+  }
+
+  return isCustomerRole(role);
+}
+
 function formatStatus(value: string | null | undefined, role?: string | null) {
   if (value?.trim()) {
     return toTitleCase(value);
   }
 
-  return role === "provider" ? "Verified" : "Active";
+  return isProviderRole(role) ? "Verified" : "Active";
 }
 
 function formatCurrency(value: number | null | undefined) {
@@ -723,7 +756,7 @@ async function tryFetchLivePayments(userId: string, role: string, profileNames: 
     return null;
   }
 
-  const column = role === "provider" ? "provider_id" : "customer_id";
+  const column = isProviderRole(role) ? "provider_id" : "customer_id";
 
   const { data, error } = await supabase
     .from("payments")
@@ -765,7 +798,7 @@ async function tryFetchLiveReviews(userId: string, role: string, profileNames: P
     return null;
   }
 
-  const column = role === "provider" ? "provider_id" : "customer_id";
+  const column = isProviderRole(role) ? "provider_id" : "customer_id";
 
   const { data, error } = await supabase
     .from("reviews")
@@ -795,7 +828,7 @@ async function tryFetchLiveReviews(userId: string, role: string, profileNames: P
     return {
       id: row.id,
       provider:
-        role === "provider"
+        isProviderRole(role)
           ? reviewerName || "Customer Review"
           : providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "") || "DELLA Provider",
       rating: Math.max(1, Math.min(5, Math.round(row.rating ?? 5))),
@@ -829,7 +862,7 @@ function buildMetrics(
   const completionRate = totalBookings > 0 ? `${((completedCount / totalBookings) * 100).toFixed(1)}%` : "0.0%";
   const cancellationRate = totalBookings > 0 ? `${((cancelledCount / totalBookings) * 100).toFixed(1)}%` : "0.0%";
 
-  if (role === "provider") {
+  if (isProviderRole(role)) {
     return [
       { id: "live-1", label: "Total Jobs", value: String(totalBookings), note: "Provider bookings", tone: "emerald" },
       { id: "live-2", label: "Completed", value: String(completedCount), note: completionRate, tone: "emerald" },
@@ -971,29 +1004,42 @@ async function fetchProfileById(userId: string) {
   };
 }
 
-export async function listUsersWithFallback() {
+async function listUsersByCategory(category: UserCategory) {
   const liveProfiles = await fetchProfiles();
 
   if (!liveProfiles?.length) {
-    return users;
+    return users.filter((row) => matchesUserCategory(row.role, category));
   }
 
-  const liveRows = liveProfiles.map(mapProfileToUserRow);
+  const liveRows = liveProfiles
+    .map(mapProfileToUserRow)
+    .filter((row) => matchesUserCategory(row.role, category));
   const seen = new Set(
     liveRows.flatMap((row) => [row.id.trim().toLowerCase(), row.email.trim().toLowerCase()])
   );
 
   const mockRemainder = users.filter(
-    (row) => !seen.has(row.id.trim().toLowerCase()) && !seen.has(row.email.trim().toLowerCase())
+    (row) =>
+      matchesUserCategory(row.role, category) &&
+      !seen.has(row.id.trim().toLowerCase()) &&
+      !seen.has(row.email.trim().toLowerCase())
   );
 
   return [...liveRows, ...mockRemainder];
 }
 
+export async function listUsersWithFallback() {
+  return listUsersByCategory("customers");
+}
+
+export async function listInternalUsersWithFallback() {
+  return listUsersByCategory("internal");
+}
+
 export function buildUserStats(rows: UserRow[]) {
   const activeCount = rows.filter((row) => ["active", "verified"].includes(row.status.toLowerCase())).length;
-  const customerCount = rows.filter((row) => row.role.toLowerCase() === "customer").length;
-  const providerCount = rows.filter((row) => row.role.toLowerCase() === "provider").length;
+  const customerCount = rows.filter((row) => isCustomerRole(row.role)).length;
+  const pendingCount = rows.filter((row) => row.status.toLowerCase() === "pending").length;
 
   return [
     {
@@ -1007,9 +1053,33 @@ export function buildUserStats(rows: UserRow[]) {
       note: "Registered marketplace customers",
     },
     {
-      label: "Providers",
-      value: providerCount.toLocaleString("en-MY"),
-      note: "Service providers in the ecosystem",
+      label: "Pending",
+      value: pendingCount.toLocaleString("en-MY"),
+      note: "Customer accounts awaiting activation or review",
+    },
+  ];
+}
+
+export function buildInternalUserStats(rows: UserRow[]) {
+  const activeCount = rows.filter((row) => ["active", "verified"].includes(row.status.toLowerCase())).length;
+  const adminCount = rows.filter((row) => ["admin", "super_admin"].includes(normalizeRole(row.role))).length;
+  const supportCount = rows.filter((row) => ["manager", "customer_care", "customer_service"].includes(normalizeRole(row.role))).length;
+
+  return [
+    {
+      label: "Active Staff",
+      value: activeCount.toLocaleString("en-MY"),
+      note: `${rows.length.toLocaleString("en-MY")} total internal accounts`,
+    },
+    {
+      label: "Admins",
+      value: adminCount.toLocaleString("en-MY"),
+      note: "Admin and super admin access",
+    },
+    {
+      label: "Managers / Support",
+      value: supportCount.toLocaleString("en-MY"),
+      note: "Managers and customer service staff",
     },
   ];
 }

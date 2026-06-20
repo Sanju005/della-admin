@@ -41,7 +41,7 @@ export function UsersPage() {
   return (
     <ResourcePage
       title="Users"
-      description="Customer, provider, and internal user management at a glance."
+      description="Customer accounts only. Service providers and internal staff are managed in their own sections."
       rows={rows}
       columns={[
         {
