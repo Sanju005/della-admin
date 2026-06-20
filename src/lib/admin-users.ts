@@ -476,10 +476,18 @@ function formatSchedule(dateValue?: string | null, timeValue?: string | null) {
 }
 
 function extractName(profile: ProfileRow) {
+  const customerProfile = relationNode(profile.customer_profiles);
   const providerProfile = relationNode(profile.provider_profiles);
 
   if (profile.full_name?.trim()) {
     return profile.full_name.trim();
+  }
+
+  const customerName = [customerProfile?.first_name?.trim(), customerProfile?.last_name?.trim()]
+    .filter(Boolean)
+    .join(" ");
+  if (customerName) {
+    return customerName;
   }
 
   if (providerProfile?.marketing_name?.trim()) {
