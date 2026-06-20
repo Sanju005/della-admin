@@ -64,6 +64,30 @@ type ProviderProfileRow = {
     | null;
 };
 
+type ProviderServiceRow = {
+  provider_id: string;
+  service_type?: string | null;
+  years_experience?: string | null;
+  hourly_rate?: number | null;
+  daily_rate?: number | null;
+  provider_service_specialties?: Array<{ specialty?: string | null }> | null;
+};
+
+type ProviderVerificationRow = {
+  provider_id: string;
+  phone_verified?: boolean | null;
+  email_verified?: boolean | null;
+  identity_verified?: boolean | null;
+  kyc_verified?: boolean | null;
+  background_check_verified?: boolean | null;
+  document_type?: string | null;
+  front_image_name?: string | null;
+  back_image_name?: string | null;
+  requested_documents?: string[] | null;
+  admin_note?: string | null;
+  last_reviewed_at?: string | null;
+};
+
 type ProviderAccountRow = {
   id: string;
   full_name: string | null;
@@ -398,42 +422,7 @@ async function fetchProviderProfiles() {
 
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select(`
-      id,
-      marketing_name,
-      service_location,
-      service_radius_km,
-      date_of_birth,
-      sex,
-      residential_address,
-      bio,
-      average_rating,
-      total_reviews,
-      approval_status,
-      is_visible,
-      provider_services (
-        service_type,
-        years_experience,
-        hourly_rate,
-        daily_rate,
-        provider_service_specialties (
-          specialty
-        )
-      ),
-      provider_verifications (
-        phone_verified,
-        email_verified,
-        identity_verified,
-        kyc_verified,
-        background_check_verified,
-        document_type,
-        front_image_name,
-        back_image_name,
-        requested_documents,
-        admin_note,
-        last_reviewed_at
-      )
-    `)
+    .select("id, marketing_name, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
     .order("average_rating", { ascending: false })
     .limit(200);
 
@@ -441,7 +430,45 @@ async function fetchProviderProfiles() {
     return null;
   }
 
-  return data as ProviderProfileRow[];
+  const profiles = data as ProviderProfileRow[];
+  const ids = profiles.map((profile) => profile.id);
+
+  const [{ data: serviceRows }, { data: verificationRows }] = await Promise.all([
+    supabase
+      .from("provider_services")
+      .select(`
+        provider_id,
+        service_type,
+        years_experience,
+        hourly_rate,
+        daily_rate,
+        provider_service_specialties (
+          specialty
+        )
+      `)
+      .in("provider_id", ids),
+    supabase
+      .from("provider_verifications")
+      .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at")
+      .in("provider_id", ids),
+  ]);
+
+  const servicesByProvider = new Map<string, ProviderServiceRow[]>();
+  for (const row of (serviceRows as ProviderServiceRow[] | null | undefined) ?? []) {
+    const current = servicesByProvider.get(row.provider_id) ?? [];
+    current.push(row);
+    servicesByProvider.set(row.provider_id, current);
+  }
+
+  const verificationByProvider = new Map(
+    ((verificationRows as ProviderVerificationRow[] | null | undefined) ?? []).map((row) => [row.provider_id, row])
+  );
+
+  return profiles.map((profile) => ({
+    ...profile,
+    provider_services: servicesByProvider.get(profile.id) ?? null,
+    provider_verifications: verificationByProvider.get(profile.id) ?? null,
+  }));
 }
 
 async function fetchProviderProfileById(providerId: string) {
@@ -451,42 +478,7 @@ async function fetchProviderProfileById(providerId: string) {
 
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select(`
-      id,
-      marketing_name,
-      service_location,
-      service_radius_km,
-      date_of_birth,
-      sex,
-      residential_address,
-      bio,
-      average_rating,
-      total_reviews,
-      approval_status,
-      is_visible,
-      provider_services (
-        service_type,
-        years_experience,
-        hourly_rate,
-        daily_rate,
-        provider_service_specialties (
-          specialty
-        )
-      ),
-      provider_verifications (
-        phone_verified,
-        email_verified,
-        identity_verified,
-        kyc_verified,
-        background_check_verified,
-        document_type,
-        front_image_name,
-        back_image_name,
-        requested_documents,
-        admin_note,
-        last_reviewed_at
-      )
-    `)
+    .select("id, marketing_name, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
     .eq("id", providerId)
     .maybeSingle();
 
@@ -494,7 +486,34 @@ async function fetchProviderProfileById(providerId: string) {
     return null;
   }
 
-  return data as ProviderProfileRow;
+  const profile = data as ProviderProfileRow;
+
+  const [{ data: serviceRows }, { data: verificationRow }] = await Promise.all([
+    supabase
+      .from("provider_services")
+      .select(`
+        provider_id,
+        service_type,
+        years_experience,
+        hourly_rate,
+        daily_rate,
+        provider_service_specialties (
+          specialty
+        )
+      `)
+      .eq("provider_id", providerId),
+    supabase
+      .from("provider_verifications")
+      .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at")
+      .eq("provider_id", providerId)
+      .maybeSingle(),
+  ]);
+
+  return {
+    ...profile,
+    provider_services: (serviceRows as ProviderServiceRow[] | null | undefined) ?? null,
+    provider_verifications: verificationRow ?? null,
+  };
 }
 
 async function fetchProviderAccountById(providerId: string) {
