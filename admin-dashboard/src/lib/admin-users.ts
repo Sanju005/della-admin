@@ -5,9 +5,16 @@ import type { DashboardBooking, PaymentRow, UserDetailRecord, UserMetric, UserRo
 
 type ProfileRelation =
   | {
+      first_name?: string | null;
+      last_name?: string | null;
       city?: string | null;
+      region?: string | null;
       state?: string | null;
       country?: string | null;
+      phone_number?: string | null;
+      country_code?: string | null;
+      verified?: boolean | null;
+      completion?: number | null;
       marketing_name?: string | null;
       service_location?: string | null;
       approval_status?: string | null;
@@ -30,9 +37,16 @@ type ProfileRelation =
         | null;
     }
   | Array<{
+      first_name?: string | null;
+      last_name?: string | null;
       city?: string | null;
+      region?: string | null;
       state?: string | null;
       country?: string | null;
+      phone_number?: string | null;
+      country_code?: string | null;
+      verified?: boolean | null;
+      completion?: number | null;
       marketing_name?: string | null;
       service_location?: string | null;
       approval_status?: string | null;
@@ -291,17 +305,51 @@ function verificationLabel(verified: boolean, fallback = "Not yet verified") {
   return verified ? "Verified" : fallback;
 }
 
+function buildCustomerAddress(customerProfile: ProfileRelation | undefined, fallbackCity: string) {
+  const node = relationNode(customerProfile);
+  if (!node) {
+    return [];
+  }
+
+  const line1 = [node.city?.trim(), node.region?.trim() || node.state?.trim()]
+    .filter(Boolean)
+    .join(", ");
+  const line2 = node.country?.trim() || fallbackCity;
+
+  if (!line1 && !line2) {
+    return [];
+  }
+
+  return [
+    {
+      id: "live-address-1",
+      label: "Primary Address",
+      line1: line1 || fallbackCity,
+      line2: line2 || "Malaysia",
+      tag: "Primary",
+    },
+  ];
+}
+
 function buildGeneratedUserDetail(
   liveProfile: ProfileRow,
   role: string,
   city: string,
   fallbackMetrics: UserMetric[],
 ): UserDetailRecord {
+  const customerProfile = relationNode(liveProfile.customer_profiles);
   const providerProfile = relationNode(liveProfile.provider_profiles);
   const verification = relationItem(providerProfile?.provider_verifications);
   const createdDate = formatDate(liveProfile.created_at);
   const createdDateTime = formatDateTime(liveProfile.created_at);
   const accountType = role === "provider" ? "Service Provider" : toTitleCase(role);
+  const customerVerified = Boolean(customerProfile?.verified) || liveProfile.status?.trim().toLowerCase() === "active";
+  const customerPhone = customerProfile?.phone_number?.trim()
+    ? `${customerProfile.country_code?.trim() || "+60"} ${customerProfile.phone_number.trim()}`.trim()
+    : liveProfile.phone?.trim() || "Not provided";
+  const customerCompletion = typeof customerProfile?.completion === "number"
+    ? `${Math.max(0, Math.min(100, customerProfile.completion)).toFixed(1)}%`
+    : "0.0%";
 
   return {
     userId: liveProfile.id,
@@ -309,8 +357,11 @@ function buildGeneratedUserDetail(
     email: liveProfile.email?.trim() || "No email",
     role,
     status: formatStatus(liveProfile.status, role),
-    phone: liveProfile.phone?.trim() || "Not provided",
-    dob: role === "provider" ? formatDateOfBirth(providerProfile?.date_of_birth) : "Not provided",
+    phone: role === "provider" ? liveProfile.phone?.trim() || "Not provided" : customerPhone,
+    dob:
+      role === "provider"
+        ? formatDateOfBirth(providerProfile?.date_of_birth)
+        : formatDateOfBirth(customerProfile?.date_of_birth),
     gender: role === "provider" ? providerProfile?.sex?.trim() || "Not provided" : "Not provided",
     city,
     joined: createdDate,
@@ -327,26 +378,37 @@ function buildGeneratedUserDetail(
     totalSpent: "RM0.00",
     reviewsGiven: "0",
     reportsSubmitted: "0",
-    completionRate: "0.0%",
+    completionRate: role === "provider" ? "0.0%" : customerCompletion,
     cancellationRate: "0.0%",
     averageRating: "0.0",
-    emailVerifiedAt: verificationLabel(Boolean(verification?.email_verified)),
-    phoneVerifiedAt: verificationLabel(Boolean(verification?.phone_verified)),
-    kycVerifiedAt: verificationLabel(
-      Boolean(verification?.kyc_verified || verification?.identity_verified),
-      "Pending review",
-    ),
-    addresses: role === "provider" && providerProfile?.residential_address?.trim()
-      ? [
-          {
-            id: "live-address-1",
-            label: "Residential Address",
-            line1: providerProfile.residential_address.trim(),
-            line2: city,
-            tag: "Primary",
-          },
-        ]
-      : [],
+    emailVerifiedAt:
+      role === "provider"
+        ? verificationLabel(Boolean(verification?.email_verified))
+        : verificationLabel(customerVerified),
+    phoneVerifiedAt:
+      role === "provider"
+        ? verificationLabel(Boolean(verification?.phone_verified))
+        : verificationLabel(Boolean(customerProfile?.phone_number?.trim())),
+    kycVerifiedAt:
+      role === "provider"
+        ? verificationLabel(
+            Boolean(verification?.kyc_verified || verification?.identity_verified),
+            "Pending review",
+          )
+        : verificationLabel(customerVerified, "Pending review"),
+    addresses: role === "provider"
+      ? providerProfile?.residential_address?.trim()
+        ? [
+            {
+              id: "live-address-1",
+              label: "Residential Address",
+              line1: providerProfile.residential_address.trim(),
+              line2: city,
+              tag: "Primary",
+            },
+          ]
+        : []
+      : buildCustomerAddress(liveProfile.customer_profiles, city),
     timeline: [
       {
         id: "live-timeline-1",
@@ -380,7 +442,14 @@ function buildGeneratedUserDetail(
                 Boolean(verification?.kyc_verified || verification?.identity_verified) ? createdDate : "Pending",
             },
           ]
-        : [],
+        : [
+            {
+              id: "live-doc-customer-1",
+              label: "Account Verification",
+              status: customerVerified ? "Verified" : "Pending",
+              updated: customerVerified ? createdDate : "Pending",
+            },
+          ],
     reports: [],
     recentReviews: [],
     metrics: fallbackMetrics,
@@ -745,9 +814,17 @@ async function fetchProfiles() {
       phone,
       created_at,
       customer_profiles (
+        first_name,
+        last_name,
         city,
+        region,
         state,
-        country
+        country,
+        date_of_birth,
+        phone_number,
+        country_code,
+        verified,
+        completion
       ),
       provider_profiles (
         marketing_name,
@@ -790,9 +867,17 @@ async function fetchProfileById(userId: string) {
       phone,
       created_at,
       customer_profiles (
+        first_name,
+        last_name,
         city,
+        region,
         state,
-        country
+        country,
+        date_of_birth,
+        phone_number,
+        country_code,
+        verified,
+        completion
       ),
       provider_profiles (
         marketing_name,
@@ -897,7 +982,7 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
     Object.values(userDetailRecords)[0]?.metrics ??
     [];
   const generatedDetail = buildGeneratedUserDetail(liveProfile, role, city, roleTemplate);
-  const baseDetail = mockDetail ?? generatedDetail;
+  const baseDetail = generatedDetail;
   const relatedBookings = liveBookings?.length
     ? liveBookings
     : mockDetail
@@ -921,48 +1006,39 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
       email,
       role,
       status,
-      phone: liveProfile.phone?.trim() || baseDetail.phone,
-      dob: role === "provider" ? formatDateOfBirth(providerProfile?.date_of_birth) : baseDetail.dob,
-      gender: role === "provider" ? providerProfile?.sex?.trim() || baseDetail.gender : baseDetail.gender,
+      phone: generatedDetail.phone,
+      dob: generatedDetail.dob,
+      gender: generatedDetail.gender,
       city,
       joined: formatDate(liveProfile.created_at),
       registeredAt: formatDateTime(liveProfile.created_at),
-      lastLogin: mockDetail ? baseDetail.lastLogin : generatedDetail.lastLogin,
-      device: mockDetail ? baseDetail.device : generatedDetail.device,
-      ipAddress: mockDetail ? baseDetail.ipAddress : generatedDetail.ipAddress,
-      referrer: mockDetail ? baseDetail.referrer : generatedDetail.referrer,
-      loginCount: mockDetail ? baseDetail.loginCount : generatedDetail.loginCount,
-      failedLogins: mockDetail ? baseDetail.failedLogins : generatedDetail.failedLogins,
-      twoFactorAuth: mockDetail ? baseDetail.twoFactorAuth : generatedDetail.twoFactorAuth,
+      lastLogin: generatedDetail.lastLogin,
+      device: generatedDetail.device,
+      ipAddress: generatedDetail.ipAddress,
+      referrer: generatedDetail.referrer,
+      loginCount: generatedDetail.loginCount,
+      failedLogins: generatedDetail.failedLogins,
+      twoFactorAuth: generatedDetail.twoFactorAuth,
       accountType,
       emailVerifiedAt:
         role === "provider"
-          ? verificationLabel(Boolean(verification?.email_verified), baseDetail.emailVerifiedAt)
-          : baseDetail.emailVerifiedAt,
+          ? verificationLabel(Boolean(verification?.email_verified), generatedDetail.emailVerifiedAt)
+          : generatedDetail.emailVerifiedAt,
       phoneVerifiedAt:
         role === "provider"
-          ? verificationLabel(Boolean(verification?.phone_verified), baseDetail.phoneVerifiedAt)
-          : baseDetail.phoneVerifiedAt,
+          ? verificationLabel(Boolean(verification?.phone_verified), generatedDetail.phoneVerifiedAt)
+          : generatedDetail.phoneVerifiedAt,
       kycVerifiedAt:
         role === "provider"
           ? verificationLabel(
               Boolean(verification?.kyc_verified || verification?.identity_verified),
-              baseDetail.kycVerifiedAt,
+              generatedDetail.kycVerifiedAt,
             )
-          : baseDetail.kycVerifiedAt,
-      addresses:
-        role === "provider" && !mockDetail
-          ? generatedDetail.addresses
-          : baseDetail.addresses,
-      documents:
-        role === "provider" && !mockDetail
-          ? generatedDetail.documents
-          : baseDetail.documents,
-      timeline:
-        !mockDetail && baseDetail.timeline.length === 0
-          ? generatedDetail.timeline
-          : baseDetail.timeline,
-      recentReviews: liveReviews?.length ? liveReviews : baseDetail.recentReviews,
+          : generatedDetail.kycVerifiedAt,
+      addresses: generatedDetail.addresses,
+      documents: generatedDetail.documents,
+      timeline: generatedDetail.timeline,
+      recentReviews: liveReviews?.length ? liveReviews : mockDetail?.recentReviews ?? generatedDetail.recentReviews,
       metrics,
     },
     relatedBookings,
