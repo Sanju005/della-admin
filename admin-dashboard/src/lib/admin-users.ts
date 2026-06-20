@@ -142,6 +142,39 @@ type LiveReviewRow = {
 
 type ProfileNameMap = Map<string, string>;
 
+type CustomerProfileRow = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  city?: string | null;
+  region?: string | null;
+  state?: string | null;
+  country?: string | null;
+  date_of_birth?: string | null;
+  phone_number?: string | null;
+  country_code?: string | null;
+  verified?: boolean | null;
+  completion?: number | null;
+};
+
+type ProviderVerificationRow = {
+  phone_verified?: boolean | null;
+  email_verified?: boolean | null;
+  identity_verified?: boolean | null;
+  kyc_verified?: boolean | null;
+};
+
+type ProviderProfileRow = {
+  id: string;
+  marketing_name?: string | null;
+  service_location?: string | null;
+  approval_status?: string | null;
+  date_of_birth?: string | null;
+  sex?: string | null;
+  residential_address?: string | null;
+  provider_verifications?: ProviderVerificationRow | ProviderVerificationRow[] | null;
+};
+
 function relationNode(value?: ProfileRelation) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -813,28 +846,26 @@ async function fetchProfiles() {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select(`
-      id,
-      full_name,
-      email,
-      role,
-      status,
-      phone,
-      created_at,
-      customer_profiles (
-        first_name,
-        last_name,
-        city,
-        region,
-        state,
-        country,
-        date_of_birth,
-        phone_number,
-        country_code,
-        verified,
-        completion
-      ),
-      provider_profiles (
+    .select("id, full_name, email, role, status, phone, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error || !data?.length) {
+    return null;
+  }
+
+  const profiles = data as ProfileRow[];
+  const ids = profiles.map((profile) => profile.id);
+
+  const [{ data: customerProfiles }, { data: providerProfiles }] = await Promise.all([
+    supabase
+      .from("customer_profiles")
+      .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, verified, completion")
+      .in("id", ids),
+    supabase
+      .from("provider_profiles")
+      .select(`
+        id,
         marketing_name,
         service_location,
         approval_status,
@@ -847,16 +878,18 @@ async function fetchProfiles() {
           identity_verified,
           kyc_verified
         )
-      )
-    `)
-    .order("created_at", { ascending: false })
-    .limit(200);
+      `)
+      .in("id", ids),
+  ]);
 
-  if (error || !data?.length) {
-    return null;
-  }
+  const customerMap = new Map((customerProfiles as CustomerProfileRow[] | null | undefined)?.map((row) => [row.id, row]) ?? []);
+  const providerMap = new Map((providerProfiles as ProviderProfileRow[] | null | undefined)?.map((row) => [row.id, row]) ?? []);
 
-  return data as ProfileRow[];
+  return profiles.map((profile) => ({
+    ...profile,
+    customer_profiles: customerMap.get(profile.id) ?? null,
+    provider_profiles: providerMap.get(profile.id) ?? null,
+  }));
 }
 
 async function fetchProfileById(userId: string) {
@@ -866,28 +899,26 @@ async function fetchProfileById(userId: string) {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select(`
-      id,
-      full_name,
-      email,
-      role,
-      status,
-      phone,
-      created_at,
-      customer_profiles (
-        first_name,
-        last_name,
-        city,
-        region,
-        state,
-        country,
-        date_of_birth,
-        phone_number,
-        country_code,
-        verified,
-        completion
-      ),
-      provider_profiles (
+    .select("id, full_name, email, role, status, phone, created_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  const profile = data as ProfileRow;
+
+  const [{ data: customerProfile }, { data: providerProfile }] = await Promise.all([
+    supabase
+      .from("customer_profiles")
+      .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, verified, completion")
+      .eq("id", userId)
+      .maybeSingle(),
+    supabase
+      .from("provider_profiles")
+      .select(`
+        id,
         marketing_name,
         service_location,
         approval_status,
@@ -900,16 +931,16 @@ async function fetchProfileById(userId: string) {
           identity_verified,
           kyc_verified
         )
-      )
-    `)
-    .eq("id", userId)
-    .maybeSingle();
+      `)
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
 
-  if (error || !data) {
-    return null;
-  }
-
-  return data as ProfileRow;
+  return {
+    ...profile,
+    customer_profiles: customerProfile ?? null,
+    provider_profiles: providerProfile ?? null,
+  };
 }
 
 export async function listUsersWithFallback() {
