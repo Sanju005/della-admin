@@ -379,31 +379,17 @@ export function ProviderProfilePage() {
     );
   }
 
-  if (loading && !provider) {
-    return (
-      <div className="grid min-h-[40vh] place-items-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
-      </div>
-    );
-  }
-
-  if (!provider) {
-    return (
-      <SurfaceCard title="Provider Details">
-        <p className="text-sm text-slate-500">Provider record was not found.</p>
-      </SurfaceCard>
-    );
-  }
-
-  const detail = provider;
+  const defaultProviderDetail = Object.values(providerDetailRecords)[0]!;
+  const safeDetail =
+    provider ?? providerDetailRecords[providerId] ?? defaultProviderDetail;
   const providerHeroImage =
-    [...(detail.serviceImageFiles ?? []), ...(detail.certificateImageFiles ?? [])].find((value) =>
+    [...(safeDetail.serviceImageFiles ?? []), ...(safeDetail.certificateImageFiles ?? [])].find((value) =>
       isRenderableImageUrl(value)
     ) ?? null;
   const allTaskRows = useMemo(
     () =>
       [
-        ...detail.completedTaskRows.map((task) => ({
+        ...(safeDetail.completedTaskRows ?? []).map((task) => ({
           id: task.id,
           service: task.service,
           customer: task.customer,
@@ -415,7 +401,7 @@ export function ProviderProfilePage() {
           sortDate: task.date,
           type: "completed" as const,
         })),
-        ...detail.upcomingTaskRows.map((task) => ({
+        ...(safeDetail.upcomingTaskRows ?? []).map((task) => ({
           id: task.id,
           service: task.service,
           customer: task.customer,
@@ -427,7 +413,7 @@ export function ProviderProfilePage() {
           sortDate: task.schedule,
           type: "pending" as const,
         })),
-        ...(detail.cancelledTaskRows ?? []).map((task) => ({
+        ...(safeDetail.cancelledTaskRows ?? []).map((task) => ({
           id: task.id,
           service: task.service,
           customer: task.customer,
@@ -440,7 +426,7 @@ export function ProviderProfilePage() {
           type: "cancelled" as const,
         })),
       ],
-    [detail.completedTaskRows, detail.upcomingTaskRows, detail.cancelledTaskRows]
+    [safeDetail.completedTaskRows, safeDetail.upcomingTaskRows, safeDetail.cancelledTaskRows]
   );
 
   const filteredTaskRows = useMemo(() => {
@@ -453,13 +439,13 @@ export function ProviderProfilePage() {
 
   const paymentRows = useMemo(
     () =>
-      detail.payoutRows.map((row) => ({
+      safeDetail.payoutRows.map((row) => ({
         ...row,
         numericAmount: parseCurrencyValue(row.amount),
         sortLabel: row.type,
         sortDate: row.date,
       })),
-    [detail.payoutRows]
+    [safeDetail.payoutRows]
   );
 
   const filteredPaymentRows = useMemo(() => {
@@ -473,12 +459,12 @@ export function ProviderProfilePage() {
 
   const reviewRows = useMemo(
     () =>
-      (detail.recentReviews ?? []).map((review) => ({
+      (safeDetail.recentReviews ?? []).map((review) => ({
         ...review,
         sortLabel: review.provider,
         sortDate: review.date,
       })),
-    [detail.recentReviews]
+    [safeDetail.recentReviews]
   );
 
   const filteredReviewRows = useMemo(() => {
@@ -501,24 +487,24 @@ export function ProviderProfilePage() {
 
   const verificationDocuments = useMemo(
     () => [
-      { id: "verify-email", label: "Email Verification", status: detail.emailVerified ? "Verified" : "Pending", fileName: undefined },
-      { id: "verify-phone", label: "Phone Verification", status: detail.phoneVerified ? "Verified" : "Pending", fileName: undefined },
+      { id: "verify-email", label: "Email Verification", status: safeDetail.emailVerified ? "Verified" : "Pending", fileName: undefined },
+      { id: "verify-phone", label: "Phone Verification", status: safeDetail.phoneVerified ? "Verified" : "Pending", fileName: undefined },
       {
         id: "verify-ic-front",
         label: "IC Front",
-        status: detail.documents.find((item) => item.label === "Identity Verification")?.status ?? "Pending",
-        fileName: detail.documents.find((item) => item.label === "Identity Verification")?.fileName,
+        status: safeDetail.documents.find((item) => item.label === "Identity Verification")?.status ?? "Pending",
+        fileName: safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileName,
       },
       {
         id: "verify-ic-back",
         label: "IC Back",
-        status: detail.documents.find((item) => item.label === "Back of Document")?.status ?? "Pending",
-        fileName: detail.documents.find((item) => item.label === "Back of Document")?.fileName,
+        status: safeDetail.documents.find((item) => item.label === "Back of Document")?.status ?? "Pending",
+        fileName: safeDetail.documents.find((item) => item.label === "Back of Document")?.fileName,
       },
       {
         id: "verify-license",
         label: "Driving License",
-        status: detail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending",
+        status: safeDetail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending",
         fileName: undefined,
       },
       {
@@ -530,12 +516,30 @@ export function ProviderProfilePage() {
       {
         id: "verify-certificates",
         label: "Certificates",
-        status: (detail.certificateImageFiles ?? []).length ? "Uploaded" : "Pending",
-        fileName: (detail.certificateImageFiles ?? []).join(", ") || undefined,
+        status: (safeDetail.certificateImageFiles ?? []).length ? "Uploaded" : "Pending",
+        fileName: (safeDetail.certificateImageFiles ?? []).join(", ") || undefined,
       },
     ],
-    [detail]
+    [safeDetail]
   );
+
+  if (loading && !provider) {
+    return (
+      <div className="grid min-h-[40vh] place-items-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!provider) {
+    return (
+      <SurfaceCard title="Provider Details">
+        <p className="text-sm text-slate-500">Provider record was not found.</p>
+      </SurfaceCard>
+    );
+  }
+
+  const detail = provider;
 
   async function handleSaveProfile() {
     if (saving) {

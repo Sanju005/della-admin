@@ -304,24 +304,10 @@ export function UserProfilePage() {
     };
   }, [userId]);
 
-  if (loading && !record) {
-    return (
-      <div className="grid min-h-[40vh] place-items-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
-      </div>
-    );
-  }
-
-  if (!record) {
-    return (
-      <SurfaceCard title="User Details">
-        <p className="text-sm text-slate-500">User record was not found.</p>
-      </SurfaceCard>
-    );
-  }
-
-  const detail = record;
-  const recentReviews = detail.recentReviews;
+  const defaultUserDetail = Object.values(userDetailRecords)[0]!;
+  const safeDetail =
+    record ?? userDetailRecords[userId] ?? defaultUserDetail;
+  const recentReviews = safeDetail.recentReviews;
   const taskRows = useMemo(
     () =>
       relatedBookings.map((booking) => {
@@ -362,7 +348,7 @@ export function UserProfilePage() {
 
   const totalPaidValue = filteredPaymentRows.reduce((sum, payment) => sum + payment.numericAmount, 0);
   const earningPoints = Math.floor(totalPaidValue);
-  const walletBalanceValue = parseCurrencyValue(detail.walletBalance);
+  const walletBalanceValue = parseCurrencyValue(safeDetail.walletBalance);
   const balanceWithPointsValue = walletBalanceValue + earningPoints;
 
   const filteredReviewRows = useMemo(() => {
@@ -377,7 +363,7 @@ export function UserProfilePage() {
   }, [recentReviews, reviewDateFilter, reviewSort]);
 
   const filteredReportRows = useMemo(() => {
-    const rows = detail.reports
+    const rows = safeDetail.reports
       .filter((report) => matchesDateFilter(report.submitted, reportDateFilter))
       .map((report) => ({
         ...report,
@@ -385,39 +371,39 @@ export function UserProfilePage() {
         sortDate: report.submitted,
       }));
     return sortByRecentOrAz(rows, reportSort);
-  }, [detail.reports, reportDateFilter, reportSort]);
+  }, [safeDetail.reports, reportDateFilter, reportSort]);
 
   const verificationDocuments = useMemo(
     () => [
       {
         id: "user-email",
         label: "Email Verification",
-        status: isVerifiedLabel(detail.emailVerifiedAt) ? "Verified" : "Pending",
-        updated: detail.emailVerifiedAt,
+        status: isVerifiedLabel(safeDetail.emailVerifiedAt) ? "Verified" : "Pending",
+        updated: safeDetail.emailVerifiedAt || "Not verified",
       },
       {
         id: "user-phone",
         label: "Phone Verification",
-        status: isVerifiedLabel(detail.phoneVerifiedAt) ? "Verified" : "Pending",
-        updated: detail.phoneVerifiedAt,
+        status: isVerifiedLabel(safeDetail.phoneVerifiedAt) ? "Verified" : "Pending",
+        updated: safeDetail.phoneVerifiedAt || "Not verified",
       },
       {
         id: "user-ic-front",
         label: "IC Front",
-        status: detail.documents[0]?.status ?? "Pending",
-        updated: detail.documents[0]?.updated ?? "Not uploaded",
+        status: safeDetail.documents[0]?.status ?? "Pending",
+        updated: safeDetail.documents[0]?.updated ?? "Not uploaded",
       },
       {
         id: "user-ic-back",
         label: "IC Back",
-        status: detail.documents[1]?.status ?? "Pending",
-        updated: detail.documents[1]?.updated ?? "Not uploaded",
+        status: safeDetail.documents[1]?.status ?? "Pending",
+        updated: safeDetail.documents[1]?.updated ?? "Not uploaded",
       },
       {
         id: "user-license",
         label: "Driving License",
-        status: detail.documents[2]?.status ?? "Pending",
-        updated: detail.documents[2]?.updated ?? "Not uploaded",
+        status: safeDetail.documents[2]?.status ?? "Pending",
+        updated: safeDetail.documents[2]?.updated ?? "Not uploaded",
       },
       {
         id: "user-resume",
@@ -432,8 +418,26 @@ export function UserProfilePage() {
         updated: "Not uploaded",
       },
     ],
-    [detail]
+    [safeDetail]
   );
+
+  if (loading && !record) {
+    return (
+      <div className="grid min-h-[40vh] place-items-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!record) {
+    return (
+      <SurfaceCard title="User Details">
+        <p className="text-sm text-slate-500">User record was not found.</p>
+      </SurfaceCard>
+    );
+  }
+
+  const detail = record;
 
   function flash(nextMessage: string) {
     setMessage(nextMessage);
