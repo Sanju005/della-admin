@@ -659,7 +659,7 @@ export function ProviderProfilePage() {
     }
 
     await refreshProvider();
-    flash("Provider verification approved.");
+    flash(result.warning || "Provider verification approved. Listing is now live for customers.");
   }
 
   function renderOverview() {

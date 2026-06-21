@@ -819,7 +819,7 @@ function SuccessStep({
           Congratulations!
         </h2>
         <p className="mt-2 text-[14px] leading-6 text-[#4b5563]">
-          Your profile has been submitted and is now live, pending admin approval.
+          Your profile has been submitted and is now pending admin approval.
         </p>
       </div>
 
@@ -828,7 +828,7 @@ function SuccessStep({
           How Your Listing Appears
         </h3>
         <p className="mt-1 text-[13px] text-[#4b5563]">
-          Your listing will be visible even before verification is complete.
+          Your listing will become visible to customers after admin verification is approved.
         </p>
 
         <div className="mt-4 grid gap-4">

@@ -273,7 +273,7 @@ export async function POST(request: Request) {
           service_radius_km: payload.providerLocation.radius,
           bio: buildProviderBio(payload),
           approval_status: "pending",
-          is_visible: true,
+          is_visible: false,
         },
         { onConflict: "id" },
       );

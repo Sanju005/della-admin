@@ -229,10 +229,10 @@ export function ProvidersCatalogScreen({ data }: { data: CatalogScreenData }) {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-[15px] font-extrabold tracking-[-0.03em] text-[#17803D]">
-                  Listings go live before approval
+                  Approved listings only
                 </h2>
                 <p className="mt-1.5 text-[13px] leading-5 text-[#475467]">
-                  Providers can publish now. Verified badges appear after admin review.
+                  Customers only see providers after admin approval and verification.
                 </p>
               </div>
               <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[16px]">

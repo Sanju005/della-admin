@@ -317,6 +317,7 @@ export const getProviderCatalog = cache(
         `
       )
       .eq("is_visible", true)
+      .eq("approval_status", "approved")
       .order("average_rating", { ascending: false });
 
     const rows = (data ?? []) as ProviderCatalogRow[];
@@ -372,28 +373,15 @@ export const getProviderCatalog = cache(
       return {
         service: null,
         serviceLabel: "All Providers",
-        listings: [...realListings, ...Object.values(mockListings).flat()].slice(0, 24),
+        listings: realListings.slice(0, 24),
         errorMessage: error?.message ?? null,
       };
-    }
-
-    const merged = [...realListings];
-    const existingIds = new Set(merged.map((item) => item.id));
-
-    for (const mockItem of mockListings[serviceKey]) {
-      if (merged.length >= 5) {
-        break;
-      }
-
-      if (!existingIds.has(mockItem.id)) {
-        merged.push(mockItem);
-      }
     }
 
     return {
       service: serviceKey,
       serviceLabel: humanizeService(serviceKey),
-      listings: merged.slice(0, Math.max(5, merged.length)),
+      listings: realListings,
       errorMessage: error?.message ?? null,
     };
   }

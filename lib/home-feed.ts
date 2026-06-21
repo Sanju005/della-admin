@@ -252,6 +252,7 @@ export const getHomeFeedData = cache(async (): Promise<HomeFeedData> => {
         `
       )
       .eq("is_visible", true)
+      .eq("approval_status", "approved")
       .order("average_rating", { ascending: false })
       .limit(8),
     adminSupabase

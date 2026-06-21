@@ -501,6 +501,21 @@ export async function POST(request: Request) {
     );
   }
 
+  const { data: providerProfile } = await verified.adminClient
+    .from("provider_profiles")
+    .select("id, approval_status, is_visible")
+    .eq("id", payload.providerId)
+    .eq("approval_status", "approved")
+    .eq("is_visible", true)
+    .maybeSingle();
+
+  if (!providerProfile) {
+    return NextResponse.json(
+      { error: "This provider is not available for booking yet." },
+      { status: 403 }
+    );
+  }
+
   const { data: providerService } = await verified.adminClient
     .from("provider_services")
     .select("id, service_type")

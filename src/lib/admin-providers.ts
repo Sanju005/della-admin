@@ -189,6 +189,10 @@ export const providerDocumentRequestOptions = [
   "Background Check",
 ] as const;
 
+const providerApprovalNotifyUrl =
+  import.meta.env.VITE_PROVIDER_APPROVAL_NOTIFY_URL?.trim() ||
+  "https://app.dellaapp.com/api/provider-approval/notify";
+
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -1450,5 +1454,28 @@ export async function approveProviderVerification(providerId: string, note: stri
     return { error: accountError.message || "Unable to activate provider account." };
   }
 
-  return { error: null };
+  try {
+    const response = await fetch(providerApprovalNotifyUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ providerId }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      return {
+        error: null,
+        warning: payload.error || "Provider approved, but approval email could not be sent.",
+      };
+    }
+  } catch {
+    return {
+      error: null,
+      warning: "Provider approved, but approval email could not be sent.",
+    };
+  }
+
+  return { error: null, warning: null };
 }
