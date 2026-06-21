@@ -16,7 +16,9 @@ export type ProviderServiceDetails = {
   yearsExperience: string;
   specialties: string[];
   imageCaptions: string[];
+  imageFileNames: string[];
   certificateCaptions: string[];
+  certificateFileNames: string[];
   hourlyRate: string;
   dailyRate: string;
 };
@@ -51,6 +53,8 @@ export type ProviderRegistrationData = {
   providerLocation: {
     radius: number;
     areaLabel: string;
+    latitude: number;
+    longitude: number;
   };
   verification: {
     phoneOtp: string[];

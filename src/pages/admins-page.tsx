@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ResourcePage } from "./resource-page";
 import { buildInternalUserStats, listInternalUsersWithFallback } from "../lib/admin-users";
 import type { UserRow } from "../types";
@@ -43,7 +44,18 @@ export function AdminsPage() {
       description="Admin, manager, and customer service accounts from the live Supabase workspace."
       rows={rows}
       columns={[
-        { key: "id", label: "ID" },
+        {
+          key: "id",
+          label: "ID",
+          render: (row) => (
+            <Link
+              to={`/users/${row.id}`}
+              className="font-semibold text-emerald-700 hover:text-emerald-800"
+            >
+              {String(row.id)}
+            </Link>
+          ),
+        },
         { key: "name", label: "Name" },
         { key: "email", label: "Email" },
         { key: "role", label: "Role" },

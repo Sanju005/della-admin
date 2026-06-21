@@ -99,7 +99,7 @@ export default function LoginPage() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, email")
         .eq("id", data.user.id)
         .maybeSingle();
 
@@ -107,6 +107,14 @@ export default function LoginPage() {
         setError(profileError.message || "Unable to load your account.");
         return;
       }
+
+      await supabase.from("login_audit_events").insert({
+        user_id: data.user.id,
+        email: profile?.email ?? data.user.email ?? email,
+        role_snapshot: profile?.role ?? null,
+        app_surface: profile?.role === "provider" ? "provider_app" : "customer_app",
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      });
 
       try {
         const fcmToken = await requestNotificationPermission();

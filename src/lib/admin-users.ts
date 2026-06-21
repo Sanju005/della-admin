@@ -145,6 +145,19 @@ type LiveReviewRow = {
   provider_profiles?: ProfileRelation;
 };
 
+type LoginAuditRow = {
+  id: string;
+  app_surface?: string | null;
+  created_at?: string | null;
+};
+
+type UserReportRow = {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
 type ProfileNameMap = Map<string, string>;
 
 type CustomerProfileRow = {
@@ -437,6 +450,8 @@ function buildGeneratedUserDetail(
   const createdDate = formatDate(liveProfile.created_at);
   const createdDateTime = formatDateTime(liveProfile.created_at);
   const accountType = role === "provider" ? "Service Provider" : toTitleCase(role);
+  const customerRegion = customerProfile?.region?.trim() || customerProfile?.state?.trim() || "Not provided";
+  const customerCountry = customerProfile?.country?.trim() || "Malaysia";
   const customerVerified = Boolean(customerProfile?.verified) || liveProfile.status?.trim().toLowerCase() === "active";
   const customerPhone = customerProfile?.phone_number?.trim()
     ? `${customerProfile.country_code?.trim() || "+60"} ${customerProfile.phone_number.trim()}`.trim()
@@ -458,6 +473,8 @@ function buildGeneratedUserDetail(
         : formatDateOfBirth(customerProfile?.date_of_birth),
     gender: role === "provider" ? providerProfile?.sex?.trim() || "Not provided" : "Not provided",
     city,
+    region: role === "provider" ? "Not provided" : customerRegion,
+    country: role === "provider" ? "Malaysia" : customerCountry,
     joined: createdDate,
     lastLogin: "Recently active",
     registeredAt: createdDateTime,
@@ -838,6 +855,46 @@ async function tryFetchLiveReviews(userId: string, role: string, profileNames: P
   });
 }
 
+async function tryFetchLoginAudits(userId: string) {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("login_audit_events")
+    .select("id, app_surface, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as LoginAuditRow[];
+}
+
+async function tryFetchLiveReports(userId: string, role: string) {
+  if (!supabase) {
+    return null;
+  }
+
+  const column = isProviderRole(role) ? "reported_user_id" : "reporter_id";
+
+  const { data, error } = await supabase
+    .from("user_reports")
+    .select("id, title, status, created_at")
+    .eq(column, userId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as UserReportRow[];
+}
+
 function buildMetrics(
   role: string,
   relatedBookings: DashboardBooking[],
@@ -1114,6 +1171,8 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
   const liveBookings = await tryFetchLiveBookings(userId, role, profileNames);
   const livePayments = await tryFetchLivePayments(userId, role, profileNames);
   const liveReviews = await tryFetchLiveReviews(userId, role, profileNames);
+  const liveLoginAudits = await tryFetchLoginAudits(userId);
+  const liveReports = await tryFetchLiveReports(userId, role);
   const roleTemplate =
     Object.values(userDetailRecords).find((record) => record.role === role)?.metrics ??
     Object.values(userDetailRecords)[0]?.metrics ??
@@ -1153,7 +1212,6 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
       device: generatedDetail.device,
       ipAddress: generatedDetail.ipAddress,
       referrer: generatedDetail.referrer,
-      loginCount: generatedDetail.loginCount,
       failedLogins: generatedDetail.failedLogins,
       twoFactorAuth: generatedDetail.twoFactorAuth,
       accountType,
@@ -1175,8 +1233,32 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
       addresses: generatedDetail.addresses,
       documents: generatedDetail.documents,
       timeline: generatedDetail.timeline,
+      recentActions:
+        liveLoginAudits?.length
+          ? liveLoginAudits.map((entry) => ({
+              id: entry.id,
+              label: `Signed in via ${(entry.app_surface ?? "app").replaceAll("_", " ")}`,
+              time: formatDateTime(entry.created_at),
+            }))
+          : generatedDetail.recentActions,
+      loginCount: liveLoginAudits?.length ? `${liveLoginAudits.length} times` : generatedDetail.loginCount,
+      reportsSubmitted:
+        liveReports?.length && !isProviderRole(role) ? String(liveReports.length) : generatedDetail.reportsSubmitted,
+      reports:
+        liveReports?.length
+          ? liveReports.map((report) => ({
+              id: report.id,
+              title: report.title?.trim() || "Report submitted",
+              status: formatStatus(report.status),
+              submitted: formatDate(report.created_at),
+            }))
+          : generatedDetail.reports,
       recentReviews: liveReviews?.length ? liveReviews : mockDetail?.recentReviews ?? generatedDetail.recentReviews,
-      metrics,
+      metrics: metrics.map((metric) =>
+        metric.label === "Reports Submitted" && liveReports?.length && !isProviderRole(role)
+          ? { ...metric, value: String(liveReports.length), note: "Live reports submitted" }
+          : metric
+      ),
     },
     relatedBookings,
     relatedPayments,

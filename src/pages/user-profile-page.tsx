@@ -387,6 +387,16 @@ export function UserProfilePage() {
                   }
                   icon={<MapPin className="size-4" />}
                 />
+                <InfoRow
+                  label="Region / State"
+                  value={detail.region || "Not provided"}
+                  icon={<MapPin className="size-4" />}
+                />
+                <InfoRow
+                  label="Country"
+                  value={detail.country || "Malaysia"}
+                  icon={<MapPin className="size-4" />}
+                />
               </div>
               {editing ? (
                 <div className="mt-4 flex justify-end">

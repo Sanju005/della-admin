@@ -222,6 +222,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return "Wrong credentials";
           }
 
+          if (data.user) {
+            const { data: liveProfile } = await supabase
+              .from("profiles")
+              .select("role, email")
+              .eq("id", data.user.id)
+              .maybeSingle();
+
+            await supabase.from("login_audit_events").insert({
+              user_id: data.user.id,
+              email: liveProfile?.email ?? data.user.email ?? email,
+              role_snapshot: liveProfile?.role ?? null,
+              app_surface: "admin_panel",
+              user_agent:
+                typeof navigator !== "undefined" ? navigator.userAgent : "",
+            });
+          }
+
           setSession(data.session ?? null);
           return null;
         } catch (error) {

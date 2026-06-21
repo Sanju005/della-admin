@@ -2,6 +2,7 @@ import { bookings, payments, providers as mockProviders, reviews as mockReviews 
 import { providerDetailRecords } from "../data/provider-detail-mocks";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import type {
+  ProviderCancelledTaskRow,
   ProviderDetailRecord,
   ProviderDocumentItem,
   ProviderPayoutRow,
@@ -62,6 +63,7 @@ type ProviderProfileRow = {
         last_reviewed_at?: string | null;
       }>
     | null;
+  provider_admin_metadata?: ProviderAdminMetadataRow | null;
 };
 
 type ProviderServiceRow = {
@@ -88,6 +90,20 @@ type ProviderVerificationRow = {
   last_reviewed_at?: string | null;
 };
 
+type ProviderAdminMetadataRow = {
+  provider_id: string;
+  availability_days?: string[] | null;
+  availability_time_preset?: string | null;
+  availability_start_time?: string | null;
+  availability_end_time?: string | null;
+  service_image_captions?: Record<string, string[] | null> | null;
+  certificate_image_captions?: Record<string, string[] | null> | null;
+  service_image_files?: Record<string, string[] | null> | null;
+  certificate_image_files?: Record<string, string[] | null> | null;
+  current_latitude?: number | null;
+  current_longitude?: number | null;
+};
+
 type ProviderAccountRow = {
   id: string;
   full_name: string | null;
@@ -104,6 +120,7 @@ type LiveBookingRow = {
   scheduled_date?: string | null;
   scheduled_start_time?: string | null;
   total_amount?: number | null;
+  decline_reason?: string | null;
   customer_id?: string | null;
   provider_id?: string | null;
   provider_services?:
@@ -259,6 +276,59 @@ function formatDateTime(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatRate(value: number | null | undefined, suffix: string) {
+  if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
+    return "Not set";
+  }
+
+  return `${formatCurrency(value)}${suffix}`;
+}
+
+function formatAvailabilityDays(days: string[] | null | undefined) {
+  const cleanDays = (days ?? []).map((value) => value.trim()).filter(Boolean);
+
+  if (!cleanDays.length) {
+    return "Not set";
+  }
+
+  if (cleanDays.length === 7) {
+    return "Monday - Sunday";
+  }
+
+  return cleanDays.join(", ");
+}
+
+function formatAvailabilityHours(metadata: ProviderAdminMetadataRow | null | undefined) {
+  if (!metadata) {
+    return "Not set";
+  }
+
+  const preset = metadata.availability_time_preset?.trim() || "";
+  const start = metadata.availability_start_time?.trim() || "";
+  const end = metadata.availability_end_time?.trim() || "";
+
+  if (preset && preset.toLowerCase() !== "custom time") {
+    return preset;
+  }
+
+  if (start && end) {
+    return `${start} - ${end}`;
+  }
+
+  return preset || "Not set";
+}
+
+function formatCoordinates(metadata: ProviderAdminMetadataRow | null | undefined) {
+  const latitude = metadata?.current_latitude;
+  const longitude = metadata?.current_longitude;
+
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return "Not captured";
+  }
+
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
 }
 
 function formatSchedule(dateValue?: string | null, timeValue?: string | null) {
@@ -433,7 +503,7 @@ async function fetchProviderProfiles() {
   const profiles = data as ProviderProfileRow[];
   const ids = profiles.map((profile) => profile.id);
 
-  const [{ data: serviceRows }, { data: verificationRows }] = await Promise.all([
+  const [{ data: serviceRows }, { data: verificationRows }, { data: metadataRows }] = await Promise.all([
     supabase
       .from("provider_services")
       .select(`
@@ -451,6 +521,10 @@ async function fetchProviderProfiles() {
       .from("provider_verifications")
       .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at")
       .in("provider_id", ids),
+    supabase
+      .from("provider_admin_metadata")
+      .select("provider_id, availability_days, availability_time_preset, availability_start_time, availability_end_time, service_image_captions, certificate_image_captions, service_image_files, certificate_image_files, current_latitude, current_longitude")
+      .in("provider_id", ids),
   ]);
 
   const servicesByProvider = new Map<string, ProviderServiceRow[]>();
@@ -463,11 +537,15 @@ async function fetchProviderProfiles() {
   const verificationByProvider = new Map(
     ((verificationRows as ProviderVerificationRow[] | null | undefined) ?? []).map((row) => [row.provider_id, row])
   );
+  const metadataByProvider = new Map(
+    ((metadataRows as ProviderAdminMetadataRow[] | null | undefined) ?? []).map((row) => [row.provider_id, row])
+  );
 
   return profiles.map((profile) => ({
     ...profile,
     provider_services: servicesByProvider.get(profile.id) ?? null,
     provider_verifications: verificationByProvider.get(profile.id) ?? null,
+    provider_admin_metadata: metadataByProvider.get(profile.id) ?? null,
   }));
 }
 
@@ -488,7 +566,7 @@ async function fetchProviderProfileById(providerId: string) {
 
   const profile = data as ProviderProfileRow;
 
-  const [{ data: serviceRows }, { data: verificationRow }] = await Promise.all([
+  const [{ data: serviceRows }, { data: verificationRow }, { data: metadataRow }] = await Promise.all([
     supabase
       .from("provider_services")
       .select(`
@@ -507,12 +585,18 @@ async function fetchProviderProfileById(providerId: string) {
       .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at")
       .eq("provider_id", providerId)
       .maybeSingle(),
+    supabase
+      .from("provider_admin_metadata")
+      .select("provider_id, availability_days, availability_time_preset, availability_start_time, availability_end_time, service_image_captions, certificate_image_captions, service_image_files, certificate_image_files, current_latitude, current_longitude")
+      .eq("provider_id", providerId)
+      .maybeSingle(),
   ]);
 
   return {
     ...profile,
     provider_services: (serviceRows as ProviderServiceRow[] | null | undefined) ?? null,
     provider_verifications: verificationRow ?? null,
+    provider_admin_metadata: (metadataRow as ProviderAdminMetadataRow | null | undefined) ?? null,
   };
 }
 
@@ -569,6 +653,7 @@ async function tryFetchProviderTasks(providerId: string) {
       scheduled_date,
       scheduled_start_time,
       total_amount,
+      decline_reason,
       customer_id,
       provider_id,
       provider_services (
@@ -627,6 +712,7 @@ async function tryFetchProviderReviews(providerId: string) {
 function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, string>): {
   completedTaskRows: ProviderTaskRow[];
   upcomingTaskRows: ProviderUpcomingTaskRow[];
+  cancelledTaskRows: ProviderCancelledTaskRow[];
 } {
   const completedTaskRows = liveRows
     .filter((row) => ["completed"].includes((row.booking_status ?? "").toLowerCase()))
@@ -658,7 +744,23 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
       };
     });
 
-  return { completedTaskRows, upcomingTaskRows };
+  const cancelledTaskRows = liveRows
+    .filter((row) => ["cancelled", "canceled", "declined"].includes((row.booking_status ?? "").toLowerCase()))
+    .slice(0, 5)
+    .map((row) => {
+      const service = relationItem(row.provider_services);
+      return {
+        id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+        service: humanizeService(service?.service_type),
+        customer: customerNames.get(row.customer_id ?? "") || "Customer",
+        schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
+        amount: formatCurrency(row.total_amount ?? 0),
+        status: mapTaskStatus(row.booking_status),
+        reason: row.decline_reason?.trim() || "No reason recorded",
+      };
+    });
+
+  return { completedTaskRows, upcomingTaskRows, cancelledTaskRows };
 }
 
 function buildPayoutRows(livePayments: LivePaymentRow[]): ProviderPayoutRow[] {
@@ -734,23 +836,35 @@ function buildGeneratedProviderDetail(
 ): ProviderDetailRecord {
   const approvalStatus = formatApprovalStatus(liveProfile.approval_status);
   const verification = relationItem(liveProfile.provider_verifications);
+  const metadata = liveProfile.provider_admin_metadata ?? null;
+  const serviceKey = firstService?.service_type?.trim().toLowerCase() || "";
   const name =
     liveProfile.marketing_name?.trim() ||
     liveAccount?.full_name?.trim() ||
     "DELLA Provider";
   const joinedAt = formatDateTime(liveAccount?.created_at);
   const memberSince = formatDate(liveAccount?.created_at);
+  const specialties =
+    firstService?.provider_service_specialties
+      ?.map((item) => item.specialty?.trim())
+      .filter((item): item is string => Boolean(item)) ?? [];
 
   return {
     providerId,
     name,
     email: liveAccount?.email?.trim() || "Not provided",
     status: formatStatus(liveAccount?.status ?? (liveProfile.is_visible === false ? "paused" : "active")),
+    visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     roleBadge: "Provider",
     joinedAt,
     lastLogin: "Recently active",
     serviceType: humanizeService(firstService?.service_type),
     serviceArea: liveProfile.service_location?.trim() || "Malaysia",
+    serviceRadiusKm: `${Number(liveProfile.service_radius_km ?? 0).toFixed(0)} km`,
+    yearsExperience: firstService?.years_experience?.trim() || "Not set",
+    hourlyRate: formatRate(firstService?.hourly_rate, " / hr"),
+    dailyRate: formatRate(firstService?.daily_rate, " / day"),
+    currentCoordinates: formatCoordinates(metadata),
     rating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : "0.0",
     ratingNote: `(${liveProfile.total_reviews ?? 0} reviews)`,
     phone: liveAccount?.phone?.trim() || "Not provided",
@@ -779,8 +893,9 @@ function buildGeneratedProviderDetail(
     totalReviews: String(liveProfile.total_reviews ?? 0),
     onTimeRate: "Pending",
     repeatCustomers: "Pending",
-    workingDays: "Not set",
-    workingHours: "Not set",
+    workingDays: formatAvailabilityDays(metadata?.availability_days),
+    workingHours: formatAvailabilityHours(metadata),
+    availabilityPreset: metadata?.availability_time_preset?.trim() || "Not set",
     totalTasks: "0",
     completedTasks: "0",
     upcomingTasks: "0",
@@ -815,6 +930,23 @@ function buildGeneratedProviderDetail(
     skills: firstService?.service_type
       ? [{ id: `skill-${firstService.service_type}`, label: humanizeService(firstService.service_type) }]
       : [],
+    specialties,
+    serviceImageCaptions:
+      serviceKey && metadata?.service_image_captions?.[serviceKey]?.length
+        ? metadata.service_image_captions[serviceKey]?.filter(Boolean) ?? []
+        : [],
+    serviceImageFiles:
+      serviceKey && metadata?.service_image_files?.[serviceKey]?.length
+        ? metadata.service_image_files[serviceKey]?.filter(Boolean) ?? []
+        : [],
+    certificateImageCaptions:
+      serviceKey && metadata?.certificate_image_captions?.[serviceKey]?.length
+        ? metadata.certificate_image_captions[serviceKey]?.filter(Boolean) ?? []
+        : [],
+    certificateImageFiles:
+      serviceKey && metadata?.certificate_image_files?.[serviceKey]?.length
+        ? metadata.certificate_image_files[serviceKey]?.filter(Boolean) ?? []
+        : [],
     documents: [
       {
         id: "live-doc-phone",
@@ -850,7 +982,9 @@ function buildGeneratedProviderDetail(
     ],
     completedTaskRows: [],
     upcomingTaskRows: [],
+    cancelledTaskRows: [],
     payoutRows: [],
+    recentReviews: [],
     recentActions: [],
     activityLog: [
       {
@@ -916,6 +1050,8 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const liveAccount = await fetchProviderAccountById(providerId);
   const firstService = relationItem(liveProfile.provider_services);
   const verification = relationItem(liveProfile.provider_verifications);
+  const metadata = liveProfile.provider_admin_metadata ?? null;
+  const serviceKey = firstService?.service_type?.trim().toLowerCase() || "";
   const fallback = findMockProviderDetail(
     providerId,
     liveProfile.marketing_name ?? liveAccount?.full_name,
@@ -956,10 +1092,16 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     name: liveProfile.marketing_name?.trim() || liveAccount?.full_name?.trim() || baseDetail.name,
     email: liveAccount?.email?.trim() || baseDetail.email,
     status,
+    visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     joinedAt: formatDateTime(liveAccount?.created_at) || baseDetail.joinedAt,
     lastLogin: baseDetail.lastLogin,
     serviceType: humanizeService(firstService?.service_type),
     serviceArea: liveProfile.service_location?.trim() || baseDetail.serviceArea,
+    serviceRadiusKm: `${Number(liveProfile.service_radius_km ?? 0).toFixed(0)} km`,
+    yearsExperience: firstService?.years_experience?.trim() || baseDetail.yearsExperience,
+    hourlyRate: formatRate(firstService?.hourly_rate, " / hr"),
+    dailyRate: formatRate(firstService?.daily_rate, " / day"),
+    currentCoordinates: formatCoordinates(metadata),
     rating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : baseDetail.rating,
     ratingNote: `(${liveProfile.total_reviews ?? (Number(baseDetail.totalReviews) || 0)} reviews)`,
     phone: liveAccount?.phone?.trim() || baseDetail.phone,
@@ -990,6 +1132,9 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
         : baseDetail.cancellationRate,
     averageRating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : baseDetail.averageRating,
     totalReviews: String(liveProfile.total_reviews ?? (Number(baseDetail.totalReviews) || 0)),
+    workingDays: formatAvailabilityDays(metadata?.availability_days),
+    workingHours: formatAvailabilityHours(metadata),
+    availabilityPreset: metadata?.availability_time_preset?.trim() || baseDetail.availabilityPreset || "Not set",
     totalTasks: liveTasks?.length ? String(liveTasks.length) : baseDetail.totalTasks,
     completedTasks: taskRows?.completedTaskRows.length ? String(taskRows.completedTaskRows.length) : baseDetail.completedTasks,
     upcomingTasks: taskRows?.upcomingTaskRows.length ? String(taskRows.upcomingTaskRows.length) : baseDetail.upcomingTasks,
@@ -1001,6 +1146,26 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     reviewsCount: String(liveProfile.total_reviews ?? (Number(baseDetail.reviewsCount) || 0)),
     metrics,
     serviceAreas,
+    specialties:
+      firstService?.provider_service_specialties
+        ?.map((item) => item.specialty?.trim())
+        .filter((item): item is string => Boolean(item)) ?? baseDetail.specialties ?? [],
+    serviceImageCaptions:
+      serviceKey && metadata?.service_image_captions?.[serviceKey]?.length
+        ? metadata.service_image_captions[serviceKey]?.filter(Boolean) ?? []
+        : baseDetail.serviceImageCaptions ?? [],
+    serviceImageFiles:
+      serviceKey && metadata?.service_image_files?.[serviceKey]?.length
+        ? metadata.service_image_files[serviceKey]?.filter(Boolean) ?? []
+        : baseDetail.serviceImageFiles ?? [],
+    certificateImageCaptions:
+      serviceKey && metadata?.certificate_image_captions?.[serviceKey]?.length
+        ? metadata.certificate_image_captions[serviceKey]?.filter(Boolean) ?? []
+        : baseDetail.certificateImageCaptions ?? [],
+    certificateImageFiles:
+      serviceKey && metadata?.certificate_image_files?.[serviceKey]?.length
+        ? metadata.certificate_image_files[serviceKey]?.filter(Boolean) ?? []
+        : baseDetail.certificateImageFiles ?? [],
     documents: [
       {
         id: "live-doc-1",
@@ -1036,7 +1201,9 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     ] satisfies ProviderDocumentItem[],
     completedTaskRows: taskRows?.completedTaskRows.length ? taskRows.completedTaskRows : baseDetail.completedTaskRows,
     upcomingTaskRows: taskRows?.upcomingTaskRows.length ? taskRows.upcomingTaskRows : baseDetail.upcomingTaskRows,
+    cancelledTaskRows: taskRows?.cancelledTaskRows.length ? taskRows.cancelledTaskRows : baseDetail.cancelledTaskRows,
     payoutRows,
+    recentReviews: reviewRows,
   };
 
   if (reviewRows.length) {

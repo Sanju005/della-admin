@@ -62,6 +62,30 @@ function toServiceType(service: string) {
   return service.trim().toLowerCase();
 }
 
+function buildCaptionMap(
+  payload: ProviderRegistrationData,
+  key: "imageCaptions" | "certificateCaptions",
+) {
+  return Object.fromEntries(
+    payload.selectedServices.map((service) => [
+      toServiceType(service),
+      payload.serviceDetails[service][key].filter((value) => value.trim().length > 0),
+    ]),
+  );
+}
+
+function buildFileMap(
+  payload: ProviderRegistrationData,
+  key: "imageFileNames" | "certificateFileNames",
+) {
+  return Object.fromEntries(
+    payload.selectedServices.map((service) => [
+      toServiceType(service),
+      payload.serviceDetails[service][key].filter((value) => value.trim().length > 0),
+    ]),
+  );
+}
+
 function buildProviderBio(payload: ProviderRegistrationData) {
   const specialties = payload.selectedServices
     .flatMap((service) => payload.serviceDetails[service].specialties)
@@ -257,6 +281,32 @@ export async function POST(request: Request) {
     if (providerProfileError) {
       return NextResponse.json(
         { error: "Account created, but provider profile setup failed." },
+        { status: 500 }
+      );
+    }
+
+    const { error: metadataError } = await adminClient
+      .from("provider_admin_metadata")
+      .upsert(
+        {
+          provider_id: providerId,
+          availability_days: payload.availability.days,
+          availability_time_preset: payload.availability.timePreset,
+          availability_start_time: payload.availability.startTime,
+          availability_end_time: payload.availability.endTime,
+          service_image_captions: buildCaptionMap(payload, "imageCaptions"),
+          certificate_image_captions: buildCaptionMap(payload, "certificateCaptions"),
+          service_image_files: buildFileMap(payload, "imageFileNames"),
+          certificate_image_files: buildFileMap(payload, "certificateFileNames"),
+          current_latitude: payload.providerLocation.latitude,
+          current_longitude: payload.providerLocation.longitude,
+        },
+        { onConflict: "provider_id" },
+      );
+
+    if (metadataError) {
+      return NextResponse.json(
+        { error: "Account created, but provider admin metadata setup failed." },
         { status: 500 }
       );
     }

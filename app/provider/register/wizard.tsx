@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
+import { LiveLocationChip } from "@/app/_components/live-location-chip";
 
 import {
   availabilityDays,
@@ -162,6 +163,29 @@ export function ProviderRegistrationWizard() {
     }));
   };
 
+  const updateServiceDetailItem = (
+    service: ProviderService,
+    field: "imageCaptions" | "imageFileNames" | "certificateCaptions" | "certificateFileNames",
+    index: number,
+    value: string,
+  ) => {
+    setData((current) => {
+      const nextList = [...current.serviceDetails[service][field]];
+      nextList[index] = value;
+
+      return {
+        ...current,
+        serviceDetails: {
+          ...current.serviceDetails,
+          [service]: {
+            ...current.serviceDetails[service],
+            [field]: nextList,
+          },
+        },
+      };
+    });
+  };
+
   const toggleSpecialty = (service: ProviderService, specialty: string) => {
     setData((current) => {
       const currentList = current.serviceDetails[service].specialties;
@@ -270,6 +294,7 @@ export function ProviderRegistrationWizard() {
                 service={activeStep.service}
                 details={data.serviceDetails[activeStep.service]}
                 onUpdate={updateServiceDetail}
+                onUpdateItem={updateServiceDetailItem}
                 onToggleSpecialty={toggleSpecialty}
               />
             ) : null}
@@ -283,6 +308,21 @@ export function ProviderRegistrationWizard() {
                   setData((current) => ({
                     ...current,
                     providerLocation: { ...current.providerLocation, [field]: value },
+                  }))
+                }
+                onLocationChange={(location) =>
+                  setData((current) => ({
+                    ...current,
+                    basicProfile: {
+                      ...current.basicProfile,
+                      serviceLocation: location.label,
+                    },
+                    providerLocation: {
+                      ...current.providerLocation,
+                      areaLabel: location.label,
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                    },
                   }))
                 }
               />
@@ -446,6 +486,7 @@ function ServiceDetailsStep({
   service,
   details,
   onUpdate,
+  onUpdateItem,
   onToggleSpecialty,
 }: {
   service: ProviderService;
@@ -454,6 +495,12 @@ function ServiceDetailsStep({
     service: ProviderService,
     field: keyof ProviderRegistrationData["serviceDetails"][ProviderService],
     value: string | string[]
+  ) => void;
+  onUpdateItem: (
+    service: ProviderService,
+    field: "imageCaptions" | "imageFileNames" | "certificateCaptions" | "certificateFileNames",
+    index: number,
+    value: string,
   ) => void;
   onToggleSpecialty: (service: ProviderService, specialty: string) => void;
 }) {
@@ -488,11 +535,17 @@ function ServiceDetailsStep({
       <AssetStrip
         label="Images (3) with caption"
         captions={details.imageCaptions}
+        fileNames={details.imageFileNames}
+        onCaptionChange={(index, value) => onUpdateItem(service, "imageCaptions", index, value)}
+        onFileNameChange={(index, value) => onUpdateItem(service, "imageFileNames", index, value)}
         tone="media"
       />
       <AssetStrip
         label="Certificates (3) with caption"
         captions={details.certificateCaptions}
+        fileNames={details.certificateFileNames}
+        onCaptionChange={(index, value) => onUpdateItem(service, "certificateCaptions", index, value)}
+        onFileNameChange={(index, value) => onUpdateItem(service, "certificateFileNames", index, value)}
         tone="certificate"
       />
 
@@ -587,15 +640,40 @@ function AvailabilityStep({
 function ProviderLocationStep({
   data,
   onUpdate,
+  onLocationChange,
 }: {
   data: ProviderRegistrationData;
   onUpdate: (
     field: keyof ProviderRegistrationData["providerLocation"],
     value: string | number
   ) => void;
+  onLocationChange: (location: {
+    label: string;
+    latitude: number;
+    longitude: number;
+  }) => void;
 }) {
   return (
     <div className="space-y-4">
+      <div className="rounded-[18px] border border-[#dfe8e2] bg-white p-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
+        <p className="text-[13px] font-semibold text-[#111827]">Pick Exact Location</p>
+        <p className="mt-1 text-[12px] text-[#6b7280]">
+          Save the live map location so admin can see the provider coordinates.
+        </p>
+        <div className="mt-3">
+          <LiveLocationChip
+            fallbackLabel={data.providerLocation.areaLabel}
+            onLocationChange={(location) =>
+              onLocationChange({
+                label: location.label,
+                latitude: location.latitude,
+                longitude: location.longitude,
+              })
+            }
+          />
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-[18px] border border-[#dfe8e2] bg-[linear-gradient(180deg,#f7fbf7_0%,#eff7ef_100%)]">
         <div className="relative h-[18rem] overflow-hidden bg-[radial-gradient(circle_at_50%_48%,rgba(22,163,74,0.12),transparent_36%),linear-gradient(90deg,rgba(17,24,39,0.03)_1px,transparent_1px),linear-gradient(rgba(17,24,39,0.03)_1px,transparent_1px)] bg-[size:auto,28px_28px,28px_28px]">
           <div className="absolute inset-8 rounded-full border-2 border-[#49bf73] bg-[#16a34a]/8" />
@@ -614,6 +692,11 @@ function ProviderLocationStep({
         suffix="KM"
         onChange={(value) => onUpdate("radius", value)}
       />
+
+      <div className="grid grid-cols-2 gap-3">
+        <InputField compact label="Latitude" value={data.providerLocation.latitude.toFixed(6)} onChange={(value) => onUpdate("latitude", Number(value) || data.providerLocation.latitude)} />
+        <InputField compact label="Longitude" value={data.providerLocation.longitude.toFixed(6)} onChange={(value) => onUpdate("longitude", Number(value) || data.providerLocation.longitude)} />
+      </div>
     </div>
   );
 }
@@ -627,6 +710,7 @@ function ReviewStep({ data }: { data: ProviderRegistrationData }) {
         <ReviewLine icon={<PhoneIcon className="h-4 w-4" />} text={`${data.account.phoneCountryCode} ${data.account.phoneNumber}`} />
         <ReviewLine icon={<PinIcon className="h-4 w-4" />} text={data.basicProfile.serviceLocation} />
         <ReviewLine icon={<RangeIcon className="h-4 w-4" />} text={`${data.providerLocation.radius} KM`} />
+        <ReviewLine icon={<PinIcon className="h-4 w-4" />} text={`${data.providerLocation.latitude.toFixed(6)}, ${data.providerLocation.longitude.toFixed(6)}`} />
       </ReviewCard>
 
       <ReviewCard title="Services">
@@ -951,28 +1035,41 @@ function RangeField({
 function AssetStrip({
   label,
   captions,
+  fileNames,
+  onCaptionChange,
+  onFileNameChange,
   tone,
 }: {
   label: string;
   captions: string[];
+  fileNames: string[];
+  onCaptionChange: (index: number, value: string) => void;
+  onFileNameChange: (index: number, value: string) => void;
   tone: "media" | "certificate";
 }) {
   return (
     <div>
       <p className="mb-2 text-[13px] font-semibold text-[#111827]">{label}</p>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 gap-3">
         {captions.map((caption, index) => (
-          <div key={caption} className="text-center">
+          <div key={`${label}-${index}`} className="rounded-[14px] border border-[#e1e9e4] bg-white p-3 shadow-[0_8px_18px_rgba(15,23,42,0.03)]">
             <div className={`h-16 rounded-[12px] border border-[#e1e9e4] ${tone === "media" ? mediaThumbClasses(index) : "bg-[linear-gradient(180deg,#fffaf4_0%,#f7efe5_100%)]"} shadow-[0_8px_18px_rgba(15,23,42,0.03)]`} />
-            <p className="mt-1 text-[11px] text-[#374151]">{caption}</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                value={caption}
+                onChange={(event) => onCaptionChange(index, event.target.value)}
+                placeholder="Caption"
+                className="h-10 rounded-[10px] border border-[#dcecdf] px-3 text-[13px] text-[#111827] outline-none"
+              />
+              <input
+                value={fileNames[index] ?? ""}
+                onChange={(event) => onFileNameChange(index, event.target.value)}
+                placeholder="Filename"
+                className="h-10 rounded-[10px] border border-[#dcecdf] px-3 text-[13px] text-[#111827] outline-none"
+              />
+            </div>
           </div>
         ))}
-        <button
-          type="button"
-          className="flex h-16 items-center justify-center rounded-[12px] border border-[#dfe8e2] bg-[#f8fbf8] text-[#16a34a]"
-        >
-          <PlusIcon className="h-5 w-5" />
-        </button>
       </div>
     </div>
   );

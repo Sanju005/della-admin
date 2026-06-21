@@ -2,7 +2,7 @@ import { Suspense, lazy } from "react";
 import { Navigate, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/auth-provider";
 import { AdminShell } from "./components/admin-shell";
-import { complaints, payments, providers as mockProviders, reviews, bookings } from "./data/mock-data";
+import { payments, providers as mockProviders, reviews, bookings } from "./data/mock-data";
 
 const DashboardPage = lazy(async () => {
   const module = await import("./pages/dashboard-page");
@@ -52,6 +52,11 @@ const ProvidersPage = lazy(async () => {
 const AdminsPage = lazy(async () => {
   const module = await import("./pages/admins-page");
   return { default: module.AdminsPage };
+});
+
+const ReportsPage = lazy(async () => {
+  const module = await import("./pages/reports-page");
+  return { default: module.ReportsPage };
 });
 
 const UsersPage = lazy(async () => {
@@ -280,29 +285,7 @@ const router = createBrowserRouter([
       },
       {
         path: "complaints",
-        element: withSuspense((
-          <ResourcePage
-            title="Complaints"
-            description="Trust, support, and service recovery queue."
-            rows={complaints}
-            columns={[
-              { key: "ticket", label: "Ticket" },
-              { key: "subject", label: "Subject" },
-              { key: "customer", label: "Customer" },
-              { key: "owner", label: "Owner" },
-              { key: "status", label: "Status" },
-              { key: "priority", label: "Priority" },
-              { key: "updated", label: "Updated" },
-            ]}
-            statusKey="status"
-            searchPlaceholder="Search complaints, owners, or ticket IDs..."
-            stats={[
-              { label: "Open", value: "19", note: "Cases needing immediate attention" },
-              { label: "Escalated", value: "4", note: "High-risk incidents" },
-              { label: "Resolved", value: "143", note: "Closed this month" },
-            ]}
-          />
-        )),
+        element: withSuspense(<ReportsPage />),
       },
       {
         path: "settings",

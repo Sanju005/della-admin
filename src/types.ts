@@ -181,6 +181,8 @@ export type UserDetailRecord = {
   dob: string;
   gender: string;
   city: string;
+  region?: string;
+  country?: string;
   joined: string;
   lastLogin: string;
   registeredAt: string;
@@ -247,6 +249,16 @@ export type ProviderUpcomingTaskRow = {
   status: string;
 };
 
+export type ProviderCancelledTaskRow = {
+  id: string;
+  service: string;
+  customer: string;
+  schedule: string;
+  amount: string;
+  status: string;
+  reason: string;
+};
+
 export type ProviderPayoutRow = {
   id: string;
   type: string;
@@ -260,11 +272,17 @@ export type ProviderDetailRecord = {
   name: string;
   email: string;
   status: string;
+  visibilityStatus?: string;
   roleBadge: string;
   joinedAt: string;
   lastLogin: string;
   serviceType: string;
   serviceArea: string;
+  serviceRadiusKm?: string;
+  yearsExperience?: string;
+  hourlyRate?: string;
+  dailyRate?: string;
+  currentCoordinates?: string;
   rating: string;
   ratingNote: string;
   phone: string;
@@ -295,6 +313,7 @@ export type ProviderDetailRecord = {
   repeatCustomers: string;
   workingDays: string;
   workingHours: string;
+  availabilityPreset?: string;
   totalTasks: string;
   completedTasks: string;
   upcomingTasks: string;
@@ -306,10 +325,17 @@ export type ProviderDetailRecord = {
   metrics: UserMetric[];
   serviceAreas: ProviderServiceArea[];
   skills: ProviderSkill[];
+  specialties?: string[];
+  serviceImageCaptions?: string[];
+  serviceImageFiles?: string[];
+  certificateImageCaptions?: string[];
+  certificateImageFiles?: string[];
   documents: ProviderDocumentItem[];
   completedTaskRows: ProviderTaskRow[];
   upcomingTaskRows: ProviderUpcomingTaskRow[];
+  cancelledTaskRows?: ProviderCancelledTaskRow[];
   payoutRows: ProviderPayoutRow[];
+  recentReviews?: UserReviewItem[];
   recentActions: UserActionItem[];
   activityLog: UserTimelineItem[];
 };

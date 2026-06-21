@@ -482,6 +482,11 @@ export function ProviderProfilePage() {
                 }
                 icon={<ShieldCheck className="size-4" />}
               />
+              <InfoRow label="Service Radius" value={detail.serviceRadiusKm || "Not set"} icon={<MapPin className="size-4" />} />
+              <InfoRow label="Current Coordinates" value={detail.currentCoordinates || "Not captured"} icon={<MapPin className="size-4" />} />
+              <InfoRow label="Experience" value={detail.yearsExperience || "Not set"} icon={<BriefcaseBusiness className="size-4" />} />
+              <InfoRow label="Hourly Rate" value={detail.hourlyRate || "Not set"} icon={<Wallet className="size-4" />} />
+              <InfoRow label="Daily Rate" value={detail.dailyRate || "Not set"} icon={<Wallet className="size-4" />} />
               <InfoRow label="Language" value={detail.language} icon={<Languages className="size-4" />} />
               <InfoRow label="NRIC / ID Number" value={detail.nationalId} icon={<FileBadge2 className="size-4" />} />
               <InfoRow label="Emergency Contact" value={detail.emergencyContact} icon={<Phone className="size-4" />} />
@@ -547,6 +552,10 @@ export function ProviderProfilePage() {
                 <SummaryMetric label="Total Reviews" value={detail.totalReviews} />
                 <SummaryMetric label="On-time Rate" value={detail.onTimeRate} />
                 <SummaryMetric label="Repeat Customers" value={detail.repeatCustomers} />
+                <SummaryMetric label="Visibility" value={detail.visibilityStatus || "Visible"} />
+                <SummaryMetric label="Radius" value={detail.serviceRadiusKm || "Not set"} />
+                <SummaryMetric label="Working Days" value={detail.workingDays} />
+                <SummaryMetric label="Working Hours" value={detail.workingHours} />
               </div>
             </SurfaceCard>
           </div>
@@ -561,6 +570,10 @@ export function ProviderProfilePage() {
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Approval Status</span>
                   <MiniStatus status={detail.approvalStatus} />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-slate-500">Marketplace Visibility</span>
+                  <span className="font-medium text-slate-900">{detail.visibilityStatus || "Visible"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Background Check</span>
@@ -690,6 +703,84 @@ export function ProviderProfilePage() {
                   ))}
                 </div>
               </div>
+
+              <div className="mt-8">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-base font-bold text-slate-950">Specialties</h4>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {(detail.specialties ?? []).length ? (
+                    (detail.specialties ?? []).map((specialty) => (
+                      <span
+                        key={specialty}
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700"
+                      >
+                        {specialty}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No specialties added yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-base font-bold text-slate-950">Service Image Captions</h4>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {(detail.serviceImageCaptions ?? []).length ? (
+                    (detail.serviceImageCaptions ?? []).map((caption) => (
+                      <span
+                        key={caption}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700"
+                      >
+                        {caption}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No live service image captions saved yet.</p>
+                  )}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(detail.serviceImageFiles ?? []).length ? (
+                    (detail.serviceImageFiles ?? []).map((fileName) => (
+                      <div key={fileName} className="text-xs font-medium text-slate-500">
+                        {fileName}
+                      </div>
+                    ))
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-base font-bold text-slate-950">Certificate Captions</h4>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {(detail.certificateImageCaptions ?? []).length ? (
+                    (detail.certificateImageCaptions ?? []).map((caption) => (
+                      <span
+                        key={caption}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700"
+                      >
+                        {caption}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No live certificate captions saved yet.</p>
+                  )}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(detail.certificateImageFiles ?? []).length ? (
+                    (detail.certificateImageFiles ?? []).map((fileName) => (
+                      <div key={fileName} className="text-xs font-medium text-slate-500">
+                        {fileName}
+                      </div>
+                    ))
+                  ) : null}
+                </div>
+              </div>
             </SurfaceCard>
           </div>
         </section>
@@ -699,6 +790,8 @@ export function ProviderProfilePage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <SummaryMetric label="Working Days" value={detail.workingDays} />
               <SummaryMetric label="Working Hours" value={detail.workingHours} />
+              <SummaryMetric label="Availability Preset" value={detail.availabilityPreset || "Not set"} />
+              <SummaryMetric label="Coordinates" value={detail.currentCoordinates || "Not captured"} />
             </div>
           </SurfaceCard>
 
@@ -979,15 +1072,36 @@ export function ProviderProfilePage() {
       {activeTab === "Tasks"
         ? renderSimpleRows(
             "All Tasks",
-            ["Task ID", "Service", "Customer", "Date", "Amount", "Status"],
-            [...detail.completedTaskRows, ...detail.upcomingTaskRows.map((task) => ({
-              id: task.id,
-              service: task.service,
-              customer: task.customer,
-              date: task.schedule,
-              amount: task.amount,
-              status: task.status,
-            }))].map((task) => [task.id, task.service, task.customer, task.date, task.amount, task.status])
+            ["Task ID", "Service", "Customer", "Date", "Amount", "Status", "Reason"],
+            [
+              ...detail.completedTaskRows.map((task) => ({
+                id: task.id,
+                service: task.service,
+                customer: task.customer,
+                date: task.date,
+                amount: task.amount,
+                status: task.status,
+                reason: "-",
+              })),
+              ...detail.upcomingTaskRows.map((task) => ({
+                id: task.id,
+                service: task.service,
+                customer: task.customer,
+                date: task.schedule,
+                amount: task.amount,
+                status: task.status,
+                reason: "-",
+              })),
+              ...(detail.cancelledTaskRows ?? []).map((task) => ({
+                id: task.id,
+                service: task.service,
+                customer: task.customer,
+                date: task.schedule,
+                amount: task.amount,
+                status: task.status,
+                reason: task.reason,
+              })),
+            ].map((task) => [task.id, task.service, task.customer, task.date, task.amount, task.status, task.reason])
           )
         : null}
       {activeTab === "Payments & Withdrawals"
@@ -1000,13 +1114,17 @@ export function ProviderProfilePage() {
       {activeTab === "Reviews"
         ? renderSimpleRows(
             "Reviews",
-            ["Metric", "Value"],
-            [
-              ["Average Rating", detail.averageRating],
-              ["Total Reviews", detail.totalReviews],
-              ["On-time Rate", detail.onTimeRate],
-              ["Repeat Customers", detail.repeatCustomers],
-            ]
+            ["Customer", "Rating", "Review", "Date"],
+            (detail.recentReviews ?? []).length
+              ? (detail.recentReviews ?? []).map((review) => [
+                  review.provider,
+                  `${review.rating}/5`,
+                  review.review,
+                  review.date,
+                ])
+              : [
+                  ["No reviews yet", detail.averageRating, "Live customer reviews will appear here.", detail.totalReviews],
+                ]
           )
         : null}
       {activeTab === "Profile & Documents" ? (
@@ -1015,6 +1133,11 @@ export function ProviderProfilePage() {
             <div className="space-y-4">
               <InfoRow label="Provider Name" value={detail.name} icon={<UserCircle2 className="size-4" />} />
               <InfoRow label="Service Type" value={detail.serviceType} icon={<BriefcaseBusiness className="size-4" />} />
+              <InfoRow label="Service Radius" value={detail.serviceRadiusKm || "Not set"} icon={<MapPin className="size-4" />} />
+              <InfoRow label="Current Coordinates" value={detail.currentCoordinates || "Not captured"} icon={<MapPin className="size-4" />} />
+              <InfoRow label="Experience" value={detail.yearsExperience || "Not set"} icon={<BriefcaseBusiness className="size-4" />} />
+              <InfoRow label="Hourly Rate" value={detail.hourlyRate || "Not set"} icon={<Wallet className="size-4" />} />
+              <InfoRow label="Daily Rate" value={detail.dailyRate || "Not set"} icon={<Wallet className="size-4" />} />
               <InfoRow label="Email" value={detail.email} icon={<Mail className="size-4" />} />
               <InfoRow label="Phone" value={detail.phone} icon={<Phone className="size-4" />} />
             </div>
@@ -1032,6 +1155,28 @@ export function ProviderProfilePage() {
                   <MiniStatus status={document.status} />
                 </div>
               ))}
+              <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                <p className="text-sm font-semibold text-slate-900">Service Image Captions</p>
+                <p className="mt-2 text-[13px] text-slate-600">
+                  {(detail.serviceImageCaptions ?? []).length
+                    ? (detail.serviceImageCaptions ?? []).join(", ")
+                    : "No live service image captions saved yet."}
+                </p>
+                {(detail.serviceImageFiles ?? []).length ? (
+                  <p className="mt-2 text-[12px] text-slate-500">{(detail.serviceImageFiles ?? []).join(", ")}</p>
+                ) : null}
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                <p className="text-sm font-semibold text-slate-900">Certificate Captions</p>
+                <p className="mt-2 text-[13px] text-slate-600">
+                  {(detail.certificateImageCaptions ?? []).length
+                    ? (detail.certificateImageCaptions ?? []).join(", ")
+                    : "No live certificate captions saved yet."}
+                </p>
+                {(detail.certificateImageFiles ?? []).length ? (
+                  <p className="mt-2 text-[12px] text-slate-500">{(detail.certificateImageFiles ?? []).join(", ")}</p>
+                ) : null}
+              </div>
             </div>
           </div>
         </SurfaceCard>
@@ -1069,6 +1214,37 @@ export function ProviderProfilePage() {
             ))}
           </div>
         </SurfaceCard>
+      ) : null}
+
+      {(detail.cancelledTaskRows ?? []).length ? (
+        <TableShell title="Cancelled / Declined Tasks">
+          <table className="min-w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-slate-100 text-slate-400">
+                <th className="pb-3 font-semibold">Task ID</th>
+                <th className="pb-3 font-semibold">Service</th>
+                <th className="pb-3 font-semibold">Customer</th>
+                <th className="pb-3 font-semibold">Schedule</th>
+                <th className="pb-3 font-semibold">Amount</th>
+                <th className="pb-3 font-semibold">Status</th>
+                <th className="pb-3 font-semibold">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(detail.cancelledTaskRows ?? []).map((task) => (
+                <tr key={task.id} className="border-b border-slate-50">
+                  <td className="py-3 font-semibold text-slate-700">{task.id}</td>
+                  <td className="py-3">{task.service}</td>
+                  <td className="py-3">{task.customer}</td>
+                  <td className="py-3 text-slate-500">{task.schedule}</td>
+                  <td className="py-3">{task.amount}</td>
+                  <td className="py-3"><MiniStatus status={task.status} /></td>
+                  <td className="py-3 text-slate-700">{task.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableShell>
       ) : null}
     </div>
   );
