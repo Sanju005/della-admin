@@ -21,13 +21,15 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { InfoRow, MetricTile, MiniStatus, PillBadge, SurfaceCard, TableShell } from "../components/user-detail-ui";
 import { providerDetailRecords } from "../data/provider-detail-mocks";
 import {
   approveProviderVerification,
+  getProviderReportsWithFallback,
   getProviderProfileWithFallback,
+  type ProviderReportRowItem,
   providerDocumentRequestOptions,
   requestProviderVerificationDocuments,
   setProviderSuspended,
@@ -41,7 +43,8 @@ const tabs = [
   "Tasks",
   "Payments & Withdrawals",
   "Reviews",
-  "Profile & Documents",
+  "Reports",
+  "Documents & Verification",
   "Service Areas",
   "Activity Log",
 ] as const;
@@ -148,6 +151,132 @@ function renderSimpleRows(title: string, headers: string[], rows: string[][]) {
   );
 }
 
+type DateFilterKey = "all" | "date" | "week" | "month" | "year";
+type SortKey = "recent" | "a-z";
+type TaskStatusKey = "all" | "completed" | "pending" | "cancelled";
+
+function parseDisplayDate(value: string) {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const normalized = value
+    .replace("Recently active", "")
+    .replace("Recently", "")
+    .trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function matchesDateFilter(value: string, filter: DateFilterKey) {
+  if (filter === "all") {
+    return true;
+  }
+
+  const parsed = parseDisplayDate(value);
+  if (!parsed) {
+    return false;
+  }
+
+  const now = new Date();
+  const diffMs = now.getTime() - parsed.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+  if (filter === "date") {
+    return parsed.toDateString() === now.toDateString();
+  }
+
+  if (filter === "week") {
+    return diffDays <= 7;
+  }
+
+  if (filter === "month") {
+    return parsed.getFullYear() === now.getFullYear() && parsed.getMonth() === now.getMonth();
+  }
+
+  return parsed.getFullYear() === now.getFullYear();
+}
+
+function sortByRecentOrAz<T extends { sortLabel: string; sortDate: string }>(rows: T[], sort: SortKey) {
+  const next = [...rows];
+
+  if (sort === "a-z") {
+    return next.sort((left, right) => left.sortLabel.localeCompare(right.sortLabel));
+  }
+
+  return next.sort((left, right) => {
+    const leftDate = parseDisplayDate(left.sortDate)?.getTime() ?? 0;
+    const rightDate = parseDisplayDate(right.sortDate)?.getTime() ?? 0;
+    return rightDate - leftDate;
+  });
+}
+
+function parseCurrencyValue(value: string) {
+  const cleaned = value.replace(/[^\d.-]/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrencyValue(value: number) {
+  return new Intl.NumberFormat("en-MY", {
+    style: "currency",
+    currency: "MYR",
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  label: string;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SummaryStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: string; note?: string }>;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-2xl border border-[#E7ECE7] bg-slate-50/70 px-4 py-4">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">{item.label}</p>
+          <p className="mt-2 text-xl font-bold text-slate-950">{item.value}</p>
+          {item.note ? <p className="mt-1 text-[12px] text-slate-500">{item.note}</p> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ProviderProfilePage() {
   const { providerId = "" } = useParams();
   const navigate = useNavigate();
@@ -163,6 +292,16 @@ export function ProviderProfilePage() {
   const [selectedDocumentRequests, setSelectedDocumentRequests] = useState<string[]>(
     provider?.requestedDocuments ?? []
   );
+  const [providerReports, setProviderReports] = useState<ProviderReportRowItem[]>([]);
+  const [taskDateFilter, setTaskDateFilter] = useState<DateFilterKey>("all");
+  const [taskSort, setTaskSort] = useState<SortKey>("recent");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatusKey>("all");
+  const [paymentDateFilter, setPaymentDateFilter] = useState<DateFilterKey>("all");
+  const [paymentSort, setPaymentSort] = useState<SortKey>("recent");
+  const [reviewDateFilter, setReviewDateFilter] = useState<DateFilterKey>("all");
+  const [reviewSort, setReviewSort] = useState<SortKey>("recent");
+  const [reportDateFilter, setReportDateFilter] = useState<DateFilterKey>("all");
+  const [reportSort, setReportSort] = useState<SortKey>("recent");
   const [form, setForm] = useState({
     name: provider?.name ?? "",
     email: provider?.email ?? "",
@@ -180,6 +319,7 @@ export function ProviderProfilePage() {
     setActiveTab("Overview");
     setMessage(null);
     setLoading(true);
+    setProviderReports([]);
 
     async function loadProvider() {
       const fallback = providerDetailRecords[providerId] ?? providerDetailRecords["PRV-2034"] ?? null;
@@ -188,7 +328,10 @@ export function ProviderProfilePage() {
         setProvider(fallback);
       }
 
-      const payload = await getProviderProfileWithFallback(providerId);
+      const [payload, reports] = await Promise.all([
+        getProviderProfileWithFallback(providerId),
+        getProviderReportsWithFallback(providerId),
+      ]);
 
       if (!active) {
         return;
@@ -207,6 +350,7 @@ export function ProviderProfilePage() {
         address: payload.detail?.address === "Not provided" ? "" : (payload.detail?.address ?? ""),
         about: payload.detail?.about ?? "",
       });
+      setProviderReports(reports);
       setLoading(false);
     }
 
@@ -246,6 +390,142 @@ export function ProviderProfilePage() {
   }
 
   const detail = provider;
+  const allTaskRows = useMemo(
+    () =>
+      [
+        ...detail.completedTaskRows.map((task) => ({
+          id: task.id,
+          service: task.service,
+          customer: task.customer,
+          date: task.date,
+          amount: task.amount,
+          status: task.status,
+          reason: "-",
+          sortLabel: task.customer,
+          sortDate: task.date,
+          type: "completed" as const,
+        })),
+        ...detail.upcomingTaskRows.map((task) => ({
+          id: task.id,
+          service: task.service,
+          customer: task.customer,
+          date: task.schedule,
+          amount: task.amount,
+          status: task.status,
+          reason: "-",
+          sortLabel: task.customer,
+          sortDate: task.schedule,
+          type: "pending" as const,
+        })),
+        ...(detail.cancelledTaskRows ?? []).map((task) => ({
+          id: task.id,
+          service: task.service,
+          customer: task.customer,
+          date: task.schedule,
+          amount: task.amount,
+          status: task.status,
+          reason: task.reason,
+          sortLabel: task.customer,
+          sortDate: task.schedule,
+          type: "cancelled" as const,
+        })),
+      ],
+    [detail.completedTaskRows, detail.upcomingTaskRows, detail.cancelledTaskRows]
+  );
+
+  const filteredTaskRows = useMemo(() => {
+    const statusFiltered = allTaskRows.filter((task) =>
+      taskStatusFilter === "all" ? true : task.type === taskStatusFilter
+    );
+    const dateFiltered = statusFiltered.filter((task) => matchesDateFilter(task.sortDate, taskDateFilter));
+    return sortByRecentOrAz(dateFiltered, taskSort);
+  }, [allTaskRows, taskDateFilter, taskSort, taskStatusFilter]);
+
+  const paymentRows = useMemo(
+    () =>
+      detail.payoutRows.map((row) => ({
+        ...row,
+        numericAmount: parseCurrencyValue(row.amount),
+        sortLabel: row.type,
+        sortDate: row.date,
+      })),
+    [detail.payoutRows]
+  );
+
+  const filteredPaymentRows = useMemo(() => {
+    const dateFiltered = paymentRows.filter((row) => matchesDateFilter(row.date, paymentDateFilter));
+    return sortByRecentOrAz(dateFiltered, paymentSort);
+  }, [paymentRows, paymentDateFilter, paymentSort]);
+
+  const totalEarningsValue = filteredPaymentRows.reduce((sum, row) => sum + row.numericAmount, 0);
+  const commissionValue = totalEarningsValue * 0.2;
+  const afterCommissionValue = totalEarningsValue - commissionValue;
+
+  const reviewRows = useMemo(
+    () =>
+      (detail.recentReviews ?? []).map((review) => ({
+        ...review,
+        sortLabel: review.provider,
+        sortDate: review.date,
+      })),
+    [detail.recentReviews]
+  );
+
+  const filteredReviewRows = useMemo(() => {
+    const dateFiltered = reviewRows.filter((review) => matchesDateFilter(review.date, reviewDateFilter));
+    return sortByRecentOrAz(dateFiltered, reviewSort);
+  }, [reviewRows, reviewDateFilter, reviewSort]);
+
+  const fiveStarCount = filteredReviewRows.filter((review) => review.rating === 5).length;
+
+  const filteredReportRows = useMemo(() => {
+    const rows = providerReports
+      .filter((report) => matchesDateFilter(report.date, reportDateFilter))
+      .map((report) => ({
+        ...report,
+        sortLabel: report.title,
+        sortDate: report.date,
+      }));
+    return sortByRecentOrAz(rows, reportSort);
+  }, [providerReports, reportDateFilter, reportSort]);
+
+  const verificationDocuments = useMemo(
+    () => [
+      { id: "verify-email", label: "Email Verification", status: detail.emailVerified ? "Verified" : "Pending", fileName: undefined },
+      { id: "verify-phone", label: "Phone Verification", status: detail.phoneVerified ? "Verified" : "Pending", fileName: undefined },
+      {
+        id: "verify-ic-front",
+        label: "IC Front",
+        status: detail.documents.find((item) => item.label === "Identity Verification")?.status ?? "Pending",
+        fileName: detail.documents.find((item) => item.label === "Identity Verification")?.fileName,
+      },
+      {
+        id: "verify-ic-back",
+        label: "IC Back",
+        status: detail.documents.find((item) => item.label === "Back of Document")?.status ?? "Pending",
+        fileName: detail.documents.find((item) => item.label === "Back of Document")?.fileName,
+      },
+      {
+        id: "verify-license",
+        label: "Driving License",
+        status: detail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending",
+        fileName: undefined,
+      },
+      {
+        id: "verify-resume",
+        label: "Resume",
+        status: "Pending",
+        fileName: undefined,
+      },
+      {
+        id: "verify-certificates",
+        label: "Certificates",
+        status: (detail.certificateImageFiles ?? []).length ? "Uploaded" : "Pending",
+        fileName: (detail.certificateImageFiles ?? []).join(", ") || undefined,
+      },
+    ],
+    [detail]
+  );
 
   async function handleSaveProfile() {
     if (saving) {
@@ -818,86 +1098,6 @@ export function ProviderProfilePage() {
           </SurfaceCard>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-3">
-          <TableShell title="Completed Tasks" action={<button className="text-xs font-semibold text-emerald-700">View all</button>}>
-            <table className="min-w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-slate-100 text-slate-400">
-                  <th className="pb-3 font-semibold">Task ID</th>
-                  <th className="pb-3 font-semibold">Service</th>
-                  <th className="pb-3 font-semibold">Customer</th>
-                  <th className="pb-3 font-semibold">Date</th>
-                  <th className="pb-3 font-semibold">Amount</th>
-                  <th className="pb-3 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.completedTaskRows.map((task) => (
-                  <tr key={task.id} className="border-b border-slate-50">
-                    <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
-                    <td className="py-3">{task.service}</td>
-                    <td className="py-3">{task.customer}</td>
-                    <td className="py-3 text-slate-500">{task.date}</td>
-                    <td className="py-3">{task.amount}</td>
-                    <td className="py-3"><MiniStatus status={task.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableShell>
-
-          <TableShell title="Upcoming Tasks" action={<button className="text-xs font-semibold text-emerald-700">View all</button>}>
-            <table className="min-w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-slate-100 text-slate-400">
-                  <th className="pb-3 font-semibold">Task ID</th>
-                  <th className="pb-3 font-semibold">Service</th>
-                  <th className="pb-3 font-semibold">Customer</th>
-                  <th className="pb-3 font-semibold">Date & Time</th>
-                  <th className="pb-3 font-semibold">Amount</th>
-                  <th className="pb-3 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.upcomingTaskRows.map((task) => (
-                  <tr key={task.id} className="border-b border-slate-50">
-                    <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
-                    <td className="py-3">{task.service}</td>
-                    <td className="py-3">{task.customer}</td>
-                    <td className="py-3 text-slate-500">{task.schedule}</td>
-                    <td className="py-3">{task.amount}</td>
-                    <td className="py-3"><MiniStatus status={task.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableShell>
-
-          <TableShell title="Payments & Withdrawals" action={<button className="text-xs font-semibold text-emerald-700">View all</button>}>
-            <table className="min-w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-slate-100 text-slate-400">
-                  <th className="pb-3 font-semibold">ID</th>
-                  <th className="pb-3 font-semibold">Type</th>
-                  <th className="pb-3 font-semibold">Amount</th>
-                  <th className="pb-3 font-semibold">Date</th>
-                  <th className="pb-3 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.payoutRows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-50">
-                    <td className="py-3 font-semibold text-slate-700">{row.id}</td>
-                    <td className="py-3">{row.type}</td>
-                    <td className="py-3">{row.amount}</td>
-                    <td className="py-3 text-slate-500">{row.date}</td>
-                    <td className="py-3"><MiniStatus status={row.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableShell>
-        </section>
       </>
     );
   }
@@ -1065,66 +1265,296 @@ export function ProviderProfilePage() {
       </section>
 
       {activeTab === "Overview" ? renderOverview() : null}
-      {activeTab === "Tasks"
-        ? renderSimpleRows(
-            "All Tasks",
-            ["Task ID", "Service", "Customer", "Date", "Amount", "Status", "Reason"],
-            [
-              ...detail.completedTaskRows.map((task) => ({
-                id: task.id,
-                service: task.service,
-                customer: task.customer,
-                date: task.date,
-                amount: task.amount,
-                status: task.status,
-                reason: "-",
-              })),
-              ...detail.upcomingTaskRows.map((task) => ({
-                id: task.id,
-                service: task.service,
-                customer: task.customer,
-                date: task.schedule,
-                amount: task.amount,
-                status: task.status,
-                reason: "-",
-              })),
-              ...(detail.cancelledTaskRows ?? []).map((task) => ({
-                id: task.id,
-                service: task.service,
-                customer: task.customer,
-                date: task.schedule,
-                amount: task.amount,
-                status: task.status,
-                reason: task.reason,
-              })),
-            ].map((task) => [task.id, task.service, task.customer, task.date, task.amount, task.status, task.reason])
-          )
-        : null}
-      {activeTab === "Payments & Withdrawals"
-        ? renderSimpleRows(
-            "Payments & Withdrawals",
-            ["ID", "Type", "Amount", "Date", "Status"],
-            detail.payoutRows.map((row) => [row.id, row.type, row.amount, row.date, row.status])
-          )
-        : null}
-      {activeTab === "Reviews"
-        ? renderSimpleRows(
-            "Reviews",
-            ["Customer", "Rating", "Review", "Date"],
-            (detail.recentReviews ?? []).length
-              ? (detail.recentReviews ?? []).map((review) => [
-                  review.provider,
-                  `${review.rating}/5`,
-                  review.review,
-                  review.date,
-                ])
-              : [
-                  ["No reviews yet", detail.averageRating, "Live customer reviews will appear here.", detail.totalReviews],
-                ]
-          )
-        : null}
-      {activeTab === "Profile & Documents" ? (
-        <SurfaceCard title="Profile & Documents">
+      {activeTab === "Tasks" ? (
+        <div className="space-y-4">
+          <SurfaceCard title="Tasks">
+            <div className="flex flex-wrap items-center gap-3">
+              <FilterSelect
+                label="Status"
+                value={taskStatusFilter}
+                onChange={(value) => setTaskStatusFilter(value as TaskStatusKey)}
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "completed", label: "Completed" },
+                  { value: "pending", label: "Pending" },
+                  { value: "cancelled", label: "Cancelled" },
+                ]}
+              />
+              <FilterSelect
+                label="Filter"
+                value={taskDateFilter}
+                onChange={(value) => setTaskDateFilter(value as DateFilterKey)}
+                options={[
+                  { value: "all", label: "All time" },
+                  { value: "date", label: "Today" },
+                  { value: "week", label: "This week" },
+                  { value: "month", label: "This month" },
+                  { value: "year", label: "This year" },
+                ]}
+              />
+              <FilterSelect
+                label="Sort"
+                value={taskSort}
+                onChange={(value) => setTaskSort(value as SortKey)}
+                options={[
+                  { value: "recent", label: "Recent" },
+                  { value: "a-z", label: "A-Z" },
+                ]}
+              />
+            </div>
+          </SurfaceCard>
+
+          <SummaryStrip
+            items={[
+              { label: "All Tasks", value: String(allTaskRows.length) },
+              { label: "Completed", value: String(allTaskRows.filter((row) => row.type === "completed").length) },
+              { label: "Pending", value: String(allTaskRows.filter((row) => row.type === "pending").length) },
+              { label: "Cancelled", value: String(allTaskRows.filter((row) => row.type === "cancelled").length) },
+            ]}
+          />
+
+          <TableShell title="Task History">
+            <table className="min-w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400">
+                  <th className="pb-3 font-semibold">Task ID</th>
+                  <th className="pb-3 font-semibold">Service</th>
+                  <th className="pb-3 font-semibold">Customer</th>
+                  <th className="pb-3 font-semibold">Date</th>
+                  <th className="pb-3 font-semibold">Amount</th>
+                  <th className="pb-3 font-semibold">Status</th>
+                  <th className="pb-3 font-semibold">Cancel Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTaskRows.length ? (
+                  filteredTaskRows.map((task) => (
+                    <tr key={`${task.type}-${task.id}`} className="border-b border-slate-50">
+                      <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
+                      <td className="py-3 text-slate-700">{task.service}</td>
+                      <td className="py-3 text-slate-700">{task.customer}</td>
+                      <td className="py-3 text-slate-500">{task.date}</td>
+                      <td className="py-3 text-slate-700">{task.amount}</td>
+                      <td className="py-3"><MiniStatus status={task.status} /></td>
+                      <td className="py-3 text-slate-600">{task.reason}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-sm text-slate-500">
+                      No tasks found for this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </div>
+      ) : null}
+      {activeTab === "Payments & Withdrawals" ? (
+        <div className="space-y-4">
+          <SurfaceCard title="Payments & Withdrawals">
+            <div className="flex flex-wrap items-center gap-3">
+              <FilterSelect
+                label="Filter"
+                value={paymentDateFilter}
+                onChange={(value) => setPaymentDateFilter(value as DateFilterKey)}
+                options={[
+                  { value: "all", label: "All time" },
+                  { value: "date", label: "Today" },
+                  { value: "week", label: "This week" },
+                  { value: "month", label: "This month" },
+                  { value: "year", label: "This year" },
+                ]}
+              />
+              <FilterSelect
+                label="Sort"
+                value={paymentSort}
+                onChange={(value) => setPaymentSort(value as SortKey)}
+                options={[
+                  { value: "recent", label: "Recent" },
+                  { value: "a-z", label: "A-Z" },
+                ]}
+              />
+            </div>
+          </SurfaceCard>
+
+          <SummaryStrip
+            items={[
+              { label: "Total Earning", value: formatCurrencyValue(totalEarningsValue) },
+              { label: "Commission Deductions", value: formatCurrencyValue(commissionValue), note: "20% platform commission" },
+              { label: "After Commission", value: formatCurrencyValue(afterCommissionValue) },
+            ]}
+          />
+
+          <TableShell title="Payment Records">
+            <table className="min-w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400">
+                  <th className="pb-3 font-semibold">ID</th>
+                  <th className="pb-3 font-semibold">Type</th>
+                  <th className="pb-3 font-semibold">Amount</th>
+                  <th className="pb-3 font-semibold">Date</th>
+                  <th className="pb-3 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPaymentRows.length ? (
+                  filteredPaymentRows.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50">
+                      <td className="py-3 font-semibold text-slate-700">{row.id}</td>
+                      <td className="py-3 text-slate-700">{row.type}</td>
+                      <td className="py-3 text-slate-700">{row.amount}</td>
+                      <td className="py-3 text-slate-500">{row.date}</td>
+                      <td className="py-3"><MiniStatus status={row.status} /></td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
+                      No payments found for this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </div>
+      ) : null}
+      {activeTab === "Reviews" ? (
+        <div className="space-y-4">
+          <SurfaceCard title="Reviews">
+            <div className="flex flex-wrap items-center gap-3">
+              <FilterSelect
+                label="Filter"
+                value={reviewDateFilter}
+                onChange={(value) => setReviewDateFilter(value as DateFilterKey)}
+                options={[
+                  { value: "all", label: "All time" },
+                  { value: "date", label: "Today" },
+                  { value: "week", label: "This week" },
+                  { value: "month", label: "This month" },
+                  { value: "year", label: "This year" },
+                ]}
+              />
+              <FilterSelect
+                label="Sort"
+                value={reviewSort}
+                onChange={(value) => setReviewSort(value as SortKey)}
+                options={[
+                  { value: "recent", label: "Recent" },
+                  { value: "a-z", label: "A-Z" },
+                ]}
+              />
+            </div>
+          </SurfaceCard>
+
+          <SummaryStrip
+            items={[
+              { label: "5 Star", value: String(fiveStarCount) },
+              { label: "All Review", value: String(filteredReviewRows.length) },
+              { label: "Average Rating", value: detail.averageRating || "0.0" },
+            ]}
+          />
+
+          <TableShell title="Review History">
+            <table className="min-w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400">
+                  <th className="pb-3 font-semibold">Customer</th>
+                  <th className="pb-3 font-semibold">Rating</th>
+                  <th className="pb-3 font-semibold">Review</th>
+                  <th className="pb-3 font-semibold">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredReviewRows.length ? (
+                  filteredReviewRows.map((review) => (
+                    <tr key={review.id} className="border-b border-slate-50">
+                      <td className="py-3 text-slate-700">{review.provider}</td>
+                      <td className="py-3 text-slate-700">{review.rating}/5</td>
+                      <td className="py-3 text-slate-700">{review.review}</td>
+                      <td className="py-3 text-slate-500">{review.date}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                      No reviews found for this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </div>
+      ) : null}
+      {activeTab === "Reports" ? (
+        <div className="space-y-4">
+          <SurfaceCard title="Reports">
+            <div className="flex flex-wrap items-center gap-3">
+              <FilterSelect
+                label="Filter"
+                value={reportDateFilter}
+                onChange={(value) => setReportDateFilter(value as DateFilterKey)}
+                options={[
+                  { value: "all", label: "All time" },
+                  { value: "date", label: "Today" },
+                  { value: "week", label: "This week" },
+                  { value: "month", label: "This month" },
+                  { value: "year", label: "This year" },
+                ]}
+              />
+              <FilterSelect
+                label="Sort"
+                value={reportSort}
+                onChange={(value) => setReportSort(value as SortKey)}
+                options={[
+                  { value: "recent", label: "Recent" },
+                  { value: "a-z", label: "A-Z" },
+                ]}
+              />
+            </div>
+          </SurfaceCard>
+
+          <TableShell title="Recent Reports">
+            <table className="min-w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400">
+                  <th className="pb-3 font-semibold">Report ID</th>
+                  <th className="pb-3 font-semibold">Title</th>
+                  <th className="pb-3 font-semibold">Reporter</th>
+                  <th className="pb-3 font-semibold">Priority</th>
+                  <th className="pb-3 font-semibold">Date</th>
+                  <th className="pb-3 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredReportRows.length ? (
+                  filteredReportRows.map((report) => (
+                    <tr key={report.id} className="border-b border-slate-50">
+                      <td className="py-3 font-semibold text-slate-700">{report.id}</td>
+                      <td className="py-3 text-slate-700">{report.title}</td>
+                      <td className="py-3 text-slate-700">{report.reporter}</td>
+                      <td className="py-3 text-slate-700">{report.priority}</td>
+                      <td className="py-3 text-slate-500">{report.date}</td>
+                      <td className="py-3"><MiniStatus status={report.status} /></td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-sm text-slate-500">
+                      No reports found for this provider.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </div>
+      ) : null}
+      {activeTab === "Documents & Verification" ? (
+        <SurfaceCard title="Documents & Verification">
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="space-y-4">
               <InfoRow label="Provider Name" value={detail.name} icon={<UserCircle2 className="size-4" />} />
@@ -1138,14 +1568,13 @@ export function ProviderProfilePage() {
               <InfoRow label="Phone" value={detail.phone} icon={<Phone className="size-4" />} />
             </div>
             <div className="space-y-3">
-              {detail.documents.map((document) => (
+              {verificationDocuments.map((document) => (
                 <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
                   <div className="flex items-center gap-3 text-sm text-slate-700">
                     <FileText className="size-4 text-slate-400" />
                     <div>
                       <div>{document.label}</div>
-                      {document.fileName ? <div className="text-xs text-slate-400">{document.fileName}</div> : null}
-                      {document.updated ? <div className="text-xs text-slate-400">Updated {document.updated}</div> : null}
+                      {"fileName" in document && document.fileName ? <div className="text-xs text-slate-400">{document.fileName}</div> : null}
                     </div>
                   </div>
                   <MiniStatus status={document.status} />
@@ -1180,6 +1609,14 @@ export function ProviderProfilePage() {
       {activeTab === "Service Areas" ? (
         <SurfaceCard title="Service Areas">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Radius</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{detail.serviceRadiusKm || "Not set"}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Current Live Location</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{detail.currentCoordinates || "Not captured"}</p>
+            </div>
             {detail.serviceAreas.map((area) => (
               <div key={area.id} className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
                 <div className="flex items-center justify-between gap-3">
@@ -1210,37 +1647,6 @@ export function ProviderProfilePage() {
             ))}
           </div>
         </SurfaceCard>
-      ) : null}
-
-      {(detail.cancelledTaskRows ?? []).length ? (
-        <TableShell title="Cancelled / Declined Tasks">
-          <table className="min-w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-400">
-                <th className="pb-3 font-semibold">Task ID</th>
-                <th className="pb-3 font-semibold">Service</th>
-                <th className="pb-3 font-semibold">Customer</th>
-                <th className="pb-3 font-semibold">Schedule</th>
-                <th className="pb-3 font-semibold">Amount</th>
-                <th className="pb-3 font-semibold">Status</th>
-                <th className="pb-3 font-semibold">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(detail.cancelledTaskRows ?? []).map((task) => (
-                <tr key={task.id} className="border-b border-slate-50">
-                  <td className="py-3 font-semibold text-slate-700">{task.id}</td>
-                  <td className="py-3">{task.service}</td>
-                  <td className="py-3">{task.customer}</td>
-                  <td className="py-3 text-slate-500">{task.schedule}</td>
-                  <td className="py-3">{task.amount}</td>
-                  <td className="py-3"><MiniStatus status={task.status} /></td>
-                  <td className="py-3 text-slate-700">{task.reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableShell>
       ) : null}
     </div>
   );

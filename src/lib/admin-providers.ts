@@ -13,6 +13,15 @@ import type {
   UserReviewItem,
 } from "../types";
 
+export type ProviderReportRowItem = {
+  id: string;
+  title: string;
+  reporter: string;
+  status: string;
+  priority: string;
+  date: string;
+};
+
 type ProviderProfileRow = {
   id: string;
   marketing_name?: string | null;
@@ -150,6 +159,17 @@ type LiveReviewRow = {
   created_at?: string | null;
   customer_id?: string | null;
   provider_id?: string | null;
+};
+
+type LiveReportRow = {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  category?: string | null;
+  created_at?: string | null;
+  reporter_id?: string | null;
+  reported_user_id?: string | null;
 };
 
 type ProviderProfilePayload = {
@@ -709,6 +729,25 @@ async function tryFetchProviderReviews(providerId: string) {
   return data as LiveReviewRow[];
 }
 
+async function tryFetchProviderReports(providerId: string) {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("user_reports")
+    .select("id, title, status, priority, category, created_at, reporter_id, reported_user_id")
+    .eq("reported_user_id", providerId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as LiveReportRow[];
+}
+
 function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, string>): {
   completedTaskRows: ProviderTaskRow[];
   upcomingTaskRows: ProviderUpcomingTaskRow[];
@@ -779,6 +818,17 @@ function buildReviewRows(liveReviews: LiveReviewRow[], customerNames: Map<string
     provider: customerNames.get(row.customer_id ?? "") || "Customer Review",
     rating: Math.max(1, Math.min(5, Math.round(row.rating ?? 5))),
     review: row.comment?.trim() || "Shared feedback",
+    date: formatDate(row.created_at),
+  }));
+}
+
+function buildReportRows(liveReports: LiveReportRow[], profileNames: Map<string, string>): ProviderReportRowItem[] {
+  return liveReports.map((row) => ({
+    id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+    title: row.title?.trim() || "General report",
+    reporter: profileNames.get(row.reporter_id ?? "") || "Reporter",
+    status: formatStatus(row.status),
+    priority: toTitleCase(row.priority?.trim() || row.category?.trim() || "submitted"),
     date: formatDate(row.created_at),
   }));
 }
@@ -1211,6 +1261,17 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   }
 
   return { detail };
+}
+
+export async function getProviderReportsWithFallback(providerId: string): Promise<ProviderReportRowItem[]> {
+  const liveReports = await tryFetchProviderReports(providerId);
+
+  if (!liveReports?.length) {
+    return [];
+  }
+
+  const profileNames = await fetchProfileNameMap(liveReports.map((row) => row.reporter_id));
+  return buildReportRows(liveReports, profileNames);
 }
 
 export async function updateProviderProfile(
