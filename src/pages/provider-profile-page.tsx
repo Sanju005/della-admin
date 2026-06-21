@@ -662,7 +662,29 @@ export function ProviderProfilePage() {
     flash(result.warning || "Provider verification approved. Listing is now live for customers.");
   }
 
+  async function handleDisableApprovedProvider() {
+    if (saving) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await setProviderVisibility(detail.providerId, false);
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    await refreshProvider();
+    flash("Provider listing disabled. Customers can no longer find this provider.");
+  }
+
   function renderOverview() {
+    const isApproved =
+      detail.approvalStatus.trim().toLowerCase() === "approved" ||
+      detail.kycStatus.trim().toLowerCase() === "verified";
+
     return (
       <>
         <section className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -891,6 +913,7 @@ export function ProviderProfilePage() {
                           type="checkbox"
                           checked={selectedDocumentRequests.includes(document)}
                           onChange={() => toggleRequestedDocument(document)}
+                          disabled={saving || isApproved}
                           className="size-4 rounded border-slate-300 text-emerald-600"
                         />
                         <span>{document}</span>
@@ -900,26 +923,45 @@ export function ProviderProfilePage() {
                   <textarea
                     value={verificationNote}
                     onChange={(event) => setVerificationNote(event.target.value)}
+                    disabled={saving || isApproved}
                     placeholder="Add admin note for the provider"
                     className="min-h-[96px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
                   />
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleRequestDocuments}
-                      disabled={saving}
-                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
-                    >
-                      {saving ? "Saving..." : "Request IC / Documents"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleApproveVerification}
-                      disabled={saving}
-                      className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                    >
-                      {saving ? "Saving..." : "Approve Verification"}
-                    </button>
+                    {isApproved ? (
+                      <>
+                        <span className="inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                          Approved
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleDisableApprovedProvider}
+                          disabled={saving}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                        >
+                          {saving ? "Saving..." : "Disable Provider"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleRequestDocuments}
+                          disabled={saving}
+                          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
+                        >
+                          {saving ? "Saving..." : "Request IC / Documents"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleApproveVerification}
+                          disabled={saving}
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          {saving ? "Saving..." : "Approve Verification"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
