@@ -640,6 +640,18 @@ export function ProviderProfilePage() {
       return;
     }
 
+    setProvider((current) =>
+      current
+        ? {
+            ...current,
+            approvalStatus: "Document Review",
+            status: "Pending",
+            requestedDocuments: [...selectedDocumentRequests],
+            verificationNote,
+            visibilityStatus: "Hidden",
+          }
+        : current
+    );
     await refreshProvider();
     flash("Verification request sent. Admin panel marked this provider for document review.");
   }
@@ -658,6 +670,22 @@ export function ProviderProfilePage() {
       return;
     }
 
+    setProvider((current) =>
+      current
+        ? {
+            ...current,
+            approvalStatus: "Approved",
+            kycStatus: "Verified",
+            status: "Active",
+            visibilityStatus: "Visible",
+            verificationNote,
+            requestedDocuments: [],
+            identityVerified: true,
+            backgroundCheckVerified: true,
+          }
+        : current
+    );
+    setSelectedDocumentRequests([]);
     await refreshProvider();
     flash(result.warning || "Provider verification approved. Listing is now live for customers.");
   }
@@ -676,6 +704,15 @@ export function ProviderProfilePage() {
       return;
     }
 
+    setProvider((current) =>
+      current
+        ? {
+            ...current,
+            status: "Paused",
+            visibilityStatus: "Hidden",
+          }
+        : current
+    );
     await refreshProvider();
     flash("Provider listing disabled. Customers can no longer find this provider.");
   }
