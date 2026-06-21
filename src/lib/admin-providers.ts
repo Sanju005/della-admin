@@ -189,9 +189,9 @@ export const providerDocumentRequestOptions = [
   "Background Check",
 ] as const;
 
-const providerApprovalNotifyUrl =
-  import.meta.env.VITE_PROVIDER_APPROVAL_NOTIFY_URL?.trim() ||
-  "https://app.dellaapp.com/api/provider-approval/notify";
+const adminProviderVerificationApiUrl =
+  import.meta.env.VITE_ADMIN_PROVIDER_VERIFICATION_URL?.trim() ||
+  "/api/admin/providers/verification";
 
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
@@ -199,6 +199,62 @@ function relationItem<T>(value: T | T[] | null | undefined) {
   }
 
   return value ?? null;
+}
+
+async function getAdminAccessToken() {
+  if (!supabase) {
+    return null;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token ?? null;
+}
+
+async function postProviderVerificationAction(payload: Record<string, unknown>) {
+  if (!supabase) {
+    return { error: "Supabase is not configured." };
+  }
+
+  const accessToken = await getAdminAccessToken();
+
+  if (!accessToken) {
+    return { error: "Admin session expired. Please sign in again." };
+  }
+
+  try {
+    const response = await fetch(adminProviderVerificationApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responsePayload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      warning?: string | null;
+      success?: boolean;
+    };
+
+    if (!response.ok) {
+      return {
+        error: responsePayload.error || "Unable to update provider verification.",
+      };
+    }
+
+    return {
+      error: null,
+      warning: responsePayload.warning ?? null,
+    };
+  } catch {
+    return {
+      error: "Unable to reach the admin verification service.",
+    };
+  }
 }
 
 function toTitleCase(value: string) {
@@ -1341,20 +1397,11 @@ export async function setProviderSuspended(providerId: string, suspended: boolea
 }
 
 export async function setProviderVisibility(providerId: string, active: boolean) {
-  if (!supabase) {
-    return { error: "Supabase is not configured." };
-  }
-
-  const { error } = await supabase
-    .from("provider_profiles")
-    .update({ is_visible: active })
-    .eq("id", providerId);
-
-  if (error) {
-    return { error: error.message || "Unable to update provider visibility." };
-  }
-
-  return { error: null };
+  return postProviderVerificationAction({
+    action: "set_visibility",
+    providerId,
+    active,
+  });
 }
 
 export async function requestProviderVerificationDocuments(
@@ -1362,120 +1409,20 @@ export async function requestProviderVerificationDocuments(
   requestedDocuments: string[],
   note: string,
 ) {
-  if (!supabase) {
-    return { error: "Supabase is not configured." };
-  }
-
-  const timestamp = new Date().toISOString();
-  const cleanedDocuments = requestedDocuments
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  const { error: verificationError } = await supabase
-    .from("provider_verifications")
-    .upsert(
-      {
-        provider_id: providerId,
-        requested_documents: cleanedDocuments,
-        admin_note: note.trim(),
-        last_reviewed_at: timestamp,
-      },
-      { onConflict: "provider_id" }
-    );
-
-  if (verificationError) {
-    return { error: verificationError.message || "Unable to request provider documents." };
-  }
-
-  const { error: profileError } = await supabase
-    .from("provider_profiles")
-    .update({ approval_status: "document_review" })
-    .eq("id", providerId);
-
-  if (profileError) {
-    return { error: profileError.message || "Unable to update provider approval status." };
-  }
-
-  const { error: accountError } = await supabase
-    .from("profiles")
-    .update({ status: "pending" })
-    .eq("id", providerId);
-
-  if (accountError) {
-    return { error: accountError.message || "Unable to update provider account status." };
-  }
-
-  return { error: null };
+  return postProviderVerificationAction({
+    action: "request_documents",
+    providerId,
+    requestedDocuments: requestedDocuments
+      .map((value) => value.trim())
+      .filter(Boolean),
+    note: note.trim(),
+  });
 }
 
 export async function approveProviderVerification(providerId: string, note: string) {
-  if (!supabase) {
-    return { error: "Supabase is not configured." };
-  }
-
-  const timestamp = new Date().toISOString();
-
-  const { error: verificationError } = await supabase
-    .from("provider_verifications")
-    .upsert(
-      {
-        provider_id: providerId,
-        identity_verified: true,
-        kyc_verified: true,
-        requested_documents: [],
-        admin_note: note.trim(),
-        last_reviewed_at: timestamp,
-      },
-      { onConflict: "provider_id" }
-    );
-
-  if (verificationError) {
-    return { error: verificationError.message || "Unable to approve provider verification." };
-  }
-
-  const { error: profileError } = await supabase
-    .from("provider_profiles")
-    .update({
-      approval_status: "approved",
-      is_visible: true,
-    })
-    .eq("id", providerId);
-
-  if (profileError) {
-    return { error: profileError.message || "Unable to update provider approval." };
-  }
-
-  const { error: accountError } = await supabase
-    .from("profiles")
-    .update({ status: "active" })
-    .eq("id", providerId);
-
-  if (accountError) {
-    return { error: accountError.message || "Unable to activate provider account." };
-  }
-
-  try {
-    const response = await fetch(providerApprovalNotifyUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ providerId }),
-    });
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      return {
-        error: null,
-        warning: payload.error || "Provider approved, but approval email could not be sent.",
-      };
-    }
-  } catch {
-    return {
-      error: null,
-      warning: "Provider approved, but approval email could not be sent.",
-    };
-  }
-
-  return { error: null, warning: null };
+  return postProviderVerificationAction({
+    action: "approve",
+    providerId,
+    note: note.trim(),
+  });
 }
