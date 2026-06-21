@@ -1,6 +1,5 @@
 import {
   BadgeCheck,
-  Ban,
   BriefcaseBusiness,
   CalendarCheck2,
   CalendarDays,
@@ -32,7 +31,6 @@ import {
   type ProviderReportRowItem,
   providerDocumentRequestOptions,
   requestProviderVerificationDocuments,
-  setProviderSuspended,
   setProviderVisibility,
   updateProviderProfile,
 } from "../lib/admin-providers";
@@ -87,6 +85,14 @@ function initials(name: string) {
     .slice(0, 2)
     .map((part) => part[0])
     .join("");
+}
+
+function isRenderableImageUrl(value: string | undefined) {
+  if (!value?.trim()) {
+    return false;
+  }
+
+  return /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
 }
 
 function normalizeEditableDate(value: string) {
@@ -390,6 +396,10 @@ export function ProviderProfilePage() {
   }
 
   const detail = provider;
+  const providerHeroImage =
+    [...(detail.serviceImageFiles ?? []), ...(detail.certificateImageFiles ?? [])].find((value) =>
+      isRenderableImageUrl(value)
+    ) ?? null;
   const allTaskRows = useMemo(
     () =>
       [
@@ -568,27 +578,6 @@ export function ProviderProfilePage() {
     );
     setEditing(false);
     flash("Provider details updated.");
-  }
-
-  async function handleSuspend() {
-    if (saving) {
-      return;
-    }
-
-    const suspended = detail.status !== "Suspended";
-    setSaving(true);
-    const result = await setProviderSuspended(detail.providerId, suspended);
-    setSaving(false);
-
-    if (result.error) {
-      flash(result.error);
-      return;
-    }
-
-    setProvider((current) =>
-      current ? { ...current, status: suspended ? "Suspended" : "Active" } : current
-    );
-    flash(suspended ? "Provider suspended." : "Provider restored.");
   }
 
   async function refreshProvider() {
@@ -1104,34 +1093,44 @@ export function ProviderProfilePage() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[28px] border border-[#E7ECE7] bg-white px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:px-6">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="flex flex-col gap-5 sm:flex-row">
-            <div className="relative">
+      <section className="rounded-[28px] border border-[#E7ECE7] bg-white px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:px-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="relative shrink-0">
               <div
-                className={`grid size-[104px] shrink-0 place-items-center rounded-[30px] bg-gradient-to-br ${avatarGradient(detail.name)} shadow-inner ring-8 ring-slate-50`}
+                className={`grid size-[88px] overflow-hidden rounded-[26px] bg-gradient-to-br ${avatarGradient(detail.name)} shadow-inner ring-4 ring-slate-50`}
               >
-                <div className="grid size-[82px] place-items-center rounded-[26px] bg-white/70 backdrop-blur">
-                  <span className="font-display text-[2rem] font-extrabold text-slate-700">
-                    {initials(detail.name)}
-                  </span>
-                </div>
+                {providerHeroImage ? (
+                  <img
+                    src={providerHeroImage}
+                    alt={detail.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="grid place-items-center">
+                    <div className="grid size-[68px] place-items-center rounded-[22px] bg-white/75 backdrop-blur">
+                      <span className="font-display text-[1.7rem] font-extrabold text-slate-700">
+                        {initials(detail.name)}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <span className="absolute bottom-2 right-2 size-4 rounded-full border-2 border-white bg-emerald-500" />
+              <span className="absolute bottom-1.5 right-1.5 size-3.5 rounded-full border-2 border-white bg-emerald-500" />
             </div>
 
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="font-display text-[2rem] font-extrabold tracking-tight text-slate-950">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-display text-[1.65rem] font-extrabold tracking-tight text-slate-950">
                   {detail.name}
                 </h1>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
                   {detail.status}
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">Provider ID: {detail.providerId}</p>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <PillBadge tone={detail.emailVerified ? "emerald" : "slate"}>
                   <BadgeCheck className="size-3.5" /> {detail.emailVerified ? "Email Verified" : "Email Pending"}
                 </PillBadge>
@@ -1144,70 +1143,52 @@ export function ProviderProfilePage() {
                 <PillBadge tone="blue">{detail.roleBadge}</PillBadge>
               </div>
 
-              <div className="mt-5 grid gap-4 text-sm text-slate-500 sm:grid-cols-2 xl:grid-cols-5">
-                <div className="flex items-start gap-3">
+              <div className="mt-4 grid gap-x-5 gap-y-3 text-sm text-slate-500 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="flex items-start gap-2.5">
                   <CalendarDays className="mt-0.5 size-4 text-slate-400" />
                   <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Joined</p>
-                    <p className="mt-1 font-medium text-slate-900">{detail.joinedAt}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Joined</p>
+                    <p className="mt-0.5 font-medium text-slate-900">{detail.joinedAt}</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <Clock3 className="mt-0.5 size-4 text-slate-400" />
                   <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Last Login</p>
-                    <p className="mt-1 font-medium text-slate-900">{detail.lastLogin}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Last Login</p>
+                    <p className="mt-0.5 font-medium text-slate-900">{detail.lastLogin}</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <BriefcaseBusiness className="mt-0.5 size-4 text-slate-400" />
                   <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Type</p>
-                    <p className="mt-1 font-medium text-slate-900">{detail.serviceType}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Type</p>
+                    <p className="mt-0.5 font-medium text-slate-900">{detail.serviceType}</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <MapPin className="mt-0.5 size-4 text-slate-400" />
                   <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Area</p>
-                    <p className="mt-1 font-medium text-slate-900">{detail.serviceArea}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Service Area</p>
+                    <p className="mt-0.5 font-medium text-slate-900">{detail.serviceArea}</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <Star className="mt-0.5 size-4 text-amber-400" />
                   <div>
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Rating</p>
-                    <p className="mt-1 font-medium text-slate-900">{detail.rating} {detail.ratingNote}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Rating</p>
+                    <p className="mt-0.5 font-medium text-slate-900">{detail.rating} {detail.ratingNote}</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 xl:max-w-[620px] xl:justify-end">
-            <button
-              type="button"
-              onClick={() => flash("Public provider profile opened.")}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700"
-            >
-              <Eye className="size-4" />
-              View Profile
-            </button>
-            <button
-              type="button"
-              onClick={handleSuspend}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 px-5 py-3 text-sm font-semibold text-amber-700"
-            >
-              <Ban className="size-4" />
-              {detail.status === "Suspended" ? "Restore Provider" : "Suspend Provider"}
-            </button>
+          <div className="flex flex-wrap gap-2 xl:shrink-0">
             <button
               type="button"
               onClick={() => flash("Password reset link sent.")}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 px-5 py-3 text-sm font-semibold text-blue-700"
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700"
             >
               <KeyRound className="size-4" />
               Reset Password
@@ -1216,7 +1197,7 @@ export function ProviderProfilePage() {
               type="button"
               onClick={handleDeactivate}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 px-5 py-3 text-sm font-semibold text-rose-600"
+              className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-600"
             >
               <Trash2 className="size-4" />
               Deactivate
