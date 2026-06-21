@@ -392,20 +392,21 @@ export function ProviderProfilePage() {
   function renderOverview() {
     return (
       <>
-        <section className="grid gap-4 xl:grid-cols-[1.03fr_0.95fr_0.78fr_1fr]">
-            <SurfaceCard
-              title="Personal Details"
-              action={
-                <button
-                  type="button"
-                  onClick={() => setEditing((current) => !current)}
-                  className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700"
-                >
-                  {editing ? "Cancel" : "Edit"}
-                </button>
-              }
-            >
-              <div className="space-y-4">
+        <section className="mx-auto flex max-w-5xl flex-col gap-5">
+          <SurfaceCard
+            title="Personal Details"
+            className="w-full px-5 py-5 sm:px-6"
+            action={
+              <button
+                type="button"
+                onClick={() => setEditing((current) => !current)}
+                className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700"
+              >
+                {editing ? "Cancel" : "Edit"}
+              </button>
+            }
+          >
+            <div className="grid gap-x-8 gap-y-4 xl:grid-cols-2">
               <InfoRow
                 label="Full Name"
                 value={
@@ -520,269 +521,264 @@ export function ProviderProfilePage() {
             ) : null}
           </SurfaceCard>
 
-          <div className="space-y-4">
-            <SurfaceCard
-              title="Service Areas"
-              action={
-                <button className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-                  Edit
-                </button>
-              }
-            >
-              <div className="space-y-4">
-                {detail.serviceAreas.map((area) => (
-                  <div key={area.id} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 text-sm text-slate-700">
-                      <MapPin className="size-4 text-slate-400" />
-                      <span>{area.label}</span>
+          <SurfaceCard
+            title="Service Areas"
+            className="w-full max-w-4xl px-5 py-5 sm:px-6"
+            action={
+              <button className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                Edit
+              </button>
+            }
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {detail.serviceAreas.map((area) => (
+                <div key={area.id} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 text-sm text-slate-700">
+                    <MapPin className="size-4 text-slate-400" />
+                    <span>{area.label}</span>
+                  </div>
+                  {area.tag ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                      {area.tag}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard title="Quick Summary" className="w-full max-w-4xl px-5 py-5 sm:px-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <SummaryMetric label="Average Rating" value={detail.averageRating} />
+              <SummaryMetric label="Total Reviews" value={detail.totalReviews} />
+              <SummaryMetric label="On-time Rate" value={detail.onTimeRate} />
+              <SummaryMetric label="Repeat Customers" value={detail.repeatCustomers} />
+              <SummaryMetric label="Visibility" value={detail.visibilityStatus || "Visible"} />
+              <SummaryMetric label="Radius" value={detail.serviceRadiusKm || "Not set"} />
+              <SummaryMetric label="Working Days" value={detail.workingDays} />
+              <SummaryMetric label="Working Hours" value={detail.workingHours} />
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard title="Provider Status" className="w-full max-w-4xl px-5 py-5 sm:px-6">
+            <div className="grid gap-x-8 gap-y-4 text-sm md:grid-cols-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Account Status</span>
+                <MiniStatus status={detail.status} />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Approval Status</span>
+                <MiniStatus status={detail.approvalStatus} />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Marketplace Visibility</span>
+                <span className="font-medium text-slate-900">{detail.visibilityStatus || "Visible"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Background Check</span>
+                <MiniStatus status={detail.backgroundCheck} />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">KYC Status</span>
+                <MiniStatus status={detail.kycStatus} />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Member Since</span>
+                <span className="font-medium text-slate-900">{detail.memberSince}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Last Login</span>
+                <span className="font-medium text-slate-900">{detail.lastLogin}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Device</span>
+                <span className="font-medium text-slate-900">{detail.device}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Completed Jobs</span>
+                <span className="font-medium text-slate-900">{detail.completedJobs}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Cancellation Rate</span>
+                <span className="font-medium text-slate-900">{detail.cancellationRate}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Response Rate</span>
+                <span className="font-medium text-slate-900">{detail.responseRate}</span>
+              </div>
+              <div className="border-t border-slate-100 pt-4 md:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  Verification Review
+                </p>
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-2">
+                    {providerDocumentRequestOptions.map((document) => (
+                      <label key={document} className="flex items-center gap-3 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocumentRequests.includes(document)}
+                          onChange={() => toggleRequestedDocument(document)}
+                          className="size-4 rounded border-slate-300 text-emerald-600"
+                        />
+                        <span>{document}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <textarea
+                    value={verificationNote}
+                    onChange={(event) => setVerificationNote(event.target.value)}
+                    placeholder="Add admin note for the provider"
+                    className="min-h-[96px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRequestDocuments}
+                      disabled={saving}
+                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
+                    >
+                      {saving ? "Saving..." : "Request IC / Documents"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApproveVerification}
+                      disabled={saving}
+                      className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      {saving ? "Saving..." : "Approve Verification"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard title="About Provider" className="w-full px-5 py-5 sm:px-6">
+            {editing ? (
+              <textarea
+                value={form.about}
+                onChange={(event) => setForm((current) => ({ ...current, about: event.target.value }))}
+                className="min-h-[132px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+              />
+            ) : (
+              <p className="text-sm leading-7 text-slate-600">{detail.about}</p>
+            )}
+
+            <div className="mt-8">
+              <h4 className="text-base font-bold text-slate-950">Skills & Services</h4>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {detail.skills.map((skill) => (
+                  <span
+                    key={skill.id}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-600"
+                  >
+                    {skill.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-base font-bold text-slate-950">Documents</h4>
+                <button className="text-xs font-semibold text-emerald-700">View all</button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {detail.documents.map((document) => (
+                  <div key={document.id} className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center gap-3 text-slate-700">
+                      <FileText className="size-4 text-slate-400" />
+                      <div>
+                        <div>{document.label}</div>
+                        {document.fileName ? (
+                          <div className="text-xs text-slate-400">{document.fileName}</div>
+                        ) : null}
+                      </div>
                     </div>
-                    {area.tag ? (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                        {area.tag}
-                      </span>
-                    ) : null}
+                    <MiniStatus status={document.status} />
                   </div>
                 ))}
               </div>
-            </SurfaceCard>
+            </div>
 
-            <SurfaceCard title="Quick Summary">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <SummaryMetric label="Average Rating" value={detail.averageRating} />
-                <SummaryMetric label="Total Reviews" value={detail.totalReviews} />
-                <SummaryMetric label="On-time Rate" value={detail.onTimeRate} />
-                <SummaryMetric label="Repeat Customers" value={detail.repeatCustomers} />
-                <SummaryMetric label="Visibility" value={detail.visibilityStatus || "Visible"} />
-                <SummaryMetric label="Radius" value={detail.serviceRadiusKm || "Not set"} />
-                <SummaryMetric label="Working Days" value={detail.workingDays} />
-                <SummaryMetric label="Working Hours" value={detail.workingHours} />
+            <div className="mt-8">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-base font-bold text-slate-950">Specialties</h4>
               </div>
-            </SurfaceCard>
-          </div>
-
-          <div className="space-y-4">
-            <SurfaceCard title="Provider Status" className="h-full">
-              <div className="space-y-4 text-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Account Status</span>
-                  <MiniStatus status={detail.status} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Approval Status</span>
-                  <MiniStatus status={detail.approvalStatus} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Marketplace Visibility</span>
-                  <span className="font-medium text-slate-900">{detail.visibilityStatus || "Visible"}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Background Check</span>
-                  <MiniStatus status={detail.backgroundCheck} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">KYC Status</span>
-                  <MiniStatus status={detail.kycStatus} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Member Since</span>
-                  <span className="font-medium text-slate-900">{detail.memberSince}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Last Login</span>
-                  <span className="font-medium text-slate-900">{detail.lastLogin}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Device</span>
-                  <span className="font-medium text-slate-900">{detail.device}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Completed Jobs</span>
-                  <span className="font-medium text-slate-900">{detail.completedJobs}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Cancellation Rate</span>
-                  <span className="font-medium text-slate-900">{detail.cancellationRate}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Response Rate</span>
-                  <span className="font-medium text-slate-900">{detail.responseRate}</span>
-                </div>
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Verification Review
-                  </p>
-                  <div className="mt-3 space-y-3">
-                    <div className="space-y-2">
-                      {providerDocumentRequestOptions.map((document) => (
-                        <label key={document} className="flex items-center gap-3 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={selectedDocumentRequests.includes(document)}
-                            onChange={() => toggleRequestedDocument(document)}
-                            className="size-4 rounded border-slate-300 text-emerald-600"
-                          />
-                          <span>{document}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <textarea
-                      value={verificationNote}
-                      onChange={(event) => setVerificationNote(event.target.value)}
-                      placeholder="Add admin note for the provider"
-                      className="min-h-[96px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleRequestDocuments}
-                        disabled={saving}
-                        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
-                      >
-                        {saving ? "Saving..." : "Request IC / Documents"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleApproveVerification}
-                        disabled={saving}
-                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                      >
-                        {saving ? "Saving..." : "Approve Verification"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </SurfaceCard>
-          </div>
-
-          <div className="space-y-4">
-            <SurfaceCard title="About Provider">
-              {editing ? (
-                <textarea
-                  value={form.about}
-                  onChange={(event) => setForm((current) => ({ ...current, about: event.target.value }))}
-                  className="min-h-[132px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
-                />
-              ) : (
-                <p className="text-sm leading-7 text-slate-600">{detail.about}</p>
-              )}
-
-              <div className="mt-8">
-                <h4 className="text-base font-bold text-slate-950">Skills & Services</h4>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {detail.skills.map((skill) => (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(detail.specialties ?? []).length ? (
+                  (detail.specialties ?? []).map((specialty) => (
                     <span
-                      key={skill.id}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-600"
+                      key={specialty}
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700"
                     >
-                      {skill.label}
+                      {specialty}
                     </span>
-                  ))}
-                </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">No specialties added yet.</p>
+                )}
               </div>
+            </div>
 
-              <div className="mt-8">
-                <div className="flex items-center justify-between gap-3">
-                  <h4 className="text-base font-bold text-slate-950">Documents</h4>
-                  <button className="text-xs font-semibold text-emerald-700">View all</button>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {detail.documents.map((document) => (
-                    <div key={document.id} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="flex items-center gap-3 text-slate-700">
-                        <FileText className="size-4 text-slate-400" />
-                        <div>
-                          <div>{document.label}</div>
-                          {document.fileName ? (
-                            <div className="text-xs text-slate-400">{document.fileName}</div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <MiniStatus status={document.status} />
+            <div className="mt-8">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-base font-bold text-slate-950">Service Image Captions</h4>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(detail.serviceImageCaptions ?? []).length ? (
+                  (detail.serviceImageCaptions ?? []).map((caption) => (
+                    <span
+                      key={caption}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700"
+                    >
+                      {caption}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">No live service image captions saved yet.</p>
+                )}
+              </div>
+              <div className="mt-3 space-y-2">
+                {(detail.serviceImageFiles ?? []).length ? (
+                  (detail.serviceImageFiles ?? []).map((fileName) => (
+                    <div key={fileName} className="text-xs font-medium text-slate-500">
+                      {fileName}
                     </div>
-                  ))}
-                </div>
+                  ))
+                ) : null}
               </div>
+            </div>
 
-              <div className="mt-8">
-                <div className="flex items-center justify-between gap-3">
-                  <h4 className="text-base font-bold text-slate-950">Specialties</h4>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(detail.specialties ?? []).length ? (
-                    (detail.specialties ?? []).map((specialty) => (
-                      <span
-                        key={specialty}
-                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700"
-                      >
-                        {specialty}
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No specialties added yet.</p>
-                  )}
-                </div>
+            <div className="mt-8">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-base font-bold text-slate-950">Certificate Captions</h4>
               </div>
-
-              <div className="mt-8">
-                <div className="flex items-center justify-between gap-3">
-                  <h4 className="text-base font-bold text-slate-950">Service Image Captions</h4>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(detail.serviceImageCaptions ?? []).length ? (
-                    (detail.serviceImageCaptions ?? []).map((caption) => (
-                      <span
-                        key={caption}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700"
-                      >
-                        {caption}
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No live service image captions saved yet.</p>
-                  )}
-                </div>
-                <div className="mt-3 space-y-2">
-                  {(detail.serviceImageFiles ?? []).length ? (
-                    (detail.serviceImageFiles ?? []).map((fileName) => (
-                      <div key={fileName} className="text-xs font-medium text-slate-500">
-                        {fileName}
-                      </div>
-                    ))
-                  ) : null}
-                </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(detail.certificateImageCaptions ?? []).length ? (
+                  (detail.certificateImageCaptions ?? []).map((caption) => (
+                    <span
+                      key={caption}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700"
+                    >
+                      {caption}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">No live certificate captions saved yet.</p>
+                )}
               </div>
-
-              <div className="mt-8">
-                <div className="flex items-center justify-between gap-3">
-                  <h4 className="text-base font-bold text-slate-950">Certificate Captions</h4>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(detail.certificateImageCaptions ?? []).length ? (
-                    (detail.certificateImageCaptions ?? []).map((caption) => (
-                      <span
-                        key={caption}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700"
-                      >
-                        {caption}
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No live certificate captions saved yet.</p>
-                  )}
-                </div>
-                <div className="mt-3 space-y-2">
-                  {(detail.certificateImageFiles ?? []).length ? (
-                    (detail.certificateImageFiles ?? []).map((fileName) => (
-                      <div key={fileName} className="text-xs font-medium text-slate-500">
-                        {fileName}
-                      </div>
-                    ))
-                  ) : null}
-                </div>
+              <div className="mt-3 space-y-2">
+                {(detail.certificateImageFiles ?? []).length ? (
+                  (detail.certificateImageFiles ?? []).map((fileName) => (
+                    <div key={fileName} className="text-xs font-medium text-slate-500">
+                      {fileName}
+                    </div>
+                  ))
+                ) : null}
               </div>
-            </SurfaceCard>
-          </div>
+            </div>
+          </SurfaceCard>
         </section>
 
         <section className="grid gap-4 xl:grid-cols-3">
