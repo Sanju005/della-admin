@@ -34,8 +34,19 @@ export type ProviderTaskDetail = {
   schedule: string;
   location: string;
   createdAt: string;
+  scheduledStart: string;
+  scheduledEnd: string;
   notes: Array<{ label: string; value: string }>;
-  timeline: Array<{ id: string; title: string; note: string; time: string }>;
+  timeline: Array<{ id: string; title: string; note: string; time: string; status?: string }>;
+  statusHistory: Array<{
+    id: string;
+    fromStatus: string;
+    toStatus: string;
+    actor: string;
+    actorRole: string;
+    note: string;
+    time: string;
+  }>;
   payments: Array<{
     id: string;
     amount: string;
@@ -48,8 +59,12 @@ export type ProviderTaskDetail = {
   }>;
   reviews: Array<{
     id: string;
+    reviewer: string;
+    reviewFor: string;
+    reviewerRole: string;
     rating: number;
     comment: string;
+    reply?: string;
     createdAt: string;
   }>;
   messages: Array<{

@@ -53,11 +53,11 @@ type PaymentRow = {
   provider_company_payment_proof_mime_type?: string | null;
 };
 
-type ReviewRow = {
+type ReviewRow = Record<string, unknown> & {
   id: string;
-  rating: number | null;
-  comment: string | null;
-  created_at: string | null;
+  rating?: number | null;
+  comment?: string | null;
+  created_at?: string | null;
 };
 
 type BookingMessageRow = {
@@ -183,6 +183,21 @@ function compactId(value: string) {
   return value.startsWith("#") ? value : `#${value.slice(0, 8).toUpperCase()}`;
 }
 
+function normalizeOptionalText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function pickFirstText(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = normalizeOptionalText(row[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
 async function verifyAdminRequest(request: Request) {
   const adminClient = buildAdminSupabaseClient();
 
@@ -287,11 +302,11 @@ export async function GET(
       .order("created_at", { ascending: false }),
     adminClient
       .from("reviews")
-      .select("id, rating, comment, created_at")
+      .select("*")
       .eq("provider_id", booking.provider_id)
       .eq("customer_id", booking.customer_id)
       .order("created_at", { ascending: false })
-      .limit(5),
+      .limit(20),
     adminClient
       .from("booking_messages")
       .select("id, sender_id, sender_role, message_text, created_at")
@@ -313,30 +328,35 @@ export async function GET(
     createdAt: formatDateTime(row.created_at),
   }));
 
-  const timeline = [
+  const milestoneTimeline = [
     {
       id: "created",
       title: "Booking created",
       note: "Customer created the booking request.",
       time: formatDateTime(booking.created_at),
+      status: "Created",
     },
     ...([
-      booking.accepted_at ? { id: "accepted_at", title: "Accepted", note: booking.provider_response_note?.trim() || "Provider accepted the task.", time: formatDateTime(booking.accepted_at) } : null,
-      booking.on_the_way_at ? { id: "on_the_way_at", title: "On the way", note: "Provider marked the trip as started.", time: formatDateTime(booking.on_the_way_at) } : null,
-      booking.arrived_at ? { id: "arrived_at", title: "Arrived", note: "Provider arrived on site.", time: formatDateTime(booking.arrived_at) } : null,
-      booking.completed_at ? { id: "completed_at", title: "Completed", note: "Task was marked completed.", time: formatDateTime(booking.completed_at) } : null,
-      booking.paid_at ? { id: "paid_at", title: "Payment done", note: "Payment was marked paid.", time: formatDateTime(booking.paid_at) } : null,
-      booking.review_requested_at ? { id: "review_requested_at", title: "Review requested", note: "Provider asked the customer for review.", time: formatDateTime(booking.review_requested_at) } : null,
-      booking.reviewed_at ? { id: "reviewed_at", title: "Reviewed", note: "Customer completed the review flow.", time: formatDateTime(booking.reviewed_at) } : null,
-      booking.cancelled_at ? { id: "cancelled_at", title: "Cancelled", note: booking.decline_reason?.trim() || "Booking was cancelled.", time: formatDateTime(booking.cancelled_at) } : null,
-    ].filter(Boolean) as Array<{ id: string; title: string; note: string; time: string }>),
-    ...((historyResult.data ?? []) as BookingStatusHistoryRow[]).map((row) => ({
-      id: row.id,
-      title: `${toTitleCase(row.old_status)} -> ${toTitleCase(row.new_status)}`,
-      note: row.note?.trim() || `${toTitleCase(row.changed_by_role)} updated the task status.`,
-      time: formatDateTime(row.created_at),
-    })),
+      booking.accepted_at ? { id: "accepted_at", title: "Accepted", note: booking.provider_response_note?.trim() || "Provider accepted the task.", time: formatDateTime(booking.accepted_at), status: "Accepted" } : null,
+      booking.on_the_way_at ? { id: "on_the_way_at", title: "On the way", note: "Provider started travelling to the task location.", time: formatDateTime(booking.on_the_way_at), status: "On The Way" } : null,
+      booking.arrived_at ? { id: "arrived_at", title: "Arrived", note: "Provider arrived on site.", time: formatDateTime(booking.arrived_at), status: "Arrived" } : null,
+      booking.completed_at ? { id: "completed_at", title: "Completed", note: "Provider marked the task as completed.", time: formatDateTime(booking.completed_at), status: "Completed" } : null,
+      booking.paid_at ? { id: "paid_at", title: "Payment done", note: "Payment was marked paid.", time: formatDateTime(booking.paid_at), status: "Paid" } : null,
+      booking.review_requested_at ? { id: "review_requested_at", title: "Review requested", note: "Provider requested customer review.", time: formatDateTime(booking.review_requested_at), status: "Review Requested" } : null,
+      booking.reviewed_at ? { id: "reviewed_at", title: "Reviewed", note: "Review flow was completed.", time: formatDateTime(booking.reviewed_at), status: "Reviewed" } : null,
+      booking.cancelled_at ? { id: "cancelled_at", title: "Cancelled", note: booking.decline_reason?.trim() || "Booking was cancelled.", time: formatDateTime(booking.cancelled_at), status: "Cancelled" } : null,
+    ].filter(Boolean) as Array<{ id: string; title: string; note: string; time: string; status: string }>),
   ];
+
+  const statusHistory = ((historyResult.data ?? []) as BookingStatusHistoryRow[]).map((row) => ({
+    id: row.id,
+    fromStatus: toTitleCase(row.old_status),
+    toStatus: toTitleCase(row.new_status),
+    actor: profileMap.get(row.changed_by ?? "") || toTitleCase(row.changed_by_role),
+    actorRole: toTitleCase(row.changed_by_role),
+    note: row.note?.trim() || `${toTitleCase(row.changed_by_role)} updated the task status.`,
+    time: formatDateTime(row.created_at),
+  }));
 
   const images = ((paymentsResult.data ?? []) as PaymentRow[]).flatMap((row) => {
     const items = [];
@@ -364,6 +384,40 @@ export async function GET(
     return items;
   });
 
+  const reviewRows = ((reviewsResult.data ?? []) as ReviewRow[])
+    .filter((row) => {
+      const bookingMatch = normalizeOptionalText(row.booking_id) === booking.id;
+      if (bookingMatch) {
+        return true;
+      }
+
+      return normalizeOptionalText(row.provider_id) === booking.provider_id &&
+        normalizeOptionalText(row.customer_id) === booking.customer_id;
+    })
+    .map((row) => {
+      const reviewerRole = pickFirstText(row, ["reviewer_role", "author_role", "created_by_role"]) ||
+        (normalizeOptionalText(row.reviewer_id) === booking.customer_id ? "Customer" :
+          normalizeOptionalText(row.reviewer_id) === booking.provider_id ? "Provider" :
+          "Customer");
+      const reviewerName = normalizeOptionalText(row.reviewer_id)
+        ? profileMap.get(normalizeOptionalText(row.reviewer_id)) || reviewerRole
+        : reviewerRole;
+      const reviewFor = pickFirstText(row, ["reviewee_role", "target_role"]) ||
+        (reviewerRole.toLowerCase() === "provider" ? "Customer" : "Provider");
+      const reply = pickFirstText(row, ["reply", "provider_reply", "customer_reply", "admin_reply"]);
+
+      return {
+        id: String(row.id),
+        reviewer: reviewerName,
+        reviewFor: toTitleCase(reviewFor),
+        reviewerRole: toTitleCase(reviewerRole),
+        rating: Math.max(1, Math.min(5, Math.round(Number(row.rating ?? 0) || 0))),
+        comment: normalizeOptionalText(row.comment) || "No review comment.",
+        reply: reply || undefined,
+        createdAt: formatDateTime(typeof row.created_at === "string" ? row.created_at : null),
+      };
+    });
+
   return NextResponse.json({
     detail: {
       bookingId: compactId(booking.id),
@@ -377,12 +431,23 @@ export async function GET(
       schedule: formatSchedule(booking.scheduled_date, booking.scheduled_start_time, booking.scheduled_end_time),
       location: booking.location_text?.trim() || "Location not captured",
       createdAt: formatDateTime(booking.created_at),
+      scheduledStart: formatDateTime(
+        booking.scheduled_date && booking.scheduled_start_time
+          ? `${booking.scheduled_date}T${booking.scheduled_start_time}`
+          : null,
+      ),
+      scheduledEnd: formatDateTime(
+        booking.scheduled_date && booking.scheduled_end_time
+          ? `${booking.scheduled_date}T${booking.scheduled_end_time}`
+          : null,
+      ),
       notes: [
         { label: "Customer note", value: booking.customer_note?.trim() || "No customer note." },
         { label: "Provider response", value: booking.provider_response_note?.trim() || "No provider response note." },
         { label: "Decline / cancel note", value: booking.decline_reason?.trim() || "No decline or cancellation note." },
       ],
-      timeline,
+      timeline: milestoneTimeline,
+      statusHistory,
       payments: ((paymentsResult.data ?? []) as PaymentRow[]).map((row) => ({
         id: compactId(row.id),
         amount: formatCurrency(row.amount ?? 0),
@@ -393,12 +458,7 @@ export async function GET(
         companyStatus: toTitleCase(row.company_payment_status),
         createdAt: formatDateTime(row.created_at),
       })),
-      reviews: ((reviewsResult.data ?? []) as ReviewRow[]).map((row) => ({
-        id: row.id,
-        rating: Math.max(1, Math.min(5, Math.round(row.rating ?? 0))),
-        comment: row.comment?.trim() || "No review comment.",
-        createdAt: formatDateTime(row.created_at),
-      })),
+      reviews: reviewRows,
       messages,
       images,
     },
