@@ -249,6 +249,7 @@ export type ProviderDocumentItem = {
 
 export type ProviderTaskRow = {
   id: string;
+  rawId?: string;
   service: string;
   customer: string;
   date: string;
@@ -258,6 +259,7 @@ export type ProviderTaskRow = {
 
 export type ProviderUpcomingTaskRow = {
   id: string;
+  rawId?: string;
   service: string;
   customer: string;
   schedule: string;
@@ -267,6 +269,7 @@ export type ProviderUpcomingTaskRow = {
 
 export type ProviderCancelledTaskRow = {
   id: string;
+  rawId?: string;
   service: string;
   customer: string;
   schedule: string;

@@ -22,6 +22,52 @@ export type ProviderReportRowItem = {
   date: string;
 };
 
+export type ProviderTaskDetail = {
+  bookingId: string;
+  rawBookingId: string;
+  service: string;
+  customer: string;
+  provider: string;
+  status: string;
+  bookingMode: string;
+  amount: string;
+  schedule: string;
+  location: string;
+  createdAt: string;
+  notes: Array<{ label: string; value: string }>;
+  timeline: Array<{ id: string; title: string; note: string; time: string }>;
+  payments: Array<{
+    id: string;
+    amount: string;
+    method: string;
+    status: string;
+    providerNetAmount: string;
+    companyCommissionAmount: string;
+    companyStatus: string;
+    createdAt: string;
+  }>;
+  reviews: Array<{
+    id: string;
+    rating: number;
+    comment: string;
+    createdAt: string;
+  }>;
+  messages: Array<{
+    id: string;
+    sender: string;
+    senderRole: string;
+    message: string;
+    createdAt: string;
+  }>;
+  images: Array<{
+    id: string;
+    label: string;
+    url: string;
+    fileName?: string;
+    mimeType?: string;
+  }>;
+};
+
 type ProviderProfileRow = {
   id: string;
   marketing_name?: string | null;
@@ -272,6 +318,24 @@ async function postProviderVerificationAction(payload: Record<string, unknown>) 
       error: "Unable to reach the admin verification service.",
     };
   }
+}
+
+async function getAdminAccessHeaders() {
+  if (!supabase) {
+    return null;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    return null;
+  }
+
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+  };
 }
 
 function toTitleCase(value: string) {
@@ -883,6 +947,7 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
       const service = relationItem(row.provider_services);
       return {
         id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+        rawId: row.id,
         service: humanizeService(service?.service_type),
         customer: customerNames.get(row.customer_id ?? "") || "Customer",
         date: formatDate(row.scheduled_date),
@@ -903,6 +968,7 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
       const service = relationItem(row.provider_services);
       return {
         id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+        rawId: row.id,
         service: humanizeService(service?.service_type),
         customer: customerNames.get(row.customer_id ?? "") || "Customer",
         schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
@@ -918,6 +984,7 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
       const service = relationItem(row.provider_services);
       return {
         id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+        rawId: row.id,
         service: humanizeService(service?.service_type),
         customer: customerNames.get(row.customer_id ?? "") || "Customer",
         schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
@@ -928,6 +995,11 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
     });
 
   return { completedTaskRows, upcomingTaskRows, cancelledTaskRows };
+}
+
+function isCompletedLikeBookingStatus(value?: string | null) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return ["completed", "paid", "review_requested", "reviewed"].includes(normalized);
 }
 
 function buildPayoutRows(livePayments: LivePaymentRow[]): ProviderPayoutRow[] {
@@ -997,9 +1069,7 @@ function buildMetrics(
 
   const totalTasks = taskRows?.length ?? 0;
   const completedTasks =
-    taskRows?.filter((row) =>
-      ["completed", "paid", "review_requested", "reviewed"].includes((row.booking_status ?? "").toLowerCase())
-    ).length ?? 0;
+    taskRows?.filter((row) => isCompletedLikeBookingStatus(row.booking_status)).length ?? 0;
   const upcomingTasks =
     taskRows?.filter(
       (row) =>
@@ -1355,6 +1425,13 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     totalEarnings:
       livePayments?.length
         ? formatCurrency(livePayments.reduce((sum, row) => sum + (row.provider_net_amount ?? 0), 0))
+        : liveTasks?.length
+          ? formatCurrency(
+              liveTasks.reduce(
+                (sum, row) => sum + (isCompletedLikeBookingStatus(row.booking_status) ? (row.quoted_amount ?? 0) : 0),
+                0
+              )
+            )
         : baseDetail.totalEarnings,
     withdrawn:
       livePayments?.length
@@ -1444,6 +1521,33 @@ export async function getProviderReportsWithFallback(providerId: string): Promis
 
   const profileNames = await fetchProfileNameMap(liveReports.map((row) => row.reporter_id));
   return buildReportRows(liveReports, profileNames);
+}
+
+export async function getProviderTaskDetail(rawBookingId: string): Promise<ProviderTaskDetail | null> {
+  if (!rawBookingId.trim()) {
+    return null;
+  }
+
+  const headers = await getAdminAccessHeaders();
+
+  if (!headers) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`/api/admin/provider-bookings/${rawBookingId}`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { detail?: ProviderTaskDetail | null };
+    return payload.detail ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function updateProviderProfile(

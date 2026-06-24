@@ -28,6 +28,8 @@ import {
   approveProviderVerification,
   getProviderReportsWithFallback,
   getProviderProfileWithFallback,
+  getProviderTaskDetail,
+  type ProviderTaskDetail,
   type ProviderReportRowItem,
   providerDocumentRequestOptions,
   requestProviderVerificationDocuments,
@@ -381,6 +383,9 @@ export function ProviderProfilePage() {
     provider?.requestedDocuments ?? []
   );
   const [providerReports, setProviderReports] = useState<ProviderReportRowItem[]>([]);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<ProviderTaskDetail | null>(null);
+  const [selectedTaskRawId, setSelectedTaskRawId] = useState<string | null>(null);
+  const [taskDetailLoading, setTaskDetailLoading] = useState(false);
   const [taskDateFilter, setTaskDateFilter] = useState<DateFilterKey>("all");
   const [taskSort, setTaskSort] = useState<SortKey>("recent");
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatusKey>("all");
@@ -473,6 +478,7 @@ export function ProviderProfilePage() {
       [
         ...(safeDetail.completedTaskRows ?? []).map((task) => ({
           id: task.id,
+          rawId: task.rawId,
           service: task.service,
           customer: task.customer,
           date: task.date,
@@ -485,6 +491,7 @@ export function ProviderProfilePage() {
         })),
         ...(safeDetail.upcomingTaskRows ?? []).map((task) => ({
           id: task.id,
+          rawId: task.rawId,
           service: task.service,
           customer: task.customer,
           date: task.schedule,
@@ -497,6 +504,7 @@ export function ProviderProfilePage() {
         })),
         ...(safeDetail.cancelledTaskRows ?? []).map((task) => ({
           id: task.id,
+          rawId: task.rawId,
           service: task.service,
           customer: task.customer,
           date: task.schedule,
@@ -536,6 +544,14 @@ export function ProviderProfilePage() {
     const dateFiltered = paymentRows.filter((row) => matchesDateFilter(row.date, paymentDateFilter));
     return sortByRecentOrAz(dateFiltered, paymentSort);
   }, [paymentRows, paymentDateFilter, paymentSort]);
+
+  const bookingDerivedCompletedValue = useMemo(
+    () =>
+      allTaskRows
+        .filter((task) => task.type === "completed")
+        .reduce((sum, task) => sum + parseCurrencyValue(task.amount), 0),
+    [allTaskRows]
+  );
 
   const cashPaymentRows = useMemo(
     () => filteredPaymentRows.filter((row) => isCashMethod(row.type)),
@@ -699,6 +715,18 @@ export function ProviderProfilePage() {
     setProvider(payload.detail);
     setVerificationNote(payload.detail?.verificationNote ?? "");
     setSelectedDocumentRequests(payload.detail?.requestedDocuments ?? []);
+  }
+
+  async function handleTaskClick(rawId?: string) {
+    if (!rawId?.trim()) {
+      return;
+    }
+
+    setSelectedTaskRawId(rawId);
+    setTaskDetailLoading(true);
+    const detail = await getProviderTaskDetail(rawId);
+    setSelectedTaskDetail(detail);
+    setTaskDetailLoading(false);
   }
 
   async function handleDeactivate() {
@@ -1503,7 +1531,13 @@ export function ProviderProfilePage() {
               <tbody>
                 {filteredTaskRows.length ? (
                   filteredTaskRows.map((task) => (
-                    <tr key={`${task.type}-${task.id}`} className="border-b border-slate-50">
+                    <tr
+                      key={`${task.type}-${task.id}`}
+                      className={`border-b border-slate-50 transition hover:bg-slate-50/70 ${
+                        task.rawId && selectedTaskRawId === task.rawId ? "bg-emerald-50/40" : ""
+                      } ${task.rawId ? "cursor-pointer" : ""}`}
+                      onClick={() => void handleTaskClick(task.rawId)}
+                    >
                       <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
                       <td className="py-3 text-slate-700">{task.service}</td>
                       <td className="py-3 text-slate-700">{task.customer}</td>
@@ -1523,6 +1557,162 @@ export function ProviderProfilePage() {
               </tbody>
             </table>
           </TableShell>
+
+          {taskDetailLoading ? (
+            <SurfaceCard title="Task Detail">
+              <p className="text-sm text-slate-500">Loading task detail...</p>
+            </SurfaceCard>
+          ) : selectedTaskDetail ? (
+            <SurfaceCard title={`Task Detail • ${selectedTaskDetail.bookingId}`}>
+              <div className="space-y-4">
+                <SummaryStrip
+                  items={[
+                    { label: "Service", value: selectedTaskDetail.service },
+                    { label: "Customer", value: selectedTaskDetail.customer },
+                    { label: "Status", value: selectedTaskDetail.status },
+                    { label: "Amount", value: selectedTaskDetail.amount },
+                    { label: "Schedule", value: selectedTaskDetail.schedule },
+                    { label: "Mode", value: selectedTaskDetail.bookingMode },
+                  ]}
+                />
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Task Notes</p>
+                    {selectedTaskDetail.notes.map((note) => (
+                      <div key={note.label}>
+                        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">{note.label}</p>
+                        <p className="mt-1 text-sm text-slate-700">{note.value}</p>
+                      </div>
+                    ))}
+                    <div>
+                      <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Location</p>
+                      <p className="mt-1 text-sm text-slate-700">{selectedTaskDetail.location}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Time Snap</p>
+                    {selectedTaskDetail.timeline.length ? (
+                      selectedTaskDetail.timeline.map((item) => (
+                        <div key={item.id} className="rounded-xl border border-slate-100 bg-white px-3 py-3">
+                          <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-[13px] text-slate-600">{item.note}</p>
+                          <p className="mt-1 text-[12px] text-slate-400">{item.time}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">No task timeline found.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <TableShell title="Payments">
+                    <table className="min-w-full text-left text-[13px]">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400">
+                          <th className="pb-3 font-semibold">ID</th>
+                          <th className="pb-3 font-semibold">Method</th>
+                          <th className="pb-3 font-semibold">Amount</th>
+                          <th className="pb-3 font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTaskDetail.payments.length ? (
+                          selectedTaskDetail.payments.map((payment) => (
+                            <tr key={payment.id} className="border-b border-slate-50">
+                              <td className="py-3 text-slate-700">{payment.id}</td>
+                              <td className="py-3 text-slate-700">{payment.method}</td>
+                              <td className="py-3 text-slate-700">{payment.amount}</td>
+                              <td className="py-3"><MiniStatus status={payment.status} /></td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-sm text-slate-500">No payment records for this task.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </TableShell>
+
+                  <TableShell title="Reviews">
+                    <table className="min-w-full text-left text-[13px]">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400">
+                          <th className="pb-3 font-semibold">Rating</th>
+                          <th className="pb-3 font-semibold">Comment</th>
+                          <th className="pb-3 font-semibold">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTaskDetail.reviews.length ? (
+                          selectedTaskDetail.reviews.map((review) => (
+                            <tr key={review.id} className="border-b border-slate-50">
+                              <td className="py-3 text-slate-700">{review.rating}/5</td>
+                              <td className="py-3 text-slate-700">{review.comment}</td>
+                              <td className="py-3 text-slate-500">{review.createdAt}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="py-4 text-sm text-slate-500">No reviews linked to this task yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </TableShell>
+
+                  <TableShell title="Messages">
+                    <table className="min-w-full text-left text-[13px]">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400">
+                          <th className="pb-3 font-semibold">Sender</th>
+                          <th className="pb-3 font-semibold">Message</th>
+                          <th className="pb-3 font-semibold">Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTaskDetail.messages.length ? (
+                          selectedTaskDetail.messages.map((message) => (
+                            <tr key={message.id} className="border-b border-slate-50">
+                              <td className="py-3 text-slate-700">{message.sender}</td>
+                              <td className="py-3 text-slate-700">{message.message}</td>
+                              <td className="py-3 text-slate-500">{message.createdAt}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="py-4 text-sm text-slate-500">No additional messages for this task.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </TableShell>
+                </div>
+
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Task Related Images</p>
+                  {selectedTaskDetail.images.length ? (
+                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                      {selectedTaskDetail.images.map((image) => (
+                        <ProofLinkCard
+                          key={image.id}
+                          title={image.label}
+                          fileName={image.fileName}
+                          url={image.url}
+                          mimeType={image.mimeType}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-slate-500">No task images are stored yet for this booking. When proof files or related uploads exist, they will appear here.</p>
+                  )}
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
         </div>
       ) : null}
       {activeTab === "Payments & Withdrawals" ? (
@@ -1564,6 +1754,24 @@ export function ProviderProfilePage() {
               },
             ]}
           />
+
+          {filteredPaymentRows.length === 0 && bookingDerivedCompletedValue > 0 ? (
+            <SurfaceCard title="Booking-Derived Fallback">
+              <p className="text-sm text-slate-600">
+                No live payment settlement rows are available for this filter yet. Admin is falling back to completed booking value from backend booking history.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Completed Booking Value</p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">{formatCurrencyValue(bookingDerivedCompletedValue)}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Note</p>
+                  <p className="mt-2 text-sm text-slate-600">Cash split and company proof will appear once payment settlement rows are written to `payments`.</p>
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
 
           <SummaryStrip
             items={[
