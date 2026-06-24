@@ -25,7 +25,7 @@ type LiveBookingRow = {
   booking_status?: string | null;
   scheduled_date?: string | null;
   scheduled_start_time?: string | null;
-  total_amount?: number | null;
+  quoted_amount?: number | null;
   customer_id?: string | null;
   provider_id?: string | null;
   provider_profiles?: ProviderProfileRelation;
@@ -98,8 +98,14 @@ function formatStatus(value: string | null | undefined) {
     return "Pending";
   }
 
-  if (value.trim().toLowerCase() === "in_progress") {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "in_progress") {
     return "In Progress";
+  }
+
+  if (normalized === "review_requested") {
+    return "Review Requested";
   }
 
   return toTitleCase(value.trim());
@@ -164,7 +170,7 @@ async function fetchLiveBookings() {
       booking_status,
       scheduled_date,
       scheduled_start_time,
-      total_amount,
+      quoted_amount,
       customer_id,
       provider_id,
       provider_profiles (
@@ -240,7 +246,7 @@ export async function listBookingsWithFallback(): Promise<DashboardBooking[]> {
       provider: providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "") || "Provider",
       customer: profileNames.get(row.customer_id ?? "") || "Customer",
       status: formatStatus(row.booking_status),
-      amount: formatCurrency(row.total_amount ?? 0),
+      amount: formatCurrency(row.quoted_amount ?? 0),
       schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
       paymentMethod: paymentMethodMap.get(row.id) || "-",
     } satisfies DashboardBooking;
@@ -250,9 +256,11 @@ export async function listBookingsWithFallback(): Promise<DashboardBooking[]> {
 export function buildBookingStats(rows: DashboardBooking[]) {
   const openTasks = rows.filter((row) => {
     const normalized = row.status.trim().toLowerCase();
-    return !["completed", "cancelled", "canceled", "declined"].includes(normalized);
+    return !["completed", "paid", "review requested", "reviewed", "cancelled", "canceled", "declined"].includes(normalized);
   }).length;
-  const completedCount = rows.filter((row) => row.status.trim().toLowerCase() === "completed").length;
+  const completedCount = rows.filter((row) =>
+    ["completed", "paid", "review requested", "reviewed"].includes(row.status.trim().toLowerCase())
+  ).length;
   const cancelledCount = rows.filter((row) => {
     const normalized = row.status.trim().toLowerCase();
     return ["cancelled", "canceled", "declined"].includes(normalized);

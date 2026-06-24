@@ -313,7 +313,11 @@ export function UserProfilePage() {
       relatedBookings.map((booking) => {
         const normalized = booking.status.trim().toLowerCase();
         const taskType =
-          normalized.includes("cancel") ? "cancelled" : normalized.includes("pending") ? "pending" : "booked";
+          normalized.includes("cancel") || normalized === "declined"
+            ? "cancelled"
+            : ["pending", "accepted", "on the way", "arrived", "in progress"].includes(normalized)
+              ? "pending"
+              : "booked";
         return {
           ...booking,
           taskType: taskType as Exclude<UserTaskStatusKey, "all">,

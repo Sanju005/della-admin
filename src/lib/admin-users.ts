@@ -111,7 +111,7 @@ type LiveBookingRow = {
   booking_status?: string | null;
   scheduled_date?: string | null;
   scheduled_start_time?: string | null;
-  total_amount?: number | null;
+  quoted_amount?: number | null;
   customer_id?: string | null;
   provider_id?: string | null;
   provider_profiles?: ProfileRelation;
@@ -716,6 +716,10 @@ function mapBookingStatus(status?: string | null) {
     return "In Progress";
   }
 
+  if (normalized === "review_requested") {
+    return "Review Requested";
+  }
+
   return toTitleCase(normalized);
 }
 
@@ -733,7 +737,7 @@ async function tryFetchLiveBookings(userId: string, role: string, profileNames: 
       booking_status,
       scheduled_date,
       scheduled_start_time,
-      total_amount,
+      quoted_amount,
       customer_id,
       provider_id,
       provider_profiles (
@@ -763,7 +767,7 @@ async function tryFetchLiveBookings(userId: string, role: string, profileNames: 
       provider: providerName || "DELLA Provider",
       customer: customerName || "Customer",
       status: mapBookingStatus(row.booking_status),
-      amount: formatCurrency(row.total_amount ?? 0),
+      amount: formatCurrency(row.quoted_amount ?? 0),
       schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
     } satisfies DashboardBooking;
   });
@@ -908,10 +912,12 @@ function buildMetrics(
   }
 
   const completedCount = relatedBookings.filter((booking) =>
-    ["completed", "confirmed"].includes(booking.status.trim().toLowerCase())
+    ["completed", "confirmed", "paid", "review requested", "reviewed"].includes(
+      booking.status.trim().toLowerCase()
+    )
   ).length;
   const cancelledCount = relatedBookings.filter((booking) =>
-    ["cancelled", "canceled"].includes(booking.status.trim().toLowerCase())
+    ["cancelled", "canceled", "declined"].includes(booking.status.trim().toLowerCase())
   ).length;
   const totalAmount = relatedPayments.reduce((sum, payment) => {
     const numeric = Number(payment.amount.replace(/[^0-9.]/g, ""));

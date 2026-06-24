@@ -287,6 +287,8 @@ export type ProviderPayoutRow = {
   companyCommissionAmount?: string;
   commissionStatus?: string;
   companyPaidAt?: string;
+  providerCompanyPaymentProof?: PaymentProofAsset | null;
+  customerPaymentProof?: PaymentProofAsset | null;
 };
 
 export type ProviderDetailRecord = {

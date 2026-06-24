@@ -283,6 +283,88 @@ function SummaryStrip({
   );
 }
 
+function pillToneClasses(status: string) {
+  const normalized = status.trim().toLowerCase();
+
+  if (["approved", "verified", "active", "paid"].includes(normalized)) {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  }
+
+  if (["pending", "document review", "needs review"].includes(normalized)) {
+    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  }
+
+  if (["paused", "suspended", "rejected", "inactive"].includes(normalized)) {
+    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+  }
+
+  return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+}
+
+function isImageProofUrl(value: string | undefined) {
+  if (!value?.trim()) {
+    return false;
+  }
+
+  return /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
+}
+
+function isCashMethod(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "cash";
+}
+
+function ProofLinkCard({
+  title,
+  fileName,
+  url,
+  mimeType,
+  note,
+}: {
+  title: string;
+  fileName?: string;
+  url?: string;
+  mimeType?: string;
+  note?: string;
+}) {
+  if (!url) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="mt-2 text-sm text-slate-500">No proof uploaded yet.</p>
+        {note ? <p className="mt-1 text-[12px] text-slate-400">{note}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          <p className="mt-1 text-[13px] text-slate-600">{fileName || "Uploaded proof file"}</p>
+          {mimeType ? <p className="mt-1 text-[12px] text-slate-400">{mimeType}</p> : null}
+          {note ? <p className="mt-1 text-[12px] text-slate-400">{note}</p> : null}
+        </div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+        >
+          <Eye className="size-4" />
+          Open
+        </a>
+      </div>
+      {isImageProofUrl(url) ? (
+        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100 bg-white">
+          <img src={url} alt={fileName || title} className="max-h-56 w-full object-contain" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProviderProfilePage() {
   const { providerId = "" } = useParams();
   const navigate = useNavigate();
@@ -454,6 +536,29 @@ export function ProviderProfilePage() {
     const dateFiltered = paymentRows.filter((row) => matchesDateFilter(row.date, paymentDateFilter));
     return sortByRecentOrAz(dateFiltered, paymentSort);
   }, [paymentRows, paymentDateFilter, paymentSort]);
+
+  const cashPaymentRows = useMemo(
+    () => filteredPaymentRows.filter((row) => isCashMethod(row.type)),
+    [filteredPaymentRows]
+  );
+  const pendingCompanyCashRows = useMemo(
+    () =>
+      cashPaymentRows.filter(
+        (row) => (row.commissionStatus ?? "").trim().toLowerCase() !== "paid"
+      ),
+    [cashPaymentRows]
+  );
+  const paidCompanyCashRows = useMemo(
+    () =>
+      cashPaymentRows.filter(
+        (row) => (row.commissionStatus ?? "").trim().toLowerCase() === "paid"
+      ),
+    [cashPaymentRows]
+  );
+  const nonCashPaymentRows = useMemo(
+    () => filteredPaymentRows.filter((row) => !isCashMethod(row.type)),
+    [filteredPaymentRows]
+  );
 
   const totalEarningsValue = filteredPaymentRows.reduce((sum, row) => sum + row.numericAmount, 0);
   const grossCollectionsValue = filteredPaymentRows.reduce((sum, row) => sum + row.numericGrossAmount, 0);
@@ -1212,8 +1317,8 @@ export function ProviderProfilePage() {
                 <h1 className="font-display text-[1.65rem] font-extrabold tracking-tight text-slate-950">
                   {detail.name}
                 </h1>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                  {detail.status}
+                <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${pillToneClasses(detail.approvalStatus || detail.status)}`}>
+                  {detail.approvalStatus || detail.status}
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">Provider ID: {detail.providerId}</p>
@@ -1225,8 +1330,8 @@ export function ProviderProfilePage() {
                 <PillBadge tone={detail.phoneVerified ? "emerald" : "slate"}>
                   <Phone className="size-3.5" /> {detail.phoneVerified ? "Phone Verified" : "Phone Pending"}
                 </PillBadge>
-                <PillBadge tone={detail.identityVerified ? "emerald" : "slate"}>
-                  <ShieldCheck className="size-3.5" /> {detail.identityVerified ? "KYC Verified" : "KYC Pending"}
+                <PillBadge tone={detail.kycStatus === "Verified" ? "emerald" : "slate"}>
+                  <ShieldCheck className="size-3.5" /> {detail.kycStatus === "Verified" ? "KYC Verified" : "KYC Pending"}
                 </PillBadge>
                 <PillBadge tone="blue">{detail.roleBadge}</PillBadge>
               </div>
@@ -1460,7 +1565,115 @@ export function ProviderProfilePage() {
             ]}
           />
 
-          <TableShell title="Payment Records">
+          <SummaryStrip
+            items={[
+              {
+                label: "Cash Pending to Company",
+                value: String(pendingCompanyCashRows.length),
+                note: "Cash jobs waiting for provider-to-company settlement",
+              },
+              {
+                label: "Cash Paid to Company",
+                value: String(paidCompanyCashRows.length),
+                note: "Cash jobs already settled with company proof",
+              },
+              {
+                label: "Other Payment Methods",
+                value: String(nonCashPaymentRows.length),
+                note: "Card, FPX, wallet, and other non-cash methods",
+              },
+            ]}
+          />
+
+          <TableShell title="Cash Pending to Company">
+            <table className="min-w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400">
+                  <th className="pb-3 font-semibold">ID</th>
+                  <th className="pb-3 font-semibold">Booking</th>
+                  <th className="pb-3 font-semibold">Customer Paid</th>
+                  <th className="pb-3 font-semibold">Gross</th>
+                  <th className="pb-3 font-semibold">Net</th>
+                  <th className="pb-3 font-semibold">Due to Company</th>
+                  <th className="pb-3 font-semibold">Company Status</th>
+                  <th className="pb-3 font-semibold">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingCompanyCashRows.length ? (
+                  pendingCompanyCashRows.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50">
+                      <td className="py-3 font-semibold text-slate-700">{row.id}</td>
+                      <td className="py-3 text-slate-700">{row.bookingId ?? "-"}</td>
+                      <td className="py-3 text-slate-700">{row.status}</td>
+                      <td className="py-3 text-slate-700">{row.grossAmount ?? row.amount}</td>
+                      <td className="py-3 text-slate-700">{row.amount}</td>
+                      <td className="py-3 text-slate-700">{row.companyCommissionAmount ?? "RM0.00"}</td>
+                      <td className="py-3"><MiniStatus status={row.commissionStatus ?? "Unpaid"} /></td>
+                      <td className="py-3 text-slate-500">{row.date}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-sm text-slate-500">
+                      No cash settlements are pending to company for this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+
+          <TableShell title="Cash Paid to Company">
+            <table className="min-w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400">
+                  <th className="pb-3 font-semibold">ID</th>
+                  <th className="pb-3 font-semibold">Booking</th>
+                  <th className="pb-3 font-semibold">Gross</th>
+                  <th className="pb-3 font-semibold">Net</th>
+                  <th className="pb-3 font-semibold">Paid to Company</th>
+                  <th className="pb-3 font-semibold">Company Paid At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paidCompanyCashRows.length ? (
+                  paidCompanyCashRows.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50">
+                      <td className="py-3 font-semibold text-slate-700">{row.id}</td>
+                      <td className="py-3 text-slate-700">{row.bookingId ?? "-"}</td>
+                      <td className="py-3 text-slate-700">{row.grossAmount ?? row.amount}</td>
+                      <td className="py-3 text-slate-700">{row.amount}</td>
+                      <td className="py-3 text-slate-700">{row.companyCommissionAmount ?? "RM0.00"}</td>
+                      <td className="py-3 text-slate-500">{row.companyPaidAt ?? "-"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-sm text-slate-500">
+                      No cash-to-company payments have been marked paid for this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {paidCompanyCashRows.length ? (
+              <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                {paidCompanyCashRows.map((row) => (
+                  <ProofLinkCard
+                    key={`proof-${row.id}`}
+                    title={`${row.id} company payment proof`}
+                    fileName={row.providerCompanyPaymentProof?.fileName}
+                    url={row.providerCompanyPaymentProof?.url}
+                    mimeType={row.providerCompanyPaymentProof?.mimeType}
+                    note={row.companyPaidAt ? `Marked paid on ${row.companyPaidAt}` : undefined}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </TableShell>
+
+          <TableShell title="Other Payment Methods">
             <table className="min-w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400">
@@ -1470,14 +1683,13 @@ export function ProviderProfilePage() {
                   <th className="pb-3 font-semibold">Gross</th>
                   <th className="pb-3 font-semibold">Net</th>
                   <th className="pb-3 font-semibold">Commission</th>
-                  <th className="pb-3 font-semibold">Commission Status</th>
-                  <th className="pb-3 font-semibold">Date</th>
                   <th className="pb-3 font-semibold">Payment Status</th>
+                  <th className="pb-3 font-semibold">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredPaymentRows.length ? (
-                  filteredPaymentRows.map((row) => (
+                {nonCashPaymentRows.length ? (
+                  nonCashPaymentRows.map((row) => (
                     <tr key={row.id} className="border-b border-slate-50">
                       <td className="py-3 font-semibold text-slate-700">{row.id}</td>
                       <td className="py-3 text-slate-700">{row.bookingId ?? "-"}</td>
@@ -1485,15 +1697,14 @@ export function ProviderProfilePage() {
                       <td className="py-3 text-slate-700">{row.grossAmount ?? row.amount}</td>
                       <td className="py-3 text-slate-700">{row.amount}</td>
                       <td className="py-3 text-slate-700">{row.companyCommissionAmount ?? "RM0.00"}</td>
-                      <td className="py-3"><MiniStatus status={row.commissionStatus ?? "Unpaid"} /></td>
-                      <td className="py-3 text-slate-500">{row.date}</td>
                       <td className="py-3"><MiniStatus status={row.status} /></td>
+                      <td className="py-3 text-slate-500">{row.date}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={9} className="py-6 text-center text-sm text-slate-500">
-                      No payments found for this filter.
+                    <td colSpan={8} className="py-6 text-center text-sm text-slate-500">
+                      No non-cash payment records found for this filter.
                     </td>
                   </tr>
                 )}

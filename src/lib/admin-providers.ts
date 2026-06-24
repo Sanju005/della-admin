@@ -128,7 +128,7 @@ type LiveBookingRow = {
   booking_status?: string | null;
   scheduled_date?: string | null;
   scheduled_start_time?: string | null;
-  total_amount?: number | null;
+  quoted_amount?: number | null;
   decline_reason?: string | null;
   customer_id?: string | null;
   provider_id?: string | null;
@@ -154,6 +154,12 @@ type LivePaymentRow = {
   company_payment_status?: string | null;
   company_paid_at?: string | null;
   provider_net_amount?: number | null;
+  customer_payment_proof_data_url?: string | null;
+  customer_payment_proof_file_name?: string | null;
+  customer_payment_proof_mime_type?: string | null;
+  provider_company_payment_proof_data_url?: string | null;
+  provider_company_payment_proof_file_name?: string | null;
+  provider_company_payment_proof_mime_type?: string | null;
   customer_id?: string | null;
   provider_id?: string | null;
 };
@@ -176,6 +182,11 @@ type LiveReportRow = {
   created_at?: string | null;
   reporter_id?: string | null;
   reported_user_id?: string | null;
+};
+
+type LoginAuditRow = {
+  id: string;
+  created_at?: string | null;
 };
 
 type ProviderProfilePayload = {
@@ -455,6 +466,10 @@ function mapTaskStatus(value?: string | null) {
     return "In Progress";
   }
 
+  if (normalized === "review_requested") {
+    return "Review Requested";
+  }
+
   if (normalized === "scheduled") {
     return "Confirmed";
   }
@@ -472,6 +487,26 @@ function formatDocumentStatus(verified: boolean, requested: boolean) {
   }
 
   return "Pending";
+}
+
+function buildProofAsset(
+  label: string,
+  url: string | null | undefined,
+  fileName: string | null | undefined,
+  mimeType: string | null | undefined,
+) {
+  const trimmedUrl = url?.trim();
+
+  if (!trimmedUrl) {
+    return null;
+  }
+
+  return {
+    label,
+    url: trimmedUrl,
+    fileName: fileName?.trim() || undefined,
+    mimeType: mimeType?.trim() || undefined,
+  };
 }
 
 function findMockProviderRowByIdOrName(id: string, name?: string | null, email?: string | null) {
@@ -738,7 +773,7 @@ async function tryFetchProviderTasks(providerId: string) {
       booking_status,
       scheduled_date,
       scheduled_start_time,
-      total_amount,
+      quoted_amount,
       decline_reason,
       customer_id,
       provider_id,
@@ -764,7 +799,7 @@ async function tryFetchProviderPayments(providerId: string) {
 
   const { data, error } = await supabase
     .from("payments")
-    .select("id, booking_id, status, amount, payment_method, payment_option, created_at, company_commission_amount, company_payment_status, company_paid_at, provider_net_amount, provider_id")
+    .select("id, booking_id, status, amount, payment_method, payment_option, created_at, company_commission_amount, company_payment_status, company_paid_at, provider_net_amount, customer_payment_proof_data_url, customer_payment_proof_file_name, customer_payment_proof_mime_type, provider_company_payment_proof_data_url, provider_company_payment_proof_file_name, provider_company_payment_proof_mime_type, provider_id")
     .eq("provider_id", providerId)
     .order("created_at", { ascending: false })
     .limit(30);
@@ -814,13 +849,35 @@ async function tryFetchProviderReports(providerId: string) {
   return data as LiveReportRow[];
 }
 
+async function tryFetchProviderLastLogin(providerId: string) {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("login_audit_events")
+    .select("id, created_at")
+    .eq("user_id", providerId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as LoginAuditRow;
+}
+
 function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, string>): {
   completedTaskRows: ProviderTaskRow[];
   upcomingTaskRows: ProviderUpcomingTaskRow[];
   cancelledTaskRows: ProviderCancelledTaskRow[];
 } {
   const completedTaskRows = liveRows
-    .filter((row) => ["completed"].includes((row.booking_status ?? "").toLowerCase()))
+    .filter((row) =>
+      ["completed", "paid", "review_requested", "reviewed"].includes((row.booking_status ?? "").toLowerCase())
+    )
     .slice(0, 5)
     .map((row) => {
       const service = relationItem(row.provider_services);
@@ -829,13 +886,18 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
         service: humanizeService(service?.service_type),
         customer: customerNames.get(row.customer_id ?? "") || "Customer",
         date: formatDate(row.scheduled_date),
-        amount: formatCurrency(row.total_amount ?? 0),
+        amount: formatCurrency(row.quoted_amount ?? 0),
         status: mapTaskStatus(row.booking_status),
       };
     });
 
   const upcomingTaskRows = liveRows
-    .filter((row) => !["completed", "cancelled", "canceled"].includes((row.booking_status ?? "").toLowerCase()))
+    .filter(
+      (row) =>
+        !["completed", "paid", "review_requested", "reviewed", "cancelled", "canceled", "declined"].includes(
+          (row.booking_status ?? "").toLowerCase()
+        )
+    )
     .slice(0, 5)
     .map((row) => {
       const service = relationItem(row.provider_services);
@@ -844,7 +906,7 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
         service: humanizeService(service?.service_type),
         customer: customerNames.get(row.customer_id ?? "") || "Customer",
         schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
-        amount: formatCurrency(row.total_amount ?? 0),
+        amount: formatCurrency(row.quoted_amount ?? 0),
         status: mapTaskStatus(row.booking_status),
       };
     });
@@ -859,7 +921,7 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
         service: humanizeService(service?.service_type),
         customer: customerNames.get(row.customer_id ?? "") || "Customer",
         schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
-        amount: formatCurrency(row.total_amount ?? 0),
+        amount: formatCurrency(row.quoted_amount ?? 0),
         status: mapTaskStatus(row.booking_status),
         reason: row.decline_reason?.trim() || "No reason recorded",
       };
@@ -883,6 +945,18 @@ function buildPayoutRows(livePayments: LivePaymentRow[]): ProviderPayoutRow[] {
     companyCommissionAmount: formatCurrency(row.company_commission_amount ?? 0),
     commissionStatus: formatStatus(row.company_payment_status ?? "unpaid"),
     companyPaidAt: formatDateTime(row.company_paid_at),
+    customerPaymentProof: buildProofAsset(
+      "Customer payment proof",
+      row.customer_payment_proof_data_url,
+      row.customer_payment_proof_file_name,
+      row.customer_payment_proof_mime_type,
+    ),
+    providerCompanyPaymentProof: buildProofAsset(
+      "Provider company payment proof",
+      row.provider_company_payment_proof_data_url,
+      row.provider_company_payment_proof_file_name,
+      row.provider_company_payment_proof_mime_type,
+    ),
     date: formatDate(row.created_at),
     status: formatStatus(row.status),
   }));
@@ -922,10 +996,22 @@ function buildMetrics(
   }
 
   const totalTasks = taskRows?.length ?? 0;
-  const completedTasks = taskRows?.filter((row) => (row.booking_status ?? "").toLowerCase() === "completed").length ?? 0;
+  const completedTasks =
+    taskRows?.filter((row) =>
+      ["completed", "paid", "review_requested", "reviewed"].includes((row.booking_status ?? "").toLowerCase())
+    ).length ?? 0;
   const upcomingTasks =
-    taskRows?.filter((row) => !["completed", "cancelled", "canceled"].includes((row.booking_status ?? "").toLowerCase())).length ?? 0;
+    taskRows?.filter(
+      (row) =>
+        !["completed", "paid", "review_requested", "reviewed", "cancelled", "canceled", "declined"].includes(
+          (row.booking_status ?? "").toLowerCase()
+        )
+    ).length ?? 0;
   const totalEarnings = paymentRows?.reduce((sum, row) => sum + (row.provider_net_amount ?? 0), 0) ?? 0;
+  const withdrawn = paymentRows?.reduce((sum, row) => {
+    const isPaid = (row.company_payment_status ?? "").trim().toLowerCase() === "paid";
+    return isPaid ? sum + (row.provider_net_amount ?? 0) : sum;
+  }, 0) ?? 0;
   const completionRate = totalTasks > 0 ? `${((completedTasks / totalTasks) * 100).toFixed(1)}%` : "0.0%";
 
   return [
@@ -935,7 +1021,7 @@ function buildMetrics(
     fallbackMetrics[3] ?? { id: "lpm-4", label: "Active Time", value: "0h 0m", note: "Total logged hours", tone: "sky" },
     { id: "lpm-5", label: "Service Areas", value: String(serviceAreaCount || 1), note: "Areas covered", tone: "amber" },
     { id: "lpm-6", label: "Total Earnings", value: formatCurrency(totalEarnings), note: "All time", tone: "emerald" },
-    fallbackMetrics[6] ?? { id: "lpm-7", label: "Withdrawn", value: "RM0.00", note: "Total withdrawn", tone: "violet" },
+    { id: "lpm-7", label: "Withdrawn", value: formatCurrency(withdrawn), note: "Company-paid payouts", tone: "violet" },
     {
       id: "lpm-8",
       label: "Reviews",
@@ -1190,6 +1276,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const liveTasks = await tryFetchProviderTasks(providerId);
   const livePayments = await tryFetchProviderPayments(providerId);
   const liveReviews = await tryFetchProviderReviews(providerId);
+  const liveLastLogin = await tryFetchProviderLastLogin(providerId);
   const customerNames = await fetchProfileNameMap([
     ...(liveTasks?.map((row) => row.customer_id) ?? []),
     ...(liveReviews?.map((row) => row.customer_id) ?? []),
@@ -1220,7 +1307,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     status,
     visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     joinedAt: formatDateTime(liveAccount?.created_at) || baseDetail.joinedAt,
-    lastLogin: baseDetail.lastLogin,
+    lastLogin: liveLastLogin?.created_at ? formatDateTime(liveLastLogin.created_at) : baseDetail.lastLogin,
     serviceType: humanizeService(firstService?.service_type),
     serviceArea: liveProfile.service_location?.trim() || baseDetail.serviceArea,
     serviceRadiusKm: `${Number(liveProfile.service_radius_km ?? 0).toFixed(0)} km`,
@@ -1251,7 +1338,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     cancellationRate:
       liveTasks?.length
         ? `${(
-            (liveTasks.filter((row) => ["cancelled", "canceled"].includes((row.booking_status ?? "").toLowerCase())).length /
+            (liveTasks.filter((row) => ["cancelled", "canceled", "declined"].includes((row.booking_status ?? "").toLowerCase())).length /
               liveTasks.length) *
             100
           ).toFixed(1)}%`
@@ -1269,6 +1356,15 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
       livePayments?.length
         ? formatCurrency(livePayments.reduce((sum, row) => sum + (row.provider_net_amount ?? 0), 0))
         : baseDetail.totalEarnings,
+    withdrawn:
+      livePayments?.length
+        ? formatCurrency(
+            livePayments.reduce((sum, row) => {
+              const isPaid = (row.company_payment_status ?? "").trim().toLowerCase() === "paid";
+              return isPaid ? sum + (row.provider_net_amount ?? 0) : sum;
+            }, 0)
+          )
+        : baseDetail.withdrawn,
     reviewsCount: String(liveProfile.total_reviews ?? (Number(baseDetail.reviewsCount) || 0)),
     metrics,
     serviceAreas,
