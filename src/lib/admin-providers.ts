@@ -1540,13 +1540,13 @@ export async function getProviderReportsWithFallback(providerId: string): Promis
 
 export async function getProviderTaskDetail(rawBookingId: string): Promise<ProviderTaskDetail | null> {
   if (!rawBookingId.trim()) {
-    return null;
+    throw new Error("Booking ID is missing.");
   }
 
   const headers = await getAdminAccessHeaders();
 
   if (!headers) {
-    return null;
+    throw new Error("Admin session expired. Please sign in again.");
   }
 
   try {
@@ -1555,13 +1555,14 @@ export async function getProviderTaskDetail(rawBookingId: string): Promise<Provi
     });
 
     if (!response.ok) {
-      return null;
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error || "Unable to load booking detail.");
     }
 
     const payload = (await response.json()) as { detail?: ProviderTaskDetail | null };
     return payload.detail ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("Unable to load booking detail.");
   }
 }
 

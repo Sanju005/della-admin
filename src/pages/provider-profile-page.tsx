@@ -20,8 +20,9 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { TaskDetailPanel } from "../components/task-detail-panel";
 import { InfoRow, MetricTile, MiniStatus, PillBadge, SurfaceCard, TableShell } from "../components/user-detail-ui";
 import { providerDetailRecords } from "../data/provider-detail-mocks";
 import {
@@ -395,6 +396,7 @@ export function ProviderProfilePage() {
   const [reviewSort, setReviewSort] = useState<SortKey>("recent");
   const [reportDateFilter, setReportDateFilter] = useState<DateFilterKey>("all");
   const [reportSort, setReportSort] = useState<SortKey>("recent");
+  const taskDetailRef = useRef<HTMLDivElement | null>(null);
   const [form, setForm] = useState({
     name: provider?.name ?? "",
     email: provider?.email ?? "",
@@ -453,6 +455,18 @@ export function ProviderProfilePage() {
       active = false;
     };
   }, [providerId]);
+
+  useEffect(() => {
+    if (!taskDetailLoading && !selectedTaskDetail) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      taskDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+
+    return () => window.clearTimeout(timeout);
+  }, [taskDetailLoading, selectedTaskDetail]);
 
   function flash(nextMessage: string) {
     setMessage(nextMessage);
@@ -724,9 +738,20 @@ export function ProviderProfilePage() {
 
     setSelectedTaskRawId(rawId);
     setTaskDetailLoading(true);
-    const detail = await getProviderTaskDetail(rawId);
-    setSelectedTaskDetail(detail);
-    setTaskDetailLoading(false);
+    setMessage(null);
+
+    try {
+      const detail = await getProviderTaskDetail(rawId);
+      setSelectedTaskDetail(detail);
+      if (!detail) {
+        setMessage("No task detail was returned for this booking.");
+      }
+    } catch (error) {
+      setSelectedTaskDetail(null);
+      setMessage(error instanceof Error ? error.message : "Unable to load task detail.");
+    } finally {
+      setTaskDetailLoading(false);
+    }
   }
 
   async function handleDeactivate() {
@@ -1558,224 +1583,9 @@ export function ProviderProfilePage() {
             </table>
           </TableShell>
 
-          {taskDetailLoading ? (
-            <SurfaceCard title="Task Detail">
-              <p className="text-sm text-slate-500">Loading task detail...</p>
-            </SurfaceCard>
-          ) : selectedTaskDetail ? (
-            <SurfaceCard title={`Task Detail - ${selectedTaskDetail.bookingId}`}>
-              <div className="space-y-4">
-                <SummaryStrip
-                  items={[
-                    { label: "Booking ID", value: selectedTaskDetail.bookingId },
-                    { label: "Service", value: selectedTaskDetail.service },
-                    { label: "Customer", value: selectedTaskDetail.customer },
-                    { label: "Status", value: selectedTaskDetail.status },
-                    { label: "Amount", value: selectedTaskDetail.amount },
-                    { label: "Start Time", value: selectedTaskDetail.scheduledStart, note: "Scheduled start" },
-                    { label: "End Time", value: selectedTaskDetail.scheduledEnd, note: "Scheduled end" },
-                    { label: "Mode", value: selectedTaskDetail.bookingMode },
-                    { label: "Booked At", value: selectedTaskDetail.createdAt, note: "Request created" },
-                  ]}
-                />
-
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Task Notes</p>
-                    {selectedTaskDetail.notes.map((note) => (
-                      <div key={note.label}>
-                        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">{note.label}</p>
-                        <p className="mt-1 text-sm text-slate-700">{note.value}</p>
-                      </div>
-                    ))}
-                    <div>
-                      <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Schedule Window</p>
-                      <p className="mt-1 text-sm text-slate-700">{selectedTaskDetail.schedule}</p>
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Location</p>
-                      <p className="mt-1 text-sm text-slate-700">{selectedTaskDetail.location}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Task Path</p>
-                    {selectedTaskDetail.timeline.length ? (
-                      selectedTaskDetail.timeline.map((item) => (
-                        <div key={item.id} className="rounded-xl border border-slate-100 bg-white px-3 py-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                            {item.status ? <MiniStatus status={item.status} /> : null}
-                          </div>
-                          <p className="mt-1 text-[13px] text-slate-600">{item.note}</p>
-                          <p className="mt-1 text-[12px] text-slate-400">{item.time}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">No task timeline found.</p>
-                    )}
-                  </div>
-                </div>
-
-                <TableShell title="Status History">
-                  <table className="min-w-full text-left text-[13px]">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-slate-400">
-                        <th className="pb-3 font-semibold">From</th>
-                        <th className="pb-3 font-semibold">To</th>
-                        <th className="pb-3 font-semibold">Actor</th>
-                        <th className="pb-3 font-semibold">Note</th>
-                        <th className="pb-3 font-semibold">Time</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedTaskDetail.statusHistory.length ? (
-                        selectedTaskDetail.statusHistory.map((item) => (
-                          <tr key={item.id} className="border-b border-slate-50">
-                            <td className="py-3 text-slate-700">{item.fromStatus}</td>
-                            <td className="py-3 text-slate-700">{item.toStatus}</td>
-                            <td className="py-3 text-slate-700">
-                              <div className="font-medium">{item.actor}</div>
-                              <div className="text-xs text-slate-400">{item.actorRole}</div>
-                            </td>
-                            <td className="py-3 text-slate-700">{item.note}</td>
-                            <td className="py-3 text-slate-500">{item.time}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="py-4 text-sm text-slate-500">No status history found for this task.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </TableShell>
-
-                <div className="grid gap-4">
-                  <TableShell title="Payments">
-                    <table className="min-w-full text-left text-[13px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400">
-                          <th className="pb-3 font-semibold">ID</th>
-                          <th className="pb-3 font-semibold">Method</th>
-                          <th className="pb-3 font-semibold">Gross</th>
-                          <th className="pb-3 font-semibold">Provider Net</th>
-                          <th className="pb-3 font-semibold">Commission</th>
-                          <th className="pb-3 font-semibold">Company Status</th>
-                          <th className="pb-3 font-semibold">Status</th>
-                          <th className="pb-3 font-semibold">Time</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTaskDetail.payments.length ? (
-                          selectedTaskDetail.payments.map((payment) => (
-                            <tr key={payment.id} className="border-b border-slate-50">
-                              <td className="py-3 text-slate-700">{payment.id}</td>
-                              <td className="py-3 text-slate-700">{payment.method}</td>
-                              <td className="py-3 text-slate-700">{payment.amount}</td>
-                              <td className="py-3 text-slate-700">{payment.providerNetAmount}</td>
-                              <td className="py-3 text-slate-700">{payment.companyCommissionAmount}</td>
-                              <td className="py-3"><MiniStatus status={payment.companyStatus} /></td>
-                              <td className="py-3"><MiniStatus status={payment.status} /></td>
-                              <td className="py-3 text-slate-500">{payment.createdAt}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={8} className="py-4 text-sm text-slate-500">No payment records for this task.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </TableShell>
-
-                  <TableShell title="Reviews">
-                    <table className="min-w-full text-left text-[13px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400">
-                          <th className="pb-3 font-semibold">Reviewer</th>
-                          <th className="pb-3 font-semibold">For</th>
-                          <th className="pb-3 font-semibold">Rating</th>
-                          <th className="pb-3 font-semibold">Comment</th>
-                          <th className="pb-3 font-semibold">Reply</th>
-                          <th className="pb-3 font-semibold">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTaskDetail.reviews.length ? (
-                          selectedTaskDetail.reviews.map((review) => (
-                            <tr key={review.id} className="border-b border-slate-50">
-                              <td className="py-3 text-slate-700">
-                                <div className="font-medium">{review.reviewer}</div>
-                                <div className="text-xs text-slate-400">{review.reviewerRole}</div>
-                              </td>
-                              <td className="py-3 text-slate-700">{review.reviewFor}</td>
-                              <td className="py-3 text-slate-700">{review.rating}/5</td>
-                              <td className="py-3 text-slate-700">{review.comment}</td>
-                              <td className="py-3 text-slate-700">{review.reply ?? "-"}</td>
-                              <td className="py-3 text-slate-500">{review.createdAt}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="py-4 text-sm text-slate-500">No reviews linked to this task yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </TableShell>
-
-                  <TableShell title="Task Notes & Messages">
-                    <table className="min-w-full text-left text-[13px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400">
-                          <th className="pb-3 font-semibold">Sender</th>
-                          <th className="pb-3 font-semibold">Role</th>
-                          <th className="pb-3 font-semibold">Message</th>
-                          <th className="pb-3 font-semibold">Time</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTaskDetail.messages.length ? (
-                          selectedTaskDetail.messages.map((message) => (
-                            <tr key={message.id} className="border-b border-slate-50">
-                              <td className="py-3 text-slate-700">{message.sender}</td>
-                              <td className="py-3 text-slate-700">{message.senderRole}</td>
-                              <td className="py-3 text-slate-700">{message.message}</td>
-                              <td className="py-3 text-slate-500">{message.createdAt}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={4} className="py-4 text-sm text-slate-500">No additional messages for this task.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </TableShell>
-                </div>
-
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                  <p className="text-sm font-semibold text-slate-900">Task Related Images & Proofs</p>
-                  {selectedTaskDetail.images.length ? (
-                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                      {selectedTaskDetail.images.map((image) => (
-                        <ProofLinkCard
-                          key={image.id}
-                          title={image.label}
-                          fileName={image.fileName}
-                          url={image.url}
-                          mimeType={image.mimeType}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-slate-500">No task images are stored yet for this booking. When proof files or related uploads exist, they will appear here.</p>
-                  )}
-                </div>
-              </div>
-            </SurfaceCard>
-          ) : null}
+          <div ref={taskDetailRef}>
+            <TaskDetailPanel detail={selectedTaskDetail} loading={taskDetailLoading} />
+          </div>
         </div>
       ) : null}
       {activeTab === "Payments & Withdrawals" ? (

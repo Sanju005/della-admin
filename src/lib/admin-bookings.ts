@@ -241,6 +241,7 @@ export async function listBookingsWithFallback(): Promise<DashboardBooking[]> {
 
     return {
       id: formatEntityId(row.id),
+      rawId: row.id,
       bookingId: formatEntityId(row.id),
       service: humanizeService(providerService?.service_type),
       provider: providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "") || "Provider",

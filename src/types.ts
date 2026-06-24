@@ -53,6 +53,7 @@ export type StatusTone =
 
 export type DashboardBooking = {
   id: string;
+  rawId?: string;
   service: string;
   provider: string;
   customer: string;
