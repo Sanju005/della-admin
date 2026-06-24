@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DataTable } from "../components/data-table";
 import { TaskDetailPanel } from "../components/task-detail-panel";
+import { TaskDetailModal } from "../components/task-detail-modal";
 import { getProviderTaskDetail, type ProviderTaskDetail } from "../lib/admin-providers";
 import { buildBookingStats, listBookingsWithFallback } from "../lib/admin-bookings";
 import type { DashboardBooking } from "../types";
@@ -128,6 +129,20 @@ export function BookingsPage() {
           </div>
         ) : null}
       </div>
+
+      <TaskDetailModal
+        open={Boolean(selectedRowId && (detailLoading || selectedTaskDetail || detailError))}
+        detail={selectedTaskDetail}
+        loading={detailLoading}
+        error={detailError}
+        title="Booking Detail"
+        onClose={() => {
+          setSelectedRowId(null);
+          setSelectedTaskDetail(null);
+          setDetailError(null);
+          setDetailLoading(false);
+        }}
+      />
     </div>
   );
 }

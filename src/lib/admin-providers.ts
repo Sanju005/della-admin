@@ -1538,9 +1538,298 @@ export async function getProviderReportsWithFallback(providerId: string): Promis
   return buildReportRows(liveReports, profileNames);
 }
 
+function normalizeOptionalText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function pickFirstText(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = normalizeOptionalText(row[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderTaskDetail | null> {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data: bookingData, error: bookingError } = await supabase
+    .from("bookings")
+    .select(`
+      id,
+      customer_id,
+      provider_id,
+      booking_status,
+      booking_mode,
+      service_label,
+      location_text,
+      scheduled_date,
+      scheduled_start_time,
+      scheduled_end_time,
+      customer_note,
+      provider_response_note,
+      decline_reason,
+      quoted_amount,
+      created_at,
+      accepted_at,
+      on_the_way_at,
+      arrived_at,
+      completed_at,
+      paid_at,
+      review_requested_at,
+      reviewed_at,
+      cancelled_at
+    `)
+    .eq("id", rawBookingId)
+    .maybeSingle();
+
+  if (bookingError || !bookingData) {
+    return null;
+  }
+
+  const booking = bookingData as Record<string, unknown>;
+
+  const [paymentsResult, reviewsResult, messagesResult, historyResult] = await Promise.allSettled([
+    supabase
+      .from("payments")
+      .select(`
+        id,
+        booking_id,
+        amount,
+        payment_method,
+        payment_option,
+        status,
+        provider_net_amount,
+        company_commission_amount,
+        company_payment_status,
+        created_at,
+        customer_payment_proof_data_url,
+        customer_payment_proof_file_name,
+        customer_payment_proof_mime_type,
+        provider_company_payment_proof_data_url,
+        provider_company_payment_proof_file_name,
+        provider_company_payment_proof_mime_type
+      `)
+      .eq("booking_id", rawBookingId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("reviews")
+      .select("*")
+      .eq("provider_id", normalizeOptionalText(booking.provider_id))
+      .eq("customer_id", normalizeOptionalText(booking.customer_id))
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("booking_messages")
+      .select("id, sender_id, sender_role, message_text, created_at")
+      .eq("booking_id", rawBookingId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("booking_status_history")
+      .select("id, old_status, new_status, changed_by, changed_by_role, note, created_at")
+      .eq("booking_id", rawBookingId)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  const paymentsRows =
+    paymentsResult.status === "fulfilled" && !paymentsResult.value.error ? (paymentsResult.value.data ?? []) : [];
+  const reviewRows =
+    reviewsResult.status === "fulfilled" && !reviewsResult.value.error ? (reviewsResult.value.data ?? []) : [];
+  const messageRows =
+    messagesResult.status === "fulfilled" && !messagesResult.value.error ? (messagesResult.value.data ?? []) : [];
+  const historyRows =
+    historyResult.status === "fulfilled" && !historyResult.value.error ? (historyResult.value.data ?? []) : [];
+
+  const profileNames = await fetchProfileNameMap([
+    normalizeOptionalText(booking.customer_id),
+    normalizeOptionalText(booking.provider_id),
+    ...messageRows.map((row) => normalizeOptionalText((row as Record<string, unknown>).sender_id)),
+    ...historyRows.map((row) => normalizeOptionalText((row as Record<string, unknown>).changed_by)),
+    ...reviewRows.map((row) => normalizeOptionalText((row as Record<string, unknown>).reviewer_id)),
+  ]);
+
+  const messages = messageRows.map((row) => {
+    const item = row as Record<string, unknown>;
+    return {
+      id: String(item.id ?? ""),
+      sender: profileNames.get(normalizeOptionalText(item.sender_id)) || toTitleCase(normalizeOptionalText(item.sender_role) || "user"),
+      senderRole: toTitleCase(normalizeOptionalText(item.sender_role) || "user"),
+      message: normalizeOptionalText(item.message_text),
+      createdAt: formatDateTime(normalizeOptionalText(item.created_at) || null),
+    };
+  });
+
+  const timeline: ProviderTaskDetail["timeline"] = [
+    {
+      id: "created",
+      title: "Booking created",
+      note: "Customer created the booking request.",
+      time: formatDateTime(normalizeOptionalText(booking.created_at) || null),
+      status: "Created",
+    },
+    ...(normalizeOptionalText(booking.accepted_at)
+      ? [{ id: "accepted_at", title: "Accepted", note: normalizeOptionalText(booking.provider_response_note) || "Provider accepted the task.", time: formatDateTime(normalizeOptionalText(booking.accepted_at)), status: "Accepted" }]
+      : []),
+    ...(normalizeOptionalText(booking.on_the_way_at)
+      ? [{ id: "on_the_way_at", title: "On the way", note: "Provider started travelling to the task location.", time: formatDateTime(normalizeOptionalText(booking.on_the_way_at)), status: "On The Way" }]
+      : []),
+    ...(normalizeOptionalText(booking.arrived_at)
+      ? [{ id: "arrived_at", title: "Arrived", note: "Provider arrived on site.", time: formatDateTime(normalizeOptionalText(booking.arrived_at)), status: "Arrived" }]
+      : []),
+    ...(normalizeOptionalText(booking.completed_at)
+      ? [{ id: "completed_at", title: "Completed", note: "Provider marked the task as completed.", time: formatDateTime(normalizeOptionalText(booking.completed_at)), status: "Completed" }]
+      : []),
+    ...(normalizeOptionalText(booking.paid_at)
+      ? [{ id: "paid_at", title: "Payment done", note: "Payment was marked paid.", time: formatDateTime(normalizeOptionalText(booking.paid_at)), status: "Paid" }]
+      : []),
+    ...(normalizeOptionalText(booking.review_requested_at)
+      ? [{ id: "review_requested_at", title: "Review requested", note: "Provider requested customer review.", time: formatDateTime(normalizeOptionalText(booking.review_requested_at)), status: "Review Requested" }]
+      : []),
+    ...(normalizeOptionalText(booking.reviewed_at)
+      ? [{ id: "reviewed_at", title: "Reviewed", note: "Review flow was completed.", time: formatDateTime(normalizeOptionalText(booking.reviewed_at)), status: "Reviewed" }]
+      : []),
+    ...(normalizeOptionalText(booking.cancelled_at)
+      ? [{ id: "cancelled_at", title: "Cancelled", note: normalizeOptionalText(booking.decline_reason) || "Booking was cancelled.", time: formatDateTime(normalizeOptionalText(booking.cancelled_at)), status: "Cancelled" }]
+      : []),
+  ];
+
+  const statusHistory = historyRows.map((row) => {
+    const item = row as Record<string, unknown>;
+    return {
+      id: String(item.id ?? ""),
+      fromStatus: toTitleCase(normalizeOptionalText(item.old_status) || "Pending"),
+      toStatus: toTitleCase(normalizeOptionalText(item.new_status) || "Pending"),
+      actor: profileNames.get(normalizeOptionalText(item.changed_by)) || toTitleCase(normalizeOptionalText(item.changed_by_role) || "admin"),
+      actorRole: toTitleCase(normalizeOptionalText(item.changed_by_role) || "admin"),
+      note: normalizeOptionalText(item.note) || `${toTitleCase(normalizeOptionalText(item.changed_by_role) || "admin")} updated the task status.`,
+      time: formatDateTime(normalizeOptionalText(item.created_at) || null),
+    };
+  });
+
+  const images = paymentsRows.flatMap((row) => {
+    const item = row as Record<string, unknown>;
+    const results: ProviderTaskDetail["images"] = [];
+
+    const customerUrl = normalizeOptionalText(item.customer_payment_proof_data_url);
+    if (customerUrl) {
+      results.push({
+        id: `${String(item.id)}-customer-proof`,
+        label: "Customer payment proof",
+        url: customerUrl,
+        fileName: normalizeOptionalText(item.customer_payment_proof_file_name) || undefined,
+        mimeType: normalizeOptionalText(item.customer_payment_proof_mime_type) || undefined,
+      });
+    }
+
+    const providerUrl = normalizeOptionalText(item.provider_company_payment_proof_data_url);
+    if (providerUrl) {
+      results.push({
+        id: `${String(item.id)}-provider-proof`,
+        label: "Provider company payment proof",
+        url: providerUrl,
+        fileName: normalizeOptionalText(item.provider_company_payment_proof_file_name) || undefined,
+        mimeType: normalizeOptionalText(item.provider_company_payment_proof_mime_type) || undefined,
+      });
+    }
+
+    return results;
+  });
+
+  const reviews = reviewRows
+    .filter((row) => {
+      const item = row as Record<string, unknown>;
+      const bookingMatch = normalizeOptionalText(item.booking_id) === rawBookingId;
+      if (bookingMatch) {
+        return true;
+      }
+
+      return normalizeOptionalText(item.provider_id) === normalizeOptionalText(booking.provider_id) &&
+        normalizeOptionalText(item.customer_id) === normalizeOptionalText(booking.customer_id);
+    })
+    .map((row) => {
+      const item = row as Record<string, unknown>;
+      const reviewerRole = pickFirstText(item, ["reviewer_role", "author_role", "created_by_role"]) ||
+        (normalizeOptionalText(item.reviewer_id) === normalizeOptionalText(booking.provider_id) ? "Provider" : "Customer");
+      const reviewerName = normalizeOptionalText(item.reviewer_id)
+        ? profileNames.get(normalizeOptionalText(item.reviewer_id)) || reviewerRole
+        : reviewerRole;
+      const reviewFor = pickFirstText(item, ["reviewee_role", "target_role"]) ||
+        (reviewerRole.toLowerCase() === "provider" ? "Customer" : "Provider");
+
+      return {
+        id: String(item.id ?? ""),
+        reviewer: reviewerName,
+        reviewFor: toTitleCase(reviewFor),
+        reviewerRole: toTitleCase(reviewerRole),
+        rating: Math.max(1, Math.min(5, Math.round(Number(item.rating ?? 0) || 0))),
+        comment: normalizeOptionalText(item.comment) || "No review comment.",
+        reply: pickFirstText(item, ["reply", "provider_reply", "customer_reply", "admin_reply"]) || undefined,
+        createdAt: formatDateTime(normalizeOptionalText(item.created_at) || null),
+      };
+    });
+
+  return {
+    bookingId: rawBookingId.startsWith("#") ? rawBookingId : `#${rawBookingId.slice(0, 8).toUpperCase()}`,
+    rawBookingId,
+    service: normalizeOptionalText(booking.service_label) || "Service",
+    customer: profileNames.get(normalizeOptionalText(booking.customer_id)) || "Customer",
+    provider: profileNames.get(normalizeOptionalText(booking.provider_id)) || "Provider",
+    status: toTitleCase(normalizeOptionalText(booking.booking_status) || "pending"),
+    bookingMode: toTitleCase(normalizeOptionalText(booking.booking_mode) || "standard"),
+    amount: formatCurrency(Number(booking.quoted_amount ?? 0)),
+    schedule: formatSchedule(normalizeOptionalText(booking.scheduled_date), normalizeOptionalText(booking.scheduled_start_time)),
+    location: normalizeOptionalText(booking.location_text) || "Location not captured",
+    createdAt: formatDateTime(normalizeOptionalText(booking.created_at) || null),
+    scheduledStart: formatDateTime(
+      normalizeOptionalText(booking.scheduled_date) && normalizeOptionalText(booking.scheduled_start_time)
+        ? `${normalizeOptionalText(booking.scheduled_date)}T${normalizeOptionalText(booking.scheduled_start_time)}`
+        : null
+    ),
+    scheduledEnd: formatDateTime(
+      normalizeOptionalText(booking.scheduled_date) && normalizeOptionalText(booking.scheduled_end_time)
+        ? `${normalizeOptionalText(booking.scheduled_date)}T${normalizeOptionalText(booking.scheduled_end_time)}`
+        : null
+    ),
+    notes: [
+      { label: "Customer note", value: normalizeOptionalText(booking.customer_note) || "No customer note." },
+      { label: "Provider response", value: normalizeOptionalText(booking.provider_response_note) || "No provider response note." },
+      { label: "Decline / cancel note", value: normalizeOptionalText(booking.decline_reason) || "No decline or cancellation note." },
+    ],
+    timeline,
+    statusHistory,
+    payments: paymentsRows.map((row) => {
+      const item = row as Record<string, unknown>;
+      return {
+        id: String(item.id ?? "").startsWith("#") ? String(item.id) : `#${String(item.id ?? "").slice(0, 8).toUpperCase()}`,
+        amount: formatCurrency(Number(item.amount ?? 0)),
+        method: normalizeOptionalText(item.payment_option) || normalizeOptionalText(item.payment_method) || "Payment",
+        status: toTitleCase(normalizeOptionalText(item.status) || "pending"),
+        providerNetAmount: formatCurrency(Number(item.provider_net_amount ?? 0)),
+        companyCommissionAmount: formatCurrency(Number(item.company_commission_amount ?? 0)),
+        companyStatus: toTitleCase(normalizeOptionalText(item.company_payment_status) || "unpaid"),
+        createdAt: formatDateTime(normalizeOptionalText(item.created_at) || null),
+      };
+    }),
+    reviews,
+    messages,
+    images,
+  };
+}
+
 export async function getProviderTaskDetail(rawBookingId: string): Promise<ProviderTaskDetail | null> {
   if (!rawBookingId.trim()) {
     throw new Error("Booking ID is missing.");
+  }
+
+  const directDetail = await tryFetchTaskDetailDirect(rawBookingId);
+
+  if (directDetail) {
+    return directDetail;
   }
 
   const headers = await getAdminAccessHeaders();

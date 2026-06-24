@@ -23,6 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TaskDetailPanel } from "../components/task-detail-panel";
+import { TaskDetailModal } from "../components/task-detail-modal";
 import { InfoRow, MetricTile, MiniStatus, PillBadge, SurfaceCard, TableShell } from "../components/user-detail-ui";
 import { providerDetailRecords } from "../data/provider-detail-mocks";
 import {
@@ -1586,6 +1587,20 @@ export function ProviderProfilePage() {
           <div ref={taskDetailRef}>
             <TaskDetailPanel detail={selectedTaskDetail} loading={taskDetailLoading} />
           </div>
+
+          <TaskDetailModal
+            open={Boolean(selectedTaskRawId && (taskDetailLoading || selectedTaskDetail || message))}
+            detail={selectedTaskDetail}
+            loading={taskDetailLoading}
+            error={message}
+            title="Task Detail"
+            onClose={() => {
+              setSelectedTaskRawId(null);
+              setSelectedTaskDetail(null);
+              setTaskDetailLoading(false);
+              setMessage(null);
+            }}
+          />
         </div>
       ) : null}
       {activeTab === "Payments & Withdrawals" ? (
