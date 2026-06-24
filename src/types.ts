@@ -59,6 +59,15 @@ export type DashboardBooking = {
   status: string;
   amount: string;
   schedule: string;
+  bookingId?: string;
+  paymentMethod?: string;
+};
+
+export type PaymentProofAsset = {
+  label: string;
+  url: string;
+  fileName?: string;
+  mimeType?: string;
 };
 
 export type PaymentRow = {
@@ -69,6 +78,13 @@ export type PaymentRow = {
   method: string;
   status: string;
   date: string;
+  bookingId?: string;
+  providerNetAmount?: string;
+  companyCommissionAmount?: string;
+  commissionStatus?: string;
+  companyPaidAt?: string;
+  customerPaymentProof?: PaymentProofAsset | null;
+  providerCompanyPaymentProof?: PaymentProofAsset | null;
 };
 
 export type UserRow = {
@@ -265,6 +281,12 @@ export type ProviderPayoutRow = {
   amount: string;
   date: string;
   status: string;
+  bookingId?: string;
+  grossAmount?: string;
+  providerNetAmount?: string;
+  companyCommissionAmount?: string;
+  commissionStatus?: string;
+  companyPaidAt?: string;
 };
 
 export type ProviderDetailRecord = {

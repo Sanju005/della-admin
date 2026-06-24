@@ -441,7 +441,9 @@ export function ProviderProfilePage() {
     () =>
       safeDetail.payoutRows.map((row) => ({
         ...row,
-        numericAmount: parseCurrencyValue(row.amount),
+        numericAmount: parseCurrencyValue(row.providerNetAmount ?? row.amount),
+        numericGrossAmount: parseCurrencyValue(row.grossAmount ?? "RM0.00"),
+        numericCommissionAmount: parseCurrencyValue(row.companyCommissionAmount ?? "RM0.00"),
         sortLabel: row.type,
         sortDate: row.date,
       })),
@@ -454,8 +456,11 @@ export function ProviderProfilePage() {
   }, [paymentRows, paymentDateFilter, paymentSort]);
 
   const totalEarningsValue = filteredPaymentRows.reduce((sum, row) => sum + row.numericAmount, 0);
-  const commissionValue = totalEarningsValue * 0.2;
-  const afterCommissionValue = totalEarningsValue - commissionValue;
+  const grossCollectionsValue = filteredPaymentRows.reduce((sum, row) => sum + row.numericGrossAmount, 0);
+  const commissionValue = filteredPaymentRows.reduce((sum, row) => sum + row.numericCommissionAmount, 0);
+  const paidCommissionCount = filteredPaymentRows.filter(
+    (row) => (row.commissionStatus ?? "").trim().toLowerCase() === "paid"
+  ).length;
 
   const reviewRows = useMemo(
     () =>
@@ -1445,9 +1450,13 @@ export function ProviderProfilePage() {
 
           <SummaryStrip
             items={[
-              { label: "Total Earning", value: formatCurrencyValue(totalEarningsValue) },
-              { label: "Commission Deductions", value: formatCurrencyValue(commissionValue), note: "20% platform commission" },
-              { label: "After Commission", value: formatCurrencyValue(afterCommissionValue) },
+              { label: "Gross Paid", value: formatCurrencyValue(grossCollectionsValue) },
+              { label: "Provider Net", value: formatCurrencyValue(totalEarningsValue) },
+              {
+                label: "Commission",
+                value: formatCurrencyValue(commissionValue),
+                note: `${paidCommissionCount}/${filteredPaymentRows.length} marked paid`,
+              },
             ]}
           />
 
@@ -1456,10 +1465,14 @@ export function ProviderProfilePage() {
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400">
                   <th className="pb-3 font-semibold">ID</th>
-                  <th className="pb-3 font-semibold">Type</th>
-                  <th className="pb-3 font-semibold">Amount</th>
+                  <th className="pb-3 font-semibold">Booking</th>
+                  <th className="pb-3 font-semibold">Method</th>
+                  <th className="pb-3 font-semibold">Gross</th>
+                  <th className="pb-3 font-semibold">Net</th>
+                  <th className="pb-3 font-semibold">Commission</th>
+                  <th className="pb-3 font-semibold">Commission Status</th>
                   <th className="pb-3 font-semibold">Date</th>
-                  <th className="pb-3 font-semibold">Status</th>
+                  <th className="pb-3 font-semibold">Payment Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -1467,15 +1480,19 @@ export function ProviderProfilePage() {
                   filteredPaymentRows.map((row) => (
                     <tr key={row.id} className="border-b border-slate-50">
                       <td className="py-3 font-semibold text-slate-700">{row.id}</td>
+                      <td className="py-3 text-slate-700">{row.bookingId ?? "-"}</td>
                       <td className="py-3 text-slate-700">{row.type}</td>
+                      <td className="py-3 text-slate-700">{row.grossAmount ?? row.amount}</td>
                       <td className="py-3 text-slate-700">{row.amount}</td>
+                      <td className="py-3 text-slate-700">{row.companyCommissionAmount ?? "RM0.00"}</td>
+                      <td className="py-3"><MiniStatus status={row.commissionStatus ?? "Unpaid"} /></td>
                       <td className="py-3 text-slate-500">{row.date}</td>
                       <td className="py-3"><MiniStatus status={row.status} /></td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
+                    <td colSpan={9} className="py-6 text-center text-sm text-slate-500">
                       No payments found for this filter.
                     </td>
                   </tr>

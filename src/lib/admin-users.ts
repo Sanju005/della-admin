@@ -130,6 +130,7 @@ type LivePaymentRow = {
   status?: string | null;
   amount?: number | null;
   payment_method?: string | null;
+  payment_option?: string | null;
   created_at?: string | null;
   customer_id?: string | null;
   provider_id?: string | null;
@@ -782,6 +783,7 @@ async function tryFetchLivePayments(userId: string, role: string, profileNames: 
       status,
       amount,
       payment_method,
+      payment_option,
       created_at,
       customer_id,
       provider_id
@@ -803,7 +805,7 @@ async function tryFetchLivePayments(userId: string, role: string, profileNames: 
       customer: customerName || "Customer",
       provider: providerName || "Provider",
       amount: formatCurrency(row.amount ?? 0),
-      method: row.payment_method?.trim() || "Online",
+      method: row.payment_option?.trim() || row.payment_method?.trim() || "Online",
       status: mapBookingStatus(row.status),
       date: formatDate(row.created_at),
     };

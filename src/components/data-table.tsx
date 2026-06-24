@@ -10,6 +10,9 @@ type DataTableProps<T extends Record<string, unknown>> = {
   description: string;
   searchPlaceholder?: string;
   statusKey?: keyof T;
+  selectedRowId?: string | null;
+  onRowClick?: (row: T) => void;
+  emptyMessage?: string;
 };
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -19,6 +22,9 @@ export function DataTable<T extends Record<string, unknown>>({
   description,
   searchPlaceholder = "Search records...",
   statusKey,
+  selectedRowId,
+  onRowClick,
+  emptyMessage = "No records match the current search and filter.",
 }: DataTableProps<T>) {
   const [query, setQuery] = useState("");
   const [activeStatus, setActiveStatus] = useState("All");
@@ -113,7 +119,17 @@ export function DataTable<T extends Record<string, unknown>>({
           </thead>
           <tbody>
             {filteredRows.map((row, rowIndex) => (
-              <tr key={String(row.id ?? rowIndex)} className="rounded-2xl bg-slate-50/80">
+              <tr
+                key={String(row.id ?? rowIndex)}
+                className={`rounded-2xl bg-slate-50/80 transition ${
+                  onRowClick ? "cursor-pointer hover:bg-slate-100/90" : ""
+                } ${
+                  selectedRowId && String(row.id ?? rowIndex) === selectedRowId
+                    ? "ring-1 ring-emerald-200"
+                    : ""
+                }`}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+              >
                 {columns.map((column) => {
                   const rawValue = row[column.key as keyof T];
                   return (
@@ -136,7 +152,7 @@ export function DataTable<T extends Record<string, unknown>>({
         </table>
         {filteredRows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-            No records match the current search and filter.
+            {emptyMessage}
           </div>
         ) : null}
       </div>

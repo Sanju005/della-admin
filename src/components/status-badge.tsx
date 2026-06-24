@@ -21,6 +21,7 @@ const statusToneMap: Record<string, StatusTone> = {
   in_progress: "sky",
   "in progress": "sky",
   pending: "amber",
+  unpaid: "amber",
   "needs review": "amber",
   open: "rose",
   flagged: "rose",

@@ -144,10 +144,16 @@ type LiveBookingRow = {
 
 type LivePaymentRow = {
   id: string;
+  booking_id?: string | null;
   status?: string | null;
   amount?: number | null;
   payment_method?: string | null;
+  payment_option?: string | null;
   created_at?: string | null;
+  company_commission_amount?: number | null;
+  company_payment_status?: string | null;
+  company_paid_at?: string | null;
+  provider_net_amount?: number | null;
   customer_id?: string | null;
   provider_id?: string | null;
 };
@@ -758,7 +764,7 @@ async function tryFetchProviderPayments(providerId: string) {
 
   const { data, error } = await supabase
     .from("payments")
-    .select("id, status, amount, payment_method, created_at, provider_id")
+    .select("id, booking_id, status, amount, payment_method, payment_option, created_at, company_commission_amount, company_payment_status, company_paid_at, provider_net_amount, provider_id")
     .eq("provider_id", providerId)
     .order("created_at", { ascending: false })
     .limit(30);
@@ -865,8 +871,18 @@ function buildTaskRows(liveRows: LiveBookingRow[], customerNames: Map<string, st
 function buildPayoutRows(livePayments: LivePaymentRow[]): ProviderPayoutRow[] {
   return livePayments.slice(0, 5).map((row) => ({
     id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
-    type: row.payment_method?.trim() || "Payment",
-    amount: formatCurrency(row.amount ?? 0),
+    bookingId: row.booking_id?.trim()
+      ? row.booking_id.startsWith("#")
+        ? row.booking_id
+        : `#${row.booking_id.slice(0, 8).toUpperCase()}`
+      : undefined,
+    type: row.payment_option?.trim() || row.payment_method?.trim() || "Payment",
+    amount: formatCurrency(row.provider_net_amount ?? 0),
+    grossAmount: formatCurrency(row.amount ?? 0),
+    providerNetAmount: formatCurrency(row.provider_net_amount ?? 0),
+    companyCommissionAmount: formatCurrency(row.company_commission_amount ?? 0),
+    commissionStatus: formatStatus(row.company_payment_status ?? "unpaid"),
+    companyPaidAt: formatDateTime(row.company_paid_at),
     date: formatDate(row.created_at),
     status: formatStatus(row.status),
   }));
@@ -909,7 +925,7 @@ function buildMetrics(
   const completedTasks = taskRows?.filter((row) => (row.booking_status ?? "").toLowerCase() === "completed").length ?? 0;
   const upcomingTasks =
     taskRows?.filter((row) => !["completed", "cancelled", "canceled"].includes((row.booking_status ?? "").toLowerCase())).length ?? 0;
-  const totalEarnings = paymentRows?.reduce((sum, row) => sum + (row.amount ?? 0), 0) ?? 0;
+  const totalEarnings = paymentRows?.reduce((sum, row) => sum + (row.provider_net_amount ?? 0), 0) ?? 0;
   const completionRate = totalTasks > 0 ? `${((completedTasks / totalTasks) * 100).toFixed(1)}%` : "0.0%";
 
   return [
@@ -1251,7 +1267,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     areaCount: String(serviceAreas.length),
     totalEarnings:
       livePayments?.length
-        ? formatCurrency(livePayments.reduce((sum, row) => sum + (row.amount ?? 0), 0))
+        ? formatCurrency(livePayments.reduce((sum, row) => sum + (row.provider_net_amount ?? 0), 0))
         : baseDetail.totalEarnings,
     reviewsCount: String(liveProfile.total_reviews ?? (Number(baseDetail.reviewsCount) || 0)),
     metrics,
