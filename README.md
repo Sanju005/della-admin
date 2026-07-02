@@ -24,6 +24,7 @@ For Cloudflare deployments, add the same values in:
 
 - `Workers & Pages` -> your project -> `Settings` -> `Variables and Secrets`
 - Add them as plain text environment variables for `Production` and `Preview`
+- Add `SUPABASE_SERVICE_ROLE_KEY` as a secret for admin-only worker actions like provider approval and payment settlement approval
 
 ## Scripts
 
@@ -55,3 +56,4 @@ Required Cloudflare env vars:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_ADMIN_RESET_REDIRECT_URL=https://admin.dellaapp.com/reset-password`
+- `SUPABASE_SERVICE_ROLE_KEY`

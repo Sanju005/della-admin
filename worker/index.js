@@ -92,7 +92,7 @@ function verifyAdminRequest(request, env) {
                     origin = request.headers.get("origin");
                     if (!adminClient) {
                         return [2 /*return*/, {
-                                error: json({ error: "Supabase admin credentials are missing." }, { status: 500 }, origin),
+                                error: json({ error: "Worker env is missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 }, origin),
                             }];
                     }
                     authorization = request.headers.get("authorization");

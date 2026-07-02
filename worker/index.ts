@@ -112,7 +112,7 @@ async function verifyAdminRequest(request: Request, env: Env): Promise<VerifiedA
 
   if (!adminClient) {
     return {
-      error: json({ error: "Supabase admin credentials are missing." }, { status: 500 }, origin),
+      error: json({ error: "Worker env is missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 }, origin),
     };
   }
 
