@@ -302,10 +302,10 @@ function handleProviderVerification(request, env) {
 }
 function handlePaymentSettlement(request, env) {
     return __awaiter(this, void 0, void 0, function () {
-        var origin, verified, payload, paymentId, adminClient, _a, payment, paymentError, paymentRow, alreadyPaid, approvedAt, _b, updatedPayment, updateError;
-        var _c, _d, _e, _f, _g;
-        return __generator(this, function (_h) {
-            switch (_h.label) {
+        var origin, verified, payload, paymentId, adminClient, _a, payment, paymentError, paymentRow, hasSettlementProof, alreadyPaid, approvedAt, _b, updatedPayment, updateError;
+        var _c, _d, _e, _f, _g, _h;
+        return __generator(this, function (_j) {
+            switch (_j.label) {
                 case 0:
                     origin = request.headers.get("origin");
                     if (request.method === "OPTIONS") {
@@ -319,13 +319,13 @@ function handlePaymentSettlement(request, env) {
                     }
                     return [4 /*yield*/, verifyAdminRequest(request, env)];
                 case 1:
-                    verified = _h.sent();
+                    verified = _j.sent();
                     if ("error" in verified) {
                         return [2 /*return*/, verified.error];
                     }
                     return [4 /*yield*/, request.json().catch(function () { return ({}); })];
                 case 2:
-                    payload = (_h.sent());
+                    payload = (_j.sent());
                     paymentId = (_d = (_c = payload.paymentId) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
                     if (payload.action !== "mark_paid" || !paymentId) {
                         return [2 /*return*/, json({ error: "A valid paymentId is required." }, { status: 400 }, origin)];
@@ -333,19 +333,21 @@ function handlePaymentSettlement(request, env) {
                     adminClient = verified.adminClient;
                     return [4 /*yield*/, adminClient
                             .from("payments")
-                            .select("id, company_payment_status, company_paid_at, provider_company_payment_proof_data_url")
+                            .select("id, company_payment_status, company_paid_at, provider_company_payment_proof_data_url, customer_payment_proof_data_url")
                             .eq("id", paymentId)
                             .maybeSingle()];
                 case 3:
-                    _a = _h.sent(), payment = _a.data, paymentError = _a.error;
+                    _a = _j.sent(), payment = _a.data, paymentError = _a.error;
                     paymentRow = (_e = payment) !== null && _e !== void 0 ? _e : null;
                     if (paymentError || !paymentRow) {
                         return [2 /*return*/, json({ error: "Payment record was not found." }, { status: 404 }, origin)];
                     }
-                    if (!((_f = paymentRow.provider_company_payment_proof_data_url) === null || _f === void 0 ? void 0 : _f.trim())) {
+                    hasSettlementProof = Boolean((_f = paymentRow.provider_company_payment_proof_data_url) === null || _f === void 0 ? void 0 : _f.trim()) ||
+                        Boolean((_g = paymentRow.customer_payment_proof_data_url) === null || _g === void 0 ? void 0 : _g.trim());
+                    if (!hasSettlementProof) {
                         return [2 /*return*/, json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin)];
                     }
-                    alreadyPaid = ((_g = paymentRow.company_payment_status) !== null && _g !== void 0 ? _g : "").trim().toLowerCase() === "paid";
+                    alreadyPaid = ((_h = paymentRow.company_payment_status) !== null && _h !== void 0 ? _h : "").trim().toLowerCase() === "paid";
                     if (alreadyPaid) {
                         return [2 /*return*/, json({
                                 success: true,
@@ -367,7 +369,7 @@ function handlePaymentSettlement(request, env) {
                             .select("id, company_payment_status, company_paid_at")
                             .maybeSingle()];
                 case 4:
-                    _b = _h.sent(), updatedPayment = _b.data, updateError = _b.error;
+                    _b = _j.sent(), updatedPayment = _b.data, updateError = _b.error;
                     if (updateError || !updatedPayment) {
                         return [2 /*return*/, json({ error: (updateError === null || updateError === void 0 ? void 0 : updateError.message) || "Unable to approve provider commission payment." }, { status: 500 }, origin)];
                     }

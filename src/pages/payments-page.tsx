@@ -145,7 +145,9 @@ export function PaymentsPage() {
     () => rows.find((row) => row.id === selectedPaymentId) ?? rows[0] ?? null,
     [rows, selectedPaymentId],
   );
-  const companyProofUploaded = Boolean(selectedPayment?.providerCompanyPaymentProof?.url?.trim());
+  const settlementProofAsset =
+    selectedPayment?.providerCompanyPaymentProof ?? selectedPayment?.customerPaymentProof ?? null;
+  const companyProofUploaded = Boolean(settlementProofAsset?.url?.trim());
   const isCommissionPaid = (selectedPayment?.commissionStatus ?? "").trim().toLowerCase() === "paid";
 
   async function handleApprovePayment() {
@@ -275,7 +277,7 @@ export function PaymentsPage() {
             />
             <ProofPreviewCard
               title="Provider Company Payment Proof"
-              asset={selectedPayment.providerCompanyPaymentProof}
+              asset={selectedPayment.providerCompanyPaymentProof ?? selectedPayment.customerPaymentProof}
             />
           </div>
 

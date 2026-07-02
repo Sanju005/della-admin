@@ -56,6 +56,7 @@ type PaymentSettlementRow = {
   company_payment_status: string | null;
   company_paid_at: string | null;
   provider_company_payment_proof_data_url: string | null;
+  customer_payment_proof_data_url: string | null;
 };
 
 const allowedAdminRoles = new Set(["super_admin", "admin", "manager", "customer_care"]);
@@ -369,7 +370,7 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
   const { adminClient } = verified;
   const { data: payment, error: paymentError } = await adminClient
     .from("payments")
-    .select("id, company_payment_status, company_paid_at, provider_company_payment_proof_data_url")
+    .select("id, company_payment_status, company_paid_at, provider_company_payment_proof_data_url, customer_payment_proof_data_url")
     .eq("id", paymentId)
     .maybeSingle();
 
@@ -379,7 +380,11 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
     return json({ error: "Payment record was not found." }, { status: 404 }, origin);
   }
 
-  if (!paymentRow.provider_company_payment_proof_data_url?.trim()) {
+  const hasSettlementProof =
+    Boolean(paymentRow.provider_company_payment_proof_data_url?.trim()) ||
+    Boolean(paymentRow.customer_payment_proof_data_url?.trim());
+
+  if (!hasSettlementProof) {
     return json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin);
   }
 
