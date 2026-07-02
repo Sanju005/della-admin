@@ -31,6 +31,11 @@ type VerificationAction =
       active?: boolean;
     };
 
+type PaymentSettlementAction = {
+  action: "mark_paid";
+  paymentId?: string;
+};
+
 type AdminProfileRow = {
   id: string;
   role: string | null;
@@ -44,6 +49,13 @@ type ProviderContactRow = {
 
 type ProviderProfileRow = {
   marketing_name: string | null;
+};
+
+type PaymentSettlementRow = {
+  id: string;
+  company_payment_status: string | null;
+  company_paid_at: string | null;
+  provider_company_payment_proof_data_url: string | null;
 };
 
 const allowedAdminRoles = new Set(["super_admin", "admin", "manager", "customer_care"]);
@@ -328,12 +340,92 @@ async function handleProviderVerification(request: Request, env: Env): Promise<R
   return json({ success: true, warning: emailResult.warning }, undefined, origin);
 }
 
+async function handlePaymentSettlement(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get("origin");
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(origin),
+    });
+  }
+
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed." }, { status: 405 }, origin);
+  }
+
+  const verified = await verifyAdminRequest(request, env);
+  if ("error" in verified) {
+    return verified.error;
+  }
+
+  const payload = (await request.json().catch(() => ({}))) as PaymentSettlementAction;
+  const paymentId = payload.paymentId?.trim() ?? "";
+
+  if (payload.action !== "mark_paid" || !paymentId) {
+    return json({ error: "A valid paymentId is required." }, { status: 400 }, origin);
+  }
+
+  const { adminClient } = verified;
+  const { data: payment, error: paymentError } = await adminClient
+    .from("payments")
+    .select("id, company_payment_status, company_paid_at, provider_company_payment_proof_data_url")
+    .eq("id", paymentId)
+    .maybeSingle();
+
+  const paymentRow = (payment as PaymentSettlementRow | null) ?? null;
+
+  if (paymentError || !paymentRow) {
+    return json({ error: "Payment record was not found." }, { status: 404 }, origin);
+  }
+
+  if (!paymentRow.provider_company_payment_proof_data_url?.trim()) {
+    return json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin);
+  }
+
+  const alreadyPaid = (paymentRow.company_payment_status ?? "").trim().toLowerCase() === "paid";
+  if (alreadyPaid) {
+    return json({
+      success: true,
+      payment: {
+        id: paymentRow.id,
+        company_payment_status: paymentRow.company_payment_status,
+        company_paid_at: paymentRow.company_paid_at,
+      },
+    }, undefined, origin);
+  }
+
+  const approvedAt = new Date().toISOString();
+  const { data: updatedPayment, error: updateError } = await adminClient
+    .from("payments")
+    .update({
+      company_payment_status: "paid",
+      company_paid_at: approvedAt,
+    })
+    .eq("id", paymentId)
+    .select("id, company_payment_status, company_paid_at")
+    .maybeSingle();
+
+  if (updateError || !updatedPayment) {
+    return json({ error: updateError?.message || "Unable to approve provider commission payment." }, { status: 500 }, origin);
+  }
+
+  return json({
+    success: true,
+    payment: updatedPayment,
+  }, undefined, origin);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/admin/providers/verification") {
       return handleProviderVerification(request, env);
+    }
+
+    if (url.pathname === "/api/admin/payments/settlement") {
+      return handlePaymentSettlement(request, env);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);

@@ -1,7 +1,8 @@
 import { ExternalLink, FileText, Image as ImageIcon, ReceiptText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "../components/data-table";
-import { buildPaymentStats, listPaymentsWithFallback } from "../lib/admin-payments";
+import { useAuth } from "../auth/auth-provider";
+import { approveCompanyPayment, buildPaymentStats, listPaymentsWithFallback } from "../lib/admin-payments";
 import type { PaymentProofAsset, PaymentRow } from "../types";
 
 function isImageProof(asset: PaymentProofAsset | null | undefined) {
@@ -109,9 +110,12 @@ function DetailStat({
 }
 
 export function PaymentsPage() {
+  const { session } = useAuth();
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [approvalPending, setApprovalPending] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -126,6 +130,7 @@ export function PaymentsPage() {
 
       setRows(nextRows);
       setSelectedPaymentId((current) => current ?? nextRows[0]?.id ?? null);
+      setApprovalError(null);
       setLoading(false);
     }
 
@@ -140,6 +145,40 @@ export function PaymentsPage() {
     () => rows.find((row) => row.id === selectedPaymentId) ?? rows[0] ?? null,
     [rows, selectedPaymentId],
   );
+  const companyProofUploaded = Boolean(selectedPayment?.providerCompanyPaymentProof?.url?.trim());
+  const isCommissionPaid = (selectedPayment?.commissionStatus ?? "").trim().toLowerCase() === "paid";
+
+  async function handleApprovePayment() {
+    if (!selectedPayment?.rawId || !session?.access_token || approvalPending) {
+      return;
+    }
+
+    setApprovalPending(true);
+    setApprovalError(null);
+
+    try {
+      await approveCompanyPayment({
+        accessToken: session.access_token,
+        paymentId: selectedPayment.rawId,
+      });
+
+      const nextRows = await listPaymentsWithFallback();
+      setRows(nextRows);
+      setSelectedPaymentId((current) => {
+        if (!current) {
+          return nextRows[0]?.id ?? null;
+        }
+
+        return nextRows.find((row) => row.id === current)?.id ?? nextRows[0]?.id ?? null;
+      });
+    } catch (error) {
+      setApprovalError(
+        error instanceof Error ? error.message : "Unable to approve provider commission payment.",
+      );
+    } finally {
+      setApprovalPending(false);
+    }
+  }
 
   if (loading && rows.length === 0) {
     return (
@@ -238,6 +277,41 @@ export function PaymentsPage() {
               title="Provider Company Payment Proof"
               asset={selectedPayment.providerCompanyPaymentProof}
             />
+          </div>
+
+          <div className="mt-6 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Provider to company settlement</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Review the uploaded payment slip, then mark this commission as paid so the provider app reflects the settlement.
+                </p>
+                {!companyProofUploaded ? (
+                  <p className="mt-2 text-sm text-amber-700">
+                    The provider has not uploaded a company payment slip yet.
+                  </p>
+                ) : null}
+                {approvalError ? (
+                  <p className="mt-2 text-sm text-rose-600">{approvalError}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleApprovePayment()}
+                disabled={approvalPending || isCommissionPaid || !companyProofUploaded || !session?.access_token}
+                className={`inline-flex min-w-[180px] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition ${
+                  approvalPending || isCommissionPaid || !companyProofUploaded || !session?.access_token
+                    ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                    : "bg-[linear-gradient(135deg,#0f8b3d,#16a34a)] text-white shadow-[0_18px_40px_rgba(15,139,61,0.28)] hover:brightness-105"
+                }`}
+              >
+                {approvalPending
+                  ? "Approving..."
+                  : isCommissionPaid
+                    ? "Marked Paid"
+                    : "Approve as Paid"}
+              </button>
+            </div>
           </div>
         </section>
       ) : null}

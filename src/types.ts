@@ -73,6 +73,7 @@ export type PaymentProofAsset = {
 
 export type PaymentRow = {
   id: string;
+  rawId?: string;
   customer: string;
   provider: string;
   amount: string;

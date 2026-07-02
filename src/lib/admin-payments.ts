@@ -35,6 +35,16 @@ type ProfileNameRow = {
   email: string | null;
 };
 
+type PaymentApprovalResponse = {
+  success?: boolean;
+  payment?: {
+    id?: string | null;
+    company_payment_status?: string | null;
+    company_paid_at?: string | null;
+  } | null;
+  error?: string;
+};
+
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -230,6 +240,7 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
 
     return {
       id: formatEntityId(row.id),
+      rawId: row.id,
       bookingId: formatEntityId(row.booking_id),
       customer: profileNames.get(row.customer_id ?? "") || "Customer",
       provider: profileNames.get(row.provider_id ?? "") || "Provider",
@@ -255,6 +266,31 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
       ),
     } satisfies PaymentRow;
   });
+}
+
+export async function approveCompanyPayment(params: {
+  accessToken: string;
+  paymentId: string;
+}) {
+  const response = await fetch("/api/admin/payments/settlement", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      action: "mark_paid",
+      paymentId: params.paymentId,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as PaymentApprovalResponse;
+
+  if (!response.ok || !payload.success) {
+    throw new Error(payload.error || "Unable to approve provider commission payment.");
+  }
+
+  return payload.payment ?? null;
 }
 
 function parseMoney(value: string | undefined) {

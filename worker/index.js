@@ -300,6 +300,85 @@ function handleProviderVerification(request, env) {
         });
     });
 }
+function handlePaymentSettlement(request, env) {
+    return __awaiter(this, void 0, void 0, function () {
+        var origin, verified, payload, paymentId, adminClient, _a, payment, paymentError, paymentRow, alreadyPaid, approvedAt, _b, updatedPayment, updateError;
+        var _c, _d, _e, _f, _g;
+        return __generator(this, function (_h) {
+            switch (_h.label) {
+                case 0:
+                    origin = request.headers.get("origin");
+                    if (request.method === "OPTIONS") {
+                        return [2 /*return*/, new Response(null, {
+                                status: 204,
+                                headers: corsHeaders(origin),
+                            })];
+                    }
+                    if (request.method !== "POST") {
+                        return [2 /*return*/, json({ error: "Method not allowed." }, { status: 405 }, origin)];
+                    }
+                    return [4 /*yield*/, verifyAdminRequest(request, env)];
+                case 1:
+                    verified = _h.sent();
+                    if ("error" in verified) {
+                        return [2 /*return*/, verified.error];
+                    }
+                    return [4 /*yield*/, request.json().catch(function () { return ({}); })];
+                case 2:
+                    payload = (_h.sent());
+                    paymentId = (_d = (_c = payload.paymentId) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
+                    if (payload.action !== "mark_paid" || !paymentId) {
+                        return [2 /*return*/, json({ error: "A valid paymentId is required." }, { status: 400 }, origin)];
+                    }
+                    adminClient = verified.adminClient;
+                    return [4 /*yield*/, adminClient
+                            .from("payments")
+                            .select("id, company_payment_status, company_paid_at, provider_company_payment_proof_data_url")
+                            .eq("id", paymentId)
+                            .maybeSingle()];
+                case 3:
+                    _a = _h.sent(), payment = _a.data, paymentError = _a.error;
+                    paymentRow = (_e = payment) !== null && _e !== void 0 ? _e : null;
+                    if (paymentError || !paymentRow) {
+                        return [2 /*return*/, json({ error: "Payment record was not found." }, { status: 404 }, origin)];
+                    }
+                    if (!((_f = paymentRow.provider_company_payment_proof_data_url) === null || _f === void 0 ? void 0 : _f.trim())) {
+                        return [2 /*return*/, json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin)];
+                    }
+                    alreadyPaid = ((_g = paymentRow.company_payment_status) !== null && _g !== void 0 ? _g : "").trim().toLowerCase() === "paid";
+                    if (alreadyPaid) {
+                        return [2 /*return*/, json({
+                                success: true,
+                                payment: {
+                                    id: paymentRow.id,
+                                    company_payment_status: paymentRow.company_payment_status,
+                                    company_paid_at: paymentRow.company_paid_at,
+                                },
+                            }, undefined, origin)];
+                    }
+                    approvedAt = new Date().toISOString();
+                    return [4 /*yield*/, adminClient
+                            .from("payments")
+                            .update({
+                            company_payment_status: "paid",
+                            company_paid_at: approvedAt,
+                        })
+                            .eq("id", paymentId)
+                            .select("id, company_payment_status, company_paid_at")
+                            .maybeSingle()];
+                case 4:
+                    _b = _h.sent(), updatedPayment = _b.data, updateError = _b.error;
+                    if (updateError || !updatedPayment) {
+                        return [2 /*return*/, json({ error: (updateError === null || updateError === void 0 ? void 0 : updateError.message) || "Unable to approve provider commission payment." }, { status: 500 }, origin)];
+                    }
+                    return [2 /*return*/, json({
+                            success: true,
+                            payment: updatedPayment,
+                        }, undefined, origin)];
+            }
+        });
+    });
+}
 export default {
     fetch: function (request, env) {
         return __awaiter(this, void 0, void 0, function () {
@@ -311,6 +390,9 @@ export default {
                         url = new URL(request.url);
                         if (url.pathname === "/api/admin/providers/verification") {
                             return [2 /*return*/, handleProviderVerification(request, env)];
+                        }
+                        if (url.pathname === "/api/admin/payments/settlement") {
+                            return [2 /*return*/, handlePaymentSettlement(request, env)];
                         }
                         return [4 /*yield*/, env.ASSETS.fetch(request)];
                     case 1:
