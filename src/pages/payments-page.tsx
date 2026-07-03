@@ -2,7 +2,7 @@ import { ExternalLink, FileText, Image as ImageIcon, ReceiptText } from "lucide-
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "../components/data-table";
 import { useAuth } from "../auth/auth-provider";
-import { approveCompanyPayment, buildPaymentStats, listPaymentsWithFallback } from "../lib/admin-payments";
+import { approveCompanyPayments, buildPaymentStats, listPaymentsWithFallback } from "../lib/admin-payments";
 import type { PaymentProofAsset, PaymentRow } from "../types";
 
 function isImageProof(asset: PaymentProofAsset | null | undefined) {
@@ -151,7 +151,7 @@ export function PaymentsPage() {
   const isCommissionPaid = (selectedPayment?.commissionStatus ?? "").trim().toLowerCase() === "paid";
 
   async function handleApprovePayment() {
-    if (!selectedPayment?.rawId || !session?.access_token || approvalPending) {
+    if (!selectedPayment?.unpaidRawIds?.length || !session?.access_token || approvalPending) {
       return;
     }
 
@@ -159,9 +159,9 @@ export function PaymentsPage() {
     setApprovalError(null);
 
     try {
-      await approveCompanyPayment({
+      await approveCompanyPayments({
         accessToken: session.access_token,
-        paymentId: selectedPayment.rawId,
+        paymentIds: selectedPayment.unpaidRawIds,
       });
 
       const nextRows = await listPaymentsWithFallback();
@@ -213,12 +213,13 @@ export function PaymentsPage() {
 
       <DataTable
         title="Payments"
-        description="Customer collections, company settlement state, and uploaded proof verification. Select a row to inspect both proof uploads."
+        description="Provider-level collection totals, commission settlement state, and uploaded proof verification. Select a provider row to inspect the summary."
         rows={rows}
         columns={[
-          { key: "bookingId", label: "Booking ID" },
-          { key: "customer", label: "Customer" },
+          { key: "id", label: "Provider ID" },
           { key: "provider", label: "Provider" },
+          { key: "paymentCount", label: "Bookings" },
+          { key: "customer", label: "Customer" },
           { key: "amount", label: "Final Amount Paid" },
           { key: "providerNetAmount", label: "Provider Net" },
           { key: "companyCommissionAmount", label: "Commission" },
@@ -228,7 +229,7 @@ export function PaymentsPage() {
           { key: "date", label: "Date" },
         ]}
         statusKey="status"
-        searchPlaceholder="Search booking ID, customer, provider, or payment method..."
+        searchPlaceholder="Search provider, customer, payment method, or payment status..."
         selectedRowId={selectedPayment?.id ?? null}
         onRowClick={(row) => setSelectedPaymentId(String(row.id))}
         emptyMessage="No payment records are available yet."
@@ -240,10 +241,10 @@ export function PaymentsPage() {
             <div>
               <h2 className="flex items-center gap-2 font-display text-xl font-bold text-slate-950">
                 <ReceiptText className="size-5 text-emerald-600" />
-                Payment Detail
+                Provider Payment Summary
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                {selectedPayment.id} for {selectedPayment.bookingId ?? "booking not linked"}.
+                {selectedPayment.provider} across {selectedPayment.paymentCount ?? 0} booking{selectedPayment.paymentCount === 1 ? "" : "s"}.
               </p>
             </div>
             <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
@@ -252,7 +253,8 @@ export function PaymentsPage() {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <DetailStat label="Customer" value={selectedPayment.customer} />
+            <DetailStat label="Provider ID" value={selectedPayment.id} />
+            <DetailStat label="Customers" value={selectedPayment.customer} />
             <DetailStat label="Provider" value={selectedPayment.provider} />
             <DetailStat label="Final Amount Paid" value={selectedPayment.amount} />
             <DetailStat label="Provider Net Earning" value={selectedPayment.providerNetAmount ?? selectedPayment.amount} />
@@ -264,19 +266,19 @@ export function PaymentsPage() {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <DetailStat label="Booking ID" value={selectedPayment.bookingId ?? "-"} />
+            <DetailStat label="Booking Count" value={String(selectedPayment.paymentCount ?? 0)} />
             <DetailStat label="Payment Method" value={selectedPayment.method} />
             <DetailStat label="Payment Status" value={selectedPayment.status} />
-            <DetailStat label="Commission Status" value={selectedPayment.commissionStatus ?? "Unpaid"} />
+            <DetailStat
+              label="Commission Status"
+              value={selectedPayment.commissionStatus ?? "Unpaid"}
+              note={`${selectedPayment.unpaidRawIds?.length ?? 0} pending settlement row${selectedPayment.unpaidRawIds?.length === 1 ? "" : "s"}`}
+            />
           </div>
 
-          <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          <div className="mt-6">
             <ProofPreviewCard
-              title="Customer Payment Proof"
-              asset={selectedPayment.customerPaymentProof}
-            />
-            <ProofPreviewCard
-              title="Provider Company Payment Proof"
+              title="Payment Proof"
               asset={selectedPayment.providerCompanyPaymentProof ?? selectedPayment.customerPaymentProof}
             />
           </div>
@@ -286,7 +288,7 @@ export function PaymentsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">Provider to company settlement</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Review the uploaded payment slip, then mark this commission as paid so the provider app reflects the settlement.
+                  Review the uploaded payment slip, then mark this provider summary as paid so all pending commission rows under this provider are settled.
                 </p>
                 {!companyProofUploaded ? (
                   <p className="mt-2 text-sm text-amber-700">
@@ -311,7 +313,7 @@ export function PaymentsPage() {
                   ? "Approving..."
                   : isCommissionPaid
                     ? "Marked Paid"
-                    : "Approve as Paid"}
+                    : "Approve Provider as Paid"}
               </button>
             </div>
           </div>

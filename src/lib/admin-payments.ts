@@ -45,6 +45,25 @@ type PaymentApprovalResponse = {
   error?: string;
 };
 
+type PaymentAggregateBucket = {
+  id: string;
+  rawIds: string[];
+  unpaidRawIds: string[];
+  bookingIds: string[];
+  customers: Set<string>;
+  provider: string;
+  totalAmount: number;
+  totalProviderNet: number;
+  totalCommission: number;
+  methods: Set<string>;
+  statuses: Set<string>;
+  companyStatuses: Set<string>;
+  latestCreatedAt: string | null;
+  latestCompanyPaidAt: string | null;
+  customerPaymentProof: PaymentProofAsset | null;
+  providerCompanyPaymentProof: PaymentProofAsset | null;
+};
+
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -181,6 +200,36 @@ function buildProofAsset(
   };
 }
 
+function summarizeStatuses(values: Set<string>, fallback: string) {
+  const items = [...values].filter(Boolean);
+  if (items.length === 0) {
+    return fallback;
+  }
+
+  const normalized = items.map((item) => item.trim().toLowerCase());
+  if (normalized.every((item) => item === normalized[0])) {
+    return formatStatus(items[0], fallback);
+  }
+
+  if (normalized.every((item) => item === "paid")) {
+    return "Paid";
+  }
+
+  return "Mixed";
+}
+
+function summarizeCommissionStatus(unpaidCount: number, totalCount: number) {
+  if (totalCount === 0 || unpaidCount === 0) {
+    return "Paid";
+  }
+
+  if (unpaidCount === totalCount) {
+    return "Unpaid";
+  }
+
+  return "Payment Process";
+}
+
 async function fetchLivePayments() {
   if (!isSupabaseConfigured || !supabase) {
     return null;
@@ -226,7 +275,78 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
   const livePayments = await fetchLivePayments();
 
   if (!livePayments?.length) {
-    return mockPayments;
+    const grouped = new Map<string, PaymentAggregateBucket>();
+
+    for (const row of mockPayments) {
+      const providerKey = row.provider.trim().toLowerCase();
+      const current = grouped.get(providerKey) ?? {
+        id: providerKey,
+        rawIds: row.rawId ? [row.rawId] : [],
+        unpaidRawIds:
+          row.rawId && (row.commissionStatus ?? "").trim().toLowerCase() !== "paid" ? [row.rawId] : [],
+        bookingIds: row.bookingId ? [row.bookingId] : [],
+        customers: new Set([row.customer]),
+        provider: row.provider,
+        totalAmount: parseMoney(row.amount),
+        totalProviderNet: parseMoney(row.providerNetAmount ?? row.amount),
+        totalCommission: parseMoney(row.companyCommissionAmount),
+        methods: new Set([row.method]),
+        statuses: new Set([row.status]),
+        companyStatuses: new Set([row.commissionStatus ?? "Unpaid"]),
+        latestCreatedAt: row.date ?? null,
+        latestCompanyPaidAt: row.companyPaidAt ?? null,
+        customerPaymentProof: row.customerPaymentProof ?? null,
+        providerCompanyPaymentProof: row.providerCompanyPaymentProof ?? null,
+      };
+
+      if (grouped.has(providerKey)) {
+        current.totalAmount += parseMoney(row.amount);
+        current.totalProviderNet += parseMoney(row.providerNetAmount ?? row.amount);
+        current.totalCommission += parseMoney(row.companyCommissionAmount);
+        current.customers.add(row.customer);
+        current.methods.add(row.method);
+        current.statuses.add(row.status);
+        current.companyStatuses.add(row.commissionStatus ?? "Unpaid");
+        if (row.bookingId) {
+          current.bookingIds.push(row.bookingId);
+        }
+        if (row.rawId) {
+          current.rawIds.push(row.rawId);
+          if ((row.commissionStatus ?? "").trim().toLowerCase() !== "paid") {
+            current.unpaidRawIds.push(row.rawId);
+          }
+        }
+        if (!current.customerPaymentProof && row.customerPaymentProof) {
+          current.customerPaymentProof = row.customerPaymentProof;
+        }
+        if (!current.providerCompanyPaymentProof && row.providerCompanyPaymentProof) {
+          current.providerCompanyPaymentProof = row.providerCompanyPaymentProof;
+        }
+      }
+
+      grouped.set(providerKey, current);
+    }
+
+    return [...grouped.values()].map((bucket) => ({
+      id: bucket.provider,
+      rawId: bucket.rawIds[0],
+      rawIds: bucket.rawIds,
+      unpaidRawIds: bucket.unpaidRawIds,
+      bookingId: bucket.bookingIds[0] ?? "-",
+      customer: bucket.customers.size === 1 ? ([...bucket.customers][0] ?? "Customer") : `${bucket.customers.size} customers`,
+      provider: bucket.provider,
+      amount: formatCurrency(bucket.totalAmount),
+      method: bucket.methods.size === 1 ? ([...bucket.methods][0] ?? "Cash") : "Mixed",
+      status: summarizeStatuses(bucket.statuses, "Paid"),
+      date: bucket.latestCreatedAt ?? "Recently",
+      paymentCount: bucket.bookingIds.length || bucket.rawIds.length,
+      providerNetAmount: formatCurrency(bucket.totalProviderNet),
+      companyCommissionAmount: formatCurrency(bucket.totalCommission),
+      commissionStatus: summarizeCommissionStatus(bucket.unpaidRawIds.length, bucket.rawIds.length),
+      companyPaidAt: bucket.latestCompanyPaidAt ?? "Not paid yet",
+      customerPaymentProof: bucket.customerPaymentProof,
+      providerCompanyPaymentProof: bucket.providerCompanyPaymentProof,
+    }));
   }
 
   const profileNames = await fetchProfileNameMap([
@@ -234,37 +354,101 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
     ...livePayments.map((row) => row.provider_id),
   ]);
 
-  return livePayments.map((row) => {
+  const grouped = new Map<string, PaymentAggregateBucket>();
+
+  for (const row of livePayments) {
     const booking = relationItem(row.bookings);
     const paymentAmount = row.amount ?? booking?.total_amount ?? 0;
+    const providerName = profileNames.get(row.provider_id ?? "") || "Provider";
+    const providerKey = row.provider_id?.trim() || providerName.trim().toLowerCase();
+    const current = grouped.get(providerKey) ?? {
+      id: providerKey,
+      rawIds: [],
+      unpaidRawIds: [],
+      bookingIds: [],
+      customers: new Set<string>(),
+      provider: providerName,
+      totalAmount: 0,
+      totalProviderNet: 0,
+      totalCommission: 0,
+      methods: new Set<string>(),
+      statuses: new Set<string>(),
+      companyStatuses: new Set<string>(),
+      latestCreatedAt: null,
+      latestCompanyPaidAt: null,
+      customerPaymentProof: null,
+      providerCompanyPaymentProof: null,
+    };
 
-    return {
-      id: formatEntityId(row.id),
-      rawId: row.id,
-      bookingId: formatEntityId(row.booking_id),
-      customer: profileNames.get(row.customer_id ?? "") || "Customer",
-      provider: profileNames.get(row.provider_id ?? "") || "Provider",
-      amount: formatCurrency(paymentAmount),
-      method: row.payment_option?.trim() || row.payment_method?.trim() || "Cash",
-      status: formatStatus(row.status),
-      date: formatDate(row.created_at),
-      providerNetAmount: formatCurrency(row.provider_net_amount ?? 0),
-      companyCommissionAmount: formatCurrency(row.company_commission_amount ?? 0),
-      commissionStatus: formatStatus(row.company_payment_status, "Unpaid"),
-      companyPaidAt: formatDateTime(row.company_paid_at),
-      customerPaymentProof: buildProofAsset(
-        "Customer payment proof",
-        row.customer_payment_proof_data_url,
-        row.customer_payment_proof_file_name,
-        row.customer_payment_proof_mime_type,
-      ),
-      providerCompanyPaymentProof: buildProofAsset(
-        "Provider company payment proof",
-        row.provider_company_payment_proof_data_url,
-        row.provider_company_payment_proof_file_name,
-        row.provider_company_payment_proof_mime_type,
-      ),
-    } satisfies PaymentRow;
+    current.rawIds.push(row.id);
+    if ((row.company_payment_status ?? "").trim().toLowerCase() !== "paid") {
+      current.unpaidRawIds.push(row.id);
+    }
+    if (row.booking_id?.trim()) {
+      current.bookingIds.push(formatEntityId(row.booking_id));
+    }
+    current.customers.add(profileNames.get(row.customer_id ?? "") || "Customer");
+    current.totalAmount += paymentAmount;
+    current.totalProviderNet += row.provider_net_amount ?? 0;
+    current.totalCommission += row.company_commission_amount ?? 0;
+    current.methods.add(row.payment_option?.trim() || row.payment_method?.trim() || "Cash");
+    current.statuses.add(row.status?.trim() || "paid");
+    current.companyStatuses.add(row.company_payment_status?.trim() || "unpaid");
+    if (!current.latestCreatedAt || new Date(row.created_at ?? 0).getTime() > new Date(current.latestCreatedAt).getTime()) {
+      current.latestCreatedAt = row.created_at ?? null;
+    }
+    if (row.company_paid_at && (!current.latestCompanyPaidAt || new Date(row.company_paid_at).getTime() > new Date(current.latestCompanyPaidAt).getTime())) {
+      current.latestCompanyPaidAt = row.company_paid_at;
+    }
+
+    const customerProof = buildProofAsset(
+      "Customer payment proof",
+      row.customer_payment_proof_data_url,
+      row.customer_payment_proof_file_name,
+      row.customer_payment_proof_mime_type,
+    );
+    const providerProof = buildProofAsset(
+      "Provider company payment proof",
+      row.provider_company_payment_proof_data_url,
+      row.provider_company_payment_proof_file_name,
+      row.provider_company_payment_proof_mime_type,
+    );
+
+    if (!current.customerPaymentProof && customerProof) {
+      current.customerPaymentProof = customerProof;
+    }
+    if (!current.providerCompanyPaymentProof && providerProof) {
+      current.providerCompanyPaymentProof = providerProof;
+    }
+
+    grouped.set(providerKey, current);
+  }
+
+  return [...grouped.values()]
+    .sort((left, right) => new Date(right.latestCreatedAt ?? 0).getTime() - new Date(left.latestCreatedAt ?? 0).getTime())
+    .map((bucket) => {
+      const paymentCount = bucket.rawIds.length;
+
+      return {
+        id: bucket.provider,
+        rawId: bucket.rawIds[0],
+        rawIds: bucket.rawIds,
+        unpaidRawIds: bucket.unpaidRawIds,
+        bookingId: bucket.bookingIds[0] ?? "-",
+        customer: bucket.customers.size === 1 ? ([...bucket.customers][0] ?? "Customer") : `${bucket.customers.size} customers`,
+        provider: bucket.provider,
+        amount: formatCurrency(bucket.totalAmount),
+        method: bucket.methods.size === 1 ? ([...bucket.methods][0] ?? "Cash") : "Mixed",
+        status: summarizeStatuses(bucket.statuses, "Paid"),
+        date: formatDate(bucket.latestCreatedAt),
+        paymentCount,
+        providerNetAmount: formatCurrency(bucket.totalProviderNet),
+        companyCommissionAmount: formatCurrency(bucket.totalCommission),
+        commissionStatus: summarizeCommissionStatus(bucket.unpaidRawIds.length, paymentCount),
+        companyPaidAt: formatDateTime(bucket.latestCompanyPaidAt),
+        customerPaymentProof: bucket.customerPaymentProof,
+        providerCompanyPaymentProof: bucket.providerCompanyPaymentProof,
+      } satisfies PaymentRow;
   });
 }
 
@@ -293,6 +477,18 @@ export async function approveCompanyPayment(params: {
   return payload.payment ?? null;
 }
 
+export async function approveCompanyPayments(params: {
+  accessToken: string;
+  paymentIds: string[];
+}) {
+  for (const paymentId of params.paymentIds) {
+    await approveCompanyPayment({
+      accessToken: params.accessToken,
+      paymentId,
+    });
+  }
+}
+
 function parseMoney(value: string | undefined) {
   if (!value) {
     return 0;
@@ -313,7 +509,7 @@ export function buildPaymentStats(rows: PaymentRow[]) {
     {
       label: "Total volume",
       value: formatCurrency(totalVolume),
-      note: `${rows.length.toLocaleString("en-MY")} payment records`,
+      note: `${rows.length.toLocaleString("en-MY")} provider summaries`,
     },
     {
       label: "Provider net",

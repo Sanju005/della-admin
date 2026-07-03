@@ -74,6 +74,8 @@ export type PaymentProofAsset = {
 export type PaymentRow = {
   id: string;
   rawId?: string;
+  rawIds?: string[];
+  unpaidRawIds?: string[];
   customer: string;
   provider: string;
   amount: string;
@@ -81,6 +83,7 @@ export type PaymentRow = {
   status: string;
   date: string;
   bookingId?: string;
+  paymentCount?: number;
   providerNetAmount?: string;
   companyCommissionAmount?: string;
   commissionStatus?: string;
