@@ -1,11 +1,19 @@
 import {
+  BadgePercent,
   BadgeDollarSign,
+  Banknote,
+  BarChart3,
   BriefcaseBusiness,
+  Building2,
   CalendarDays,
   CheckCheck,
   CircleAlert,
   ClipboardList,
+  Globe,
+  ReceiptText,
+  RotateCcw,
   SearchCheck,
+  Send,
   Star,
   Users,
   XCircle,
@@ -91,19 +99,19 @@ function StatMiniCard({
 }) {
   const positive = !delta.trim().startsWith("-");
   return (
-    <article className="rounded-[22px] border border-[#F2EAF0] bg-white px-4 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+    <article className="min-h-[176px] rounded-[24px] border border-[#EEE6F7] bg-white px-5 py-5 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-600">{label}</p>
-          <p className="mt-2 text-[2rem] font-extrabold tracking-tight text-slate-950">{value}</p>
-          <div className="mt-2 flex items-center gap-2 text-sm">
+          <p className="text-[13px] font-medium text-slate-500">{label}</p>
+          <p className="mt-3 text-[1.9rem] font-extrabold tracking-tight text-slate-950">{value}</p>
+          <div className="mt-4 flex items-center gap-2 text-sm">
             <span className={positive ? "font-semibold text-emerald-600" : "font-semibold text-rose-600"}>
               {positive ? "↑" : "↓"} {delta.replace(/^[+-]/, "")}
             </span>
             <span className="text-slate-400">vs last 30 days</span>
           </div>
         </div>
-        <div className={`grid size-14 place-items-center rounded-2xl ${iconTone}`}>
+        <div className={`grid size-[76px] shrink-0 place-items-center rounded-[24px] ${iconTone}`}>
           {icon}
         </div>
       </div>
@@ -117,6 +125,24 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
       <div className="h-px flex-1 bg-[#F2E7EE]" />
       <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#E13A81]">{children}</h3>
       <div className="h-px flex-1 bg-[#F2E7EE]" />
+    </div>
+  );
+}
+
+function CollectionSectionHeader({
+  title,
+  icon,
+}: {
+  title: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 text-[#5E38D7]">
+        {icon}
+        <h3 className="text-[1.05rem] font-bold text-[#3920A4]">{title}</h3>
+      </div>
+      <div className="h-px flex-1 bg-[#ECE8F8]" />
     </div>
   );
 }
@@ -196,6 +222,8 @@ export function DashboardPage() {
   const recentProviders = useMemo(() => providers.slice(0, 3), [providers]);
   const overallCollectionsTotal =
     totals.collectionsBreakdown.cash.total + totals.collectionsBreakdown.others.total;
+  const overallRefunds =
+    totals.collectionsBreakdown.cash.refunds + totals.collectionsBreakdown.others.refunds;
   const netEarnings =
     totals.collectionsBreakdown.cash.balancePayableToCompany +
     totals.collectionsBreakdown.cash.paidToCompany +
@@ -279,92 +307,105 @@ export function DashboardPage() {
       </section>
 
       <DashboardBlock title="Collections" icon={<BadgeDollarSign className="size-5" />} action={<FilterChip label="This Month" />}>
-        <div className="space-y-5">
-          <div className="grid gap-4 xl:grid-cols-2">
+        <div className="space-y-7">
+          <div className="grid gap-4 xl:grid-cols-3">
             <StatMiniCard
-              label="Total"
+              label="Total Collections"
               value={formatMoney(overallCollectionsTotal)}
               delta="+8.6%"
-              icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
+              icon={<ReceiptText className="size-9 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Company Earnings"
               value={formatMoney(Math.max(netEarnings, 0))}
               delta="+6.4%"
-              icon={<Star className="size-6 text-[#E13A81]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(225,58,129,0.12),rgba(255,223,238,0.7))]"
+              icon={<BarChart3 className="size-9 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
+            />
+            <StatMiniCard
+              label="Refunds"
+              value={formatMoney(overallRefunds)}
+              delta="-1.4%"
+              icon={<RotateCcw className="size-9 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
           </div>
 
-          <SectionLabel>Cash</SectionLabel>
+          <CollectionSectionHeader
+            title="Cash Payments"
+            icon={<Banknote className="size-6" strokeWidth={1.8} />}
+          />
           <div className="grid gap-4 xl:grid-cols-4">
             <StatMiniCard
-              label="Total"
+              label="Total Cash Collected"
               value={formatMoney(totals.collectionsBreakdown.cash.total)}
               delta="+8.6%"
-              icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
+              icon={<Banknote className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
-              label="Balance Payable to Company"
+              label="Payable to Company"
               value={formatMoney(totals.collectionsBreakdown.cash.balancePayableToCompany)}
               delta="+11.1%"
-              icon={<CircleAlert className="size-6 text-[#F59E0B]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(255,243,224,0.75))]"
+              icon={<Building2 className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Paid to Company"
               value={formatMoney(totals.collectionsBreakdown.cash.paidToCompany)}
               delta="+7.8%"
-              icon={<CheckCheck className="size-6 text-[#22C55E]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(233,251,240,0.72))]"
+              icon={<Send className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
-              label="Refunds"
+              label="Cash Refunds"
               value={formatMoney(totals.collectionsBreakdown.cash.refunds)}
               delta="-1.4%"
-              icon={<XCircle className="size-6 text-[#FF4D6D]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(255,77,109,0.12),rgba(255,231,236,0.8))]"
+              icon={<RotateCcw className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
           </div>
 
-          <SectionLabel>Others</SectionLabel>
+          <CollectionSectionHeader
+            title="Online Payments"
+            icon={<Globe className="size-6" strokeWidth={1.8} />}
+          />
           <div className="grid gap-4 xl:grid-cols-5">
             <StatMiniCard
-              label="Total"
+              label="Total Online Collected"
               value={formatMoney(totals.collectionsBreakdown.others.total)}
               delta="+8.6%"
-              icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
+              icon={<Globe className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Commission"
               value={formatMoney(totals.collectionsBreakdown.others.commission)}
               delta="+4.2%"
-              icon={<Star className="size-6 text-[#E13A81]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(225,58,129,0.12),rgba(255,223,238,0.7))]"
+              icon={<BadgePercent className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Paid to Providers"
               value={formatMoney(totals.collectionsBreakdown.others.paidToProviders)}
               delta="+7.8%"
-              icon={<CheckCheck className="size-6 text-[#22C55E]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(233,251,240,0.72))]"
+              icon={<Send className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Payable to Providers"
               value={formatMoney(totals.collectionsBreakdown.others.payableToProviders)}
               delta="+11.1%"
-              icon={<BriefcaseBusiness className="size-6 text-[#3B82F6]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(59,130,246,0.12),rgba(228,239,255,0.75))]"
+              icon={<Users className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
-              label="Refunds"
+              label="Online Refunds"
               value={formatMoney(totals.collectionsBreakdown.others.refunds)}
               delta="-1.4%"
-              icon={<XCircle className="size-6 text-[#FF4D6D]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(255,77,109,0.12),rgba(255,231,236,0.8))]"
+              icon={<RotateCcw className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
+              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
           </div>
         </div>
