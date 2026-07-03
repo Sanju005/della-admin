@@ -111,33 +111,12 @@ function StatMiniCard({
   );
 }
 
-function ProgressRow({
-  label,
-  value,
-  total,
-  tone,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  tone: string;
-}) {
-  const percent = total > 0 ? (value / total) * 100 : 0;
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[100px_1fr_auto] items-center gap-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-        <span className={`size-3 rounded-full ${tone}`} />
-        {label}
-      </div>
-      <div className="h-2 rounded-full bg-slate-100">
-        <div
-          className={`h-2 rounded-full ${tone}`}
-          style={{ width: `${Math.max(4, Math.min(100, percent))}%` }}
-        />
-      </div>
-      <div className="min-w-[120px] text-right text-sm text-slate-600">
-        <span className="font-semibold text-slate-900">{formatPlainNumber(value)}</span> ({percent.toFixed(1)}%)
-      </div>
+    <div className="flex items-center gap-3">
+      <div className="h-px flex-1 bg-[#F2E7EE]" />
+      <h3 className="text-sm font-extrabold uppercase tracking-[0.18em] text-[#E13A81]">{children}</h3>
+      <div className="h-px flex-1 bg-[#F2E7EE]" />
     </div>
   );
 }
@@ -177,18 +156,29 @@ export function DashboardPage() {
     const totalUsers = parseMetricNumber(metrics.find((item) => item.title === "Total Users")?.value ?? "0");
     const totalProviders = parseMetricNumber(metrics.find((item) => item.title === "Service Providers")?.value ?? "0");
     const activeTasks = parseMetricNumber(metrics.find((item) => item.title === "Active Tasks")?.value ?? "0");
-    const collections = parseMetricNumber(metrics.find((item) => item.title === "Total Payments")?.value ?? "0");
     const pendingApprovals = parseMetricNumber(metrics.find((item) => item.title === "Pending Approvals")?.value ?? "0");
     const complaintsOpen = snapshot?.complaintsOpen ?? 0;
+    const collectionsBreakdown = snapshot?.collectionsBreakdown ?? {
+      cash: {
+        total: 0,
+        balancePayableToCompany: 0,
+        paidToCompany: 0,
+        refunds: 0,
+      },
+      others: {
+        total: 0,
+        commission: 0,
+        paidToProviders: 0,
+        payableToProviders: 0,
+        refunds: 0,
+      },
+    };
 
     const activeProviders = providers.filter((item) =>
       ["active", "approved", "verified"].includes(item.status.toLowerCase())
     ).length;
     const completedTasks = Math.max(Math.round(activeTasks * 2.95), 0);
     const cancelledTasks = Math.max(Math.round(activeTasks * 0.16), 0);
-    const payableProviders = Math.round(collections * 0.58);
-    const paidCollections = Math.round(collections * 0.37);
-    const balanceAfterPayout = Math.max(collections - payableProviders - Math.round(collections * 0.08), 0);
 
     return {
       totalUsers,
@@ -197,18 +187,13 @@ export function DashboardPage() {
       activeTasks,
       completedTasks,
       cancelledTasks,
-      collections,
-      payableProviders,
-      paidCollections,
-      balanceAfterPayout,
       pendingApprovals,
       complaintsOpen,
+      collectionsBreakdown,
     };
   }, [providers, snapshot]);
 
   const recentProviders = useMemo(() => providers.slice(0, 3), [providers]);
-  const totalTaskCount = totals.activeTasks + totals.completedTasks + totals.cancelledTasks;
-
   if (loading || !snapshot) {
     return (
       <div className="grid min-h-[45vh] place-items-center rounded-[28px] border border-[#F0E7EE] bg-white shadow-[0_12px_32px_rgba(225,58,129,0.08)]">
@@ -286,39 +271,81 @@ export function DashboardPage() {
       </section>
 
       <DashboardBlock title="Collections" icon={<BadgeDollarSign className="size-5" />} action={<FilterChip label="This Month" />}>
-        <div className="grid gap-4 xl:grid-cols-4">
-          <StatMiniCard
-            label="Total Collected"
-            value={formatMoney(totals.collections)}
-            delta="+8.6%"
-            icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
-            iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
-          />
-          <StatMiniCard
-            label="Payable to Providers"
-            value={formatMoney(totals.payableProviders)}
-            delta="+11.1%"
-            icon={<BriefcaseBusiness className="size-6 text-[#3B82F6]" />}
-            iconTone="bg-[linear-gradient(135deg,rgba(59,130,246,0.12),rgba(228,239,255,0.75))]"
-          />
-          <StatMiniCard
-            label="Paid Collections"
-            value={formatMoney(totals.paidCollections)}
-            delta="+7.8%"
-            icon={<CheckCheck className="size-6 text-[#22C55E]" />}
-            iconTone="bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(233,251,240,0.72))]"
-          />
-          <StatMiniCard
-            label="Balance After Payout"
-            value={formatMoney(totals.balanceAfterPayout)}
-            delta="+13.1%"
-            icon={<CircleAlert className="size-6 text-[#F59E0B]" />}
-            iconTone="bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(255,243,224,0.75))]"
-          />
+        <div className="space-y-5">
+          <SectionLabel>Cash</SectionLabel>
+          <div className="grid gap-4 xl:grid-cols-4">
+            <StatMiniCard
+              label="Total"
+              value={formatMoney(totals.collectionsBreakdown.cash.total)}
+              delta="+8.6%"
+              icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
+            />
+            <StatMiniCard
+              label="Balance Payable to Company"
+              value={formatMoney(totals.collectionsBreakdown.cash.balancePayableToCompany)}
+              delta="+11.1%"
+              icon={<CircleAlert className="size-6 text-[#F59E0B]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(255,243,224,0.75))]"
+            />
+            <StatMiniCard
+              label="Paid to Company"
+              value={formatMoney(totals.collectionsBreakdown.cash.paidToCompany)}
+              delta="+7.8%"
+              icon={<CheckCheck className="size-6 text-[#22C55E]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(233,251,240,0.72))]"
+            />
+            <StatMiniCard
+              label="Refunds"
+              value={formatMoney(totals.collectionsBreakdown.cash.refunds)}
+              delta="-1.4%"
+              icon={<XCircle className="size-6 text-[#FF4D6D]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(255,77,109,0.12),rgba(255,231,236,0.8))]"
+            />
+          </div>
+
+          <SectionLabel>Others</SectionLabel>
+          <div className="grid gap-4 xl:grid-cols-5">
+            <StatMiniCard
+              label="Total"
+              value={formatMoney(totals.collectionsBreakdown.others.total)}
+              delta="+8.6%"
+              icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
+            />
+            <StatMiniCard
+              label="Commission"
+              value={formatMoney(totals.collectionsBreakdown.others.commission)}
+              delta="+4.2%"
+              icon={<Star className="size-6 text-[#E13A81]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(225,58,129,0.12),rgba(255,223,238,0.7))]"
+            />
+            <StatMiniCard
+              label="Paid to Providers"
+              value={formatMoney(totals.collectionsBreakdown.others.paidToProviders)}
+              delta="+7.8%"
+              icon={<CheckCheck className="size-6 text-[#22C55E]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(233,251,240,0.72))]"
+            />
+            <StatMiniCard
+              label="Payable to Providers"
+              value={formatMoney(totals.collectionsBreakdown.others.payableToProviders)}
+              delta="+11.1%"
+              icon={<BriefcaseBusiness className="size-6 text-[#3B82F6]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(59,130,246,0.12),rgba(228,239,255,0.75))]"
+            />
+            <StatMiniCard
+              label="Refunds"
+              value={formatMoney(totals.collectionsBreakdown.others.refunds)}
+              delta="-1.4%"
+              icon={<XCircle className="size-6 text-[#FF4D6D]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(255,77,109,0.12),rgba(255,231,236,0.8))]"
+            />
+          </div>
         </div>
       </DashboardBlock>
 
-      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <section>
         <DashboardBlock
           title="Recent New Providers"
           icon={<BriefcaseBusiness className="size-5" />}
@@ -360,38 +387,6 @@ export function DashboardPage() {
                 </div>
               </div>
             ))}
-          </div>
-        </DashboardBlock>
-
-        <DashboardBlock
-          title="Task Status Summary"
-          icon={<Star className="size-5" />}
-          action={<span className="text-sm font-semibold text-[#E13A81]">View All</span>}
-        >
-          <div className="grid gap-8 md:grid-cols-[240px_1fr] md:items-center">
-            <div className="flex justify-center">
-              <div
-                className="grid size-[166px] place-items-center rounded-full"
-                style={{
-                  background: `conic-gradient(#22c55e 0deg ${(totals.completedTasks / Math.max(totalTaskCount, 1)) * 360}deg, #4f8df5 ${(totals.completedTasks / Math.max(totalTaskCount, 1)) * 360}deg ${((totals.completedTasks + totals.activeTasks) / Math.max(totalTaskCount, 1)) * 360}deg, #ff4d6d ${((totals.completedTasks + totals.activeTasks) / Math.max(totalTaskCount, 1)) * 360}deg 360deg)`,
-                }}
-              >
-                <div className="grid size-[126px] place-items-center rounded-full bg-white shadow-[inset_0_4px_14px_rgba(225,58,129,0.08)]">
-                  <div className="text-center">
-                    <p className="text-[2rem] font-extrabold tracking-tight text-slate-950">
-                      {formatPlainNumber(totalTaskCount)}
-                    </p>
-                    <p className="text-sm text-slate-500">Total Tasks</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <ProgressRow label="Completed" value={totals.completedTasks} total={totalTaskCount} tone="bg-[#22C55E]" />
-              <ProgressRow label="Active" value={totals.activeTasks} total={totalTaskCount} tone="bg-[#4F8DF5]" />
-              <ProgressRow label="Canceled" value={totals.cancelledTasks} total={totalTaskCount} tone="bg-[#FF4D6D]" />
-            </div>
           </div>
         </DashboardBlock>
       </section>

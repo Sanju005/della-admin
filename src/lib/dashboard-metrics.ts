@@ -21,6 +21,31 @@ type DashboardSnapshot = {
   metrics: LiveMetricCard[];
   approvals: LiveApprovalItem[];
   complaintsOpen: number;
+  collectionsBreakdown: {
+    cash: {
+      total: number;
+      balancePayableToCompany: number;
+      paidToCompany: number;
+      refunds: number;
+    };
+    others: {
+      total: number;
+      commission: number;
+      paidToProviders: number;
+      payableToProviders: number;
+      refunds: number;
+    };
+  };
+};
+
+type PaymentAggregateRow = {
+  amount?: number | null;
+  payment_method?: string | null;
+  payment_option?: string | null;
+  status?: string | null;
+  provider_net_amount?: number | null;
+  company_commission_amount?: number | null;
+  company_payment_status?: string | null;
 };
 
 async function countRows(table: string, filters?: Array<[string, string | boolean]>) {
@@ -60,6 +85,87 @@ async function sumPaymentAmounts() {
   return data.reduce((sum, row) => sum + (typeof row.amount === "number" ? row.amount : 0), 0);
 }
 
+function normalizePaymentMethod(row: PaymentAggregateRow) {
+  return (row.payment_option?.trim() || row.payment_method?.trim() || "cash").toLowerCase();
+}
+
+function isCashPayment(row: PaymentAggregateRow) {
+  return normalizePaymentMethod(row) === "cash";
+}
+
+function isRefundedPayment(row: PaymentAggregateRow) {
+  return (row.status ?? "").trim().toLowerCase() === "refunded";
+}
+
+function isProviderMarkedPaid(row: PaymentAggregateRow) {
+  return (row.company_payment_status ?? "").trim().toLowerCase() === "paid";
+}
+
+async function getCollectionsBreakdown() {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("payments")
+    .select("amount, payment_method, payment_option, status, provider_net_amount, company_commission_amount, company_payment_status")
+    .limit(5000);
+
+  if (error || !data) {
+    return null;
+  }
+
+  const rows = data as PaymentAggregateRow[];
+
+  return rows.reduce(
+    (totals, row) => {
+      const amount = typeof row.amount === "number" ? row.amount : 0;
+      const providerNet = typeof row.provider_net_amount === "number" ? row.provider_net_amount : 0;
+      const commission = typeof row.company_commission_amount === "number" ? row.company_commission_amount : 0;
+      const refunded = isRefundedPayment(row);
+
+      if (isCashPayment(row)) {
+        totals.cash.total += amount;
+        if (refunded) {
+          totals.cash.refunds += amount;
+        } else if (isProviderMarkedPaid(row)) {
+          totals.cash.paidToCompany += commission;
+        } else {
+          totals.cash.balancePayableToCompany += commission;
+        }
+        return totals;
+      }
+
+      totals.others.total += amount;
+      totals.others.commission += commission;
+      if (refunded) {
+        totals.others.refunds += amount;
+      } else if (isProviderMarkedPaid(row)) {
+        totals.others.paidToProviders += providerNet;
+      } else {
+        totals.others.payableToProviders += providerNet;
+      }
+
+      return totals;
+    },
+    {
+      cash: {
+        total: 0,
+        balancePayableToCompany: 0,
+        paidToCompany: 0,
+        refunds: 0,
+      },
+      others: {
+        total: 0,
+        commission: 0,
+        paidToProviders: 0,
+        payableToProviders: 0,
+        refunds: 0,
+      },
+    },
+  );
+}
+
 function formatCompactNumber(value: number) {
   return new Intl.NumberFormat("en-MY", {
     notation: value >= 10000 ? "compact" : "standard",
@@ -89,6 +195,21 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
       metrics: dashboardMetrics,
       approvals: approvalItems,
       complaintsOpen: fallbackComplaintCount(),
+      collectionsBreakdown: {
+        cash: {
+          total: 0,
+          balancePayableToCompany: 0,
+          paidToCompany: 0,
+          refunds: 0,
+        },
+        others: {
+          total: 0,
+          commission: 0,
+          paidToProviders: 0,
+          payableToProviders: 0,
+          refunds: 0,
+        },
+      },
     };
   }
 
@@ -97,6 +218,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     providerCount,
     activeTasks,
     paymentTotal,
+    collectionsBreakdown,
     pendingApprovals,
     liveComplaintsOpen,
   ] = await Promise.all([
@@ -104,6 +226,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     countRows("profiles", [["role", "provider"]]),
     countRows("bookings", [["booking_status", "pending"]]),
     sumPaymentAmounts(),
+    getCollectionsBreakdown(),
     countRows("provider_profiles", [["approval_status", "pending"]]),
     countRows("complaints", [["status", "open"]]),
   ]);
@@ -164,5 +287,20 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     metrics,
     approvals,
     complaintsOpen: liveComplaintsOpen ?? fallbackComplaintCount(),
+    collectionsBreakdown: collectionsBreakdown ?? {
+      cash: {
+        total: 0,
+        balancePayableToCompany: 0,
+        paidToCompany: 0,
+        refunds: 0,
+      },
+      others: {
+        total: 0,
+        commission: 0,
+        paidToProviders: 0,
+        payableToProviders: 0,
+        refunds: 0,
+      },
+    },
   };
 }
