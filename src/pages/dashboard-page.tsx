@@ -194,6 +194,14 @@ export function DashboardPage() {
   }, [providers, snapshot]);
 
   const recentProviders = useMemo(() => providers.slice(0, 3), [providers]);
+  const overallCollectionsTotal =
+    totals.collectionsBreakdown.cash.total + totals.collectionsBreakdown.others.total;
+  const netEarnings =
+    totals.collectionsBreakdown.cash.balancePayableToCompany +
+    totals.collectionsBreakdown.cash.paidToCompany +
+    totals.collectionsBreakdown.others.commission -
+    totals.collectionsBreakdown.cash.refunds -
+    totals.collectionsBreakdown.others.refunds;
   if (loading || !snapshot) {
     return (
       <div className="grid min-h-[45vh] place-items-center rounded-[28px] border border-[#F0E7EE] bg-white shadow-[0_12px_32px_rgba(225,58,129,0.08)]">
@@ -272,6 +280,23 @@ export function DashboardPage() {
 
       <DashboardBlock title="Collections" icon={<BadgeDollarSign className="size-5" />} action={<FilterChip label="This Month" />}>
         <div className="space-y-5">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <StatMiniCard
+              label="Total"
+              value={formatMoney(overallCollectionsTotal)}
+              delta="+8.6%"
+              icon={<BadgeDollarSign className="size-6 text-[#00ACC1]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(0,172,193,0.12),rgba(223,248,251,0.75))]"
+            />
+            <StatMiniCard
+              label="Company Earnings"
+              value={formatMoney(Math.max(netEarnings, 0))}
+              delta="+6.4%"
+              icon={<Star className="size-6 text-[#E13A81]" />}
+              iconTone="bg-[linear-gradient(135deg,rgba(225,58,129,0.12),rgba(255,223,238,0.7))]"
+            />
+          </div>
+
           <SectionLabel>Cash</SectionLabel>
           <div className="grid gap-4 xl:grid-cols-4">
             <StatMiniCard
