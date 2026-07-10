@@ -83,9 +83,7 @@ export function AdminShell() {
           }`}
         >
           <div className="flex items-center justify-between px-2">
-            <Link to="/" className="font-display text-[2.15rem] font-extrabold tracking-tight text-white">
-              DELLA
-            </Link>
+            <Link to="/" className="block h-10 w-24" aria-label="Admin dashboard home" />
             <button
               type="button"
               onClick={() => setMenuOpen(false)}
