@@ -41,16 +41,18 @@ function formatCount(value: number) {
 
 function buildProviderId(source: string) {
   const normalized = source.replace(/[^a-z0-9]/gi, "").toUpperCase();
-  return `PV${normalized.slice(0, 5).padEnd(5, "0")}`;
+  return normalized.startsWith("PV") ? normalized : `PV${normalized.slice(0, 5).padEnd(5, "0")}`;
 }
 
 function getProviderInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "PV";
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "PV"
+  );
 }
 
 function isImageProof(asset: PaymentProofAsset | null | undefined) {
@@ -119,6 +121,7 @@ function ProofThumb({ asset }: { asset: PaymentProofAsset | null | undefined }) 
         href={asset.url}
         target="_blank"
         rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
         className="inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border border-[#E8E2EF] bg-slate-50"
       >
         <img src={asset.url} alt={asset.fileName ?? asset.label} className="h-full w-full object-cover" />
@@ -131,6 +134,7 @@ function ProofThumb({ asset }: { asset: PaymentProofAsset | null | undefined }) 
       href={asset.url}
       target="_blank"
       rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
       className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#E8E2EF] bg-slate-50 text-slate-500"
     >
       <ImageIcon className="size-4" />
@@ -143,9 +147,10 @@ export function PaymentsPage() {
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [approvalPendingId, setApprovalPendingId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [adminAmounts, setAdminAmounts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
@@ -159,7 +164,21 @@ export function PaymentsPage() {
       }
 
       setRows(nextRows);
-      setSelectedPaymentId((current) => current ?? nextRows[0]?.id ?? null);
+      setSelectedRowId((current) => current ?? nextRows[0]?.rawId ?? null);
+      setAdminAmounts((current) => {
+        const next = { ...current };
+
+        nextRows.forEach((row) => {
+          const key = row.rawId ?? row.id;
+          if (!key || next[key] !== undefined) {
+            return;
+          }
+
+          next[key] = String(parseMoney(row.companyCommissionAmount).toFixed(2));
+        });
+
+        return next;
+      });
       setApprovalError(null);
       setLoading(false);
     }
@@ -172,41 +191,44 @@ export function PaymentsPage() {
   }, []);
 
   const filteredRows = useMemo(() => {
+    const baseRows = rows.filter((row) => (row.method ?? "").trim().toLowerCase() === "cash");
     const trimmed = query.trim().toLowerCase();
 
     if (!trimmed) {
-      return rows;
+      return baseRows;
     }
 
-    return rows.filter((row) => {
+    return baseRows.filter((row) => {
       const providerId = buildProviderId(row.id);
-
-      return [providerId, row.id, row.provider, row.customer, row.status, row.commissionStatus, row.method]
-        .join(" ")
-        .toLowerCase()
-        .includes(trimmed);
+      return [providerId, row.provider].join(" ").toLowerCase().includes(trimmed);
     });
   }, [query, rows]);
 
   useEffect(() => {
     if (!filteredRows.length) {
-      setSelectedPaymentId(null);
+      setSelectedRowId(null);
       return;
     }
 
-    setSelectedPaymentId((current) =>
-      filteredRows.some((row) => row.id === current) ? current : filteredRows[0]?.id ?? null
+    setSelectedRowId((current) =>
+      filteredRows.some((row) => (row.rawId ?? row.id) === current)
+        ? current
+        : (filteredRows[0]?.rawId ?? filteredRows[0]?.id ?? null)
     );
   }, [filteredRows]);
 
-  const selectedPayment = useMemo(
-    () => filteredRows.find((row) => row.id === selectedPaymentId) ?? filteredRows[0] ?? null,
-    [filteredRows, selectedPaymentId]
+  const selectedRow = useMemo(
+    () => filteredRows.find((row) => (row.rawId ?? row.id) === selectedRowId) ?? filteredRows[0] ?? null,
+    [filteredRows, selectedRowId]
   );
 
   const stats = useMemo(() => {
-    const totalBookings = filteredRows.reduce((sum, row) => sum + (row.paymentCount ?? 0), 0);
-    const totalCollected = filteredRows.reduce((sum, row) => sum + parseMoney(row.amount), 0);
+    const totalBookings = filteredRows.length;
+    const totalAmount = filteredRows.reduce((sum, row) => sum + parseMoney(row.amount), 0);
+    const totalCollected = filteredRows.reduce(
+      (sum, row) => sum + parseMoney(row.providerNetAmount ?? row.amount),
+      0
+    );
     const totalCommission = filteredRows.reduce(
       (sum, row) => sum + parseMoney(row.companyCommissionAmount),
       0
@@ -214,17 +236,13 @@ export function PaymentsPage() {
     const pendingAmount = filteredRows
       .filter((row) => (row.commissionStatus ?? "").trim().toLowerCase() !== "paid")
       .reduce((sum, row) => sum + parseMoney(row.companyCommissionAmount), 0);
-    const adminNet = filteredRows.reduce(
-      (sum, row) => sum + parseMoney(row.providerNetAmount ?? row.amount),
-      0
-    );
 
     return {
       totalBookings,
+      totalAmount,
       totalCollected,
       totalCommission,
       pendingAmount,
-      adminNet,
     };
   }, [filteredRows]);
 
@@ -233,7 +251,7 @@ export function PaymentsPage() {
       return;
     }
 
-    setApprovalPendingId(row.id);
+    setApprovalPendingId(row.rawId ?? row.id);
     setApprovalError(null);
 
     try {
@@ -244,7 +262,7 @@ export function PaymentsPage() {
 
       const nextRows = await listPaymentsWithFallback();
       setRows(nextRows);
-      setSelectedPaymentId(row.id);
+      setSelectedRowId(row.rawId ?? row.id);
     } catch (error) {
       setApprovalError(
         error instanceof Error ? error.message : "Unable to approve provider commission payment."
@@ -262,8 +280,7 @@ export function PaymentsPage() {
     );
   }
 
-  const selectedProof =
-    selectedPayment?.providerCompanyPaymentProof ?? selectedPayment?.customerPaymentProof ?? null;
+  const selectedProof = selectedRow?.providerCompanyPaymentProof ?? selectedRow?.customerPaymentProof ?? null;
 
   return (
     <div className="space-y-5">
@@ -279,7 +296,7 @@ export function PaymentsPage() {
                   Cash
                 </h2>
                 <p className="text-sm text-slate-500">
-                  View and manage cash collections from providers
+                  View and manage all cash payments from providers
                 </p>
               </div>
             </div>
@@ -289,7 +306,7 @@ export function PaymentsPage() {
             <FilterPill label="Today" active />
             <FilterPill label="Custom Range" />
             <div className="inline-flex items-center rounded-2xl border border-[#EEE6F2] bg-white px-4 py-2 text-sm font-medium text-slate-500">
-              20 May 2025 - 20 May 2025
+              Cash transactions only
             </div>
           </div>
         </div>
@@ -302,7 +319,7 @@ export function PaymentsPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="PV1234"
+                placeholder="Search provider name"
                 className="w-full bg-transparent outline-none placeholder:text-slate-400"
               />
               {query ? (
@@ -316,16 +333,16 @@ export function PaymentsPage() {
               ) : null}
             </label>
 
-            {selectedPayment ? (
+            {selectedRow ? (
               <article className="mt-4 rounded-[24px] border border-[#EEE6F0] bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
                 <div className="flex items-center gap-4">
                   <div className="grid size-14 place-items-center rounded-full bg-[linear-gradient(135deg,#D7FBE7,#E3F2FF)] font-bold text-[#14935E]">
-                    {getProviderInitials(selectedPayment.provider)}
+                    {getProviderInitials(selectedRow.provider)}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-950">{selectedPayment.provider}</p>
+                    <p className="truncate font-semibold text-slate-950">{selectedRow.provider}</p>
                     <p className="mt-1 text-xs font-semibold text-[#16A34A]">
-                      {buildProviderId(selectedPayment.id)}
+                      {buildProviderId(selectedRow.id)}
                     </p>
                   </div>
                 </div>
@@ -333,11 +350,11 @@ export function PaymentsPage() {
                 <div className="mt-4 grid gap-3 text-sm text-slate-500 sm:grid-cols-2">
                   <div className="flex items-center gap-2">
                     <ReceiptText className="size-4 text-slate-400" />
-                    <span>{formatCount(selectedPayment.paymentCount ?? 0)} bookings</span>
+                    <span>{selectedRow.bookingId ?? "-"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <UserRound className="size-4 text-slate-400" />
-                    <span className="truncate">{selectedPayment.customer}</span>
+                    <span className="truncate">{selectedRow.customer}</span>
                   </div>
                 </div>
               </article>
@@ -358,14 +375,14 @@ export function PaymentsPage() {
             />
             <SummaryCard
               label="Total Amount"
-              value={formatMoney(stats.totalCollected)}
+              value={formatMoney(stats.totalAmount)}
               note="Collected from customers"
               tone="bg-[#EEF4FF] text-[#2563EB]"
               icon={<Wallet className="size-5" />}
             />
             <SummaryCard
               label="Total Collected"
-              value={formatMoney(stats.adminNet)}
+              value={formatMoney(stats.totalCollected)}
               note="Provider net total"
               tone="bg-[#EAFBF0] text-[#16A34A]"
               icon={<Banknote className="size-5" />}
@@ -390,33 +407,41 @@ export function PaymentsPage() {
 
       <section className="overflow-hidden rounded-[30px] border border-[#EEE8F4] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-left">
+          <table className="min-w-[1500px] text-left">
             <thead className="border-b border-[#F0EAF4] bg-[#FFFCFF]">
               <tr className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
                 <th className="px-4 py-4">Provider ID</th>
                 <th className="px-4 py-4">Provider</th>
-                <th className="px-4 py-4">Date</th>
+                <th className="px-4 py-4">Task ID</th>
+                <th className="px-4 py-4">Task Date</th>
                 <th className="px-4 py-4">Total Amount</th>
                 <th className="px-4 py-4">Commission</th>
                 <th className="px-4 py-4">Status</th>
+                <th className="px-4 py-4">Paid Commission By Provider</th>
                 <th className="px-4 py-4">Ref Image</th>
-                <th className="px-4 py-4">Admin Type Amount</th>
-                <th className="px-4 py-4">Approved / Reject</th>
+                <th className="px-4 py-4">Admin Amount</th>
+                <th className="px-4 py-4">Balance</th>
+                <th className="px-4 py-4">Approve / Reject</th>
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row, index) => {
-                const isSelected = row.id === selectedPayment?.id;
+              {filteredRows.map((row) => {
+                const rowKey = row.rawId ?? row.id;
+                const isSelected = rowKey === selectedRowId;
+                const commission = parseMoney(row.companyCommissionAmount);
+                const paidByProvider = parseMoney(row.companyCommissionAmount);
+                const adminAmount = Number(adminAmounts[rowKey] ?? commission);
+                const balance = paidByProvider - (Number.isFinite(adminAmount) ? adminAmount : 0);
                 const isCommissionPaid = (row.commissionStatus ?? "").trim().toLowerCase() === "paid";
                 const hasProof = Boolean(
                   row.providerCompanyPaymentProof?.url?.trim() || row.customerPaymentProof?.url?.trim()
                 );
-                const pending = approvalPendingId === row.id;
+                const pending = approvalPendingId === rowKey;
 
                 return (
                   <tr
-                    key={row.id}
-                    onClick={() => setSelectedPaymentId(row.id)}
+                    key={rowKey}
+                    onClick={() => setSelectedRowId(rowKey)}
                     className={`border-b border-[#F6F0F7] text-sm transition hover:bg-[#FFFCFF] ${
                       isSelected ? "bg-[#FCFAFF]" : "bg-white"
                     }`}
@@ -425,26 +450,37 @@ export function PaymentsPage() {
                     <td className="px-4 py-4">
                       <div>
                         <p className="font-semibold text-slate-900">{row.provider}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {formatCount(row.paymentCount ?? 0)} booking{(row.paymentCount ?? 0) === 1 ? "" : "s"}
-                        </p>
+                        <p className="mt-1 text-xs text-slate-400">{row.customer}</p>
                       </div>
                     </td>
+                    <td className="px-4 py-4 font-medium text-slate-700">{row.bookingId ?? "-"}</td>
                     <td className="px-4 py-4 text-slate-500">{row.date}</td>
                     <td className="px-4 py-4 font-semibold text-slate-900">{row.amount}</td>
-                    <td className="px-4 py-4 text-slate-700">
-                      {row.companyCommissionAmount ?? formatMoney(0)}
-                    </td>
+                    <td className="px-4 py-4 text-slate-700">{formatMoney(commission)}</td>
                     <td className="px-4 py-4">
                       <StatusBadge status={row.commissionStatus ?? row.status} />
+                    </td>
+                    <td className="px-4 py-4 font-medium text-slate-700">
+                      {formatMoney(paidByProvider)}
                     </td>
                     <td className="px-4 py-4">
                       <ProofThumb asset={row.providerCompanyPaymentProof ?? row.customerPaymentProof} />
                     </td>
                     <td className="px-4 py-4">
-                      <div className="inline-flex min-w-[124px] rounded-xl border border-[#ECE5F1] bg-[#FCFBFE] px-3 py-2 font-semibold text-slate-700">
-                        {row.providerNetAmount ?? row.amount}
-                      </div>
+                      <input
+                        value={adminAmounts[rowKey] ?? String(commission.toFixed(2))}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) =>
+                          setAdminAmounts((current) => ({
+                            ...current,
+                            [rowKey]: event.target.value,
+                          }))
+                        }
+                        className="w-[120px] rounded-xl border border-[#ECE5F1] bg-[#FCFBFE] px-3 py-2 font-semibold text-slate-700 outline-none"
+                      />
+                    </td>
+                    <td className={`px-4 py-4 font-semibold ${balance === 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      {formatMoney(balance)}
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex flex-wrap items-center gap-2">
@@ -454,9 +490,15 @@ export function PaymentsPage() {
                             event.stopPropagation();
                             void handleApprovePayment(row);
                           }}
-                          disabled={pending || isCommissionPaid || !hasProof || !session?.access_token}
+                          disabled={
+                            pending ||
+                            isCommissionPaid ||
+                            !hasProof ||
+                            !session?.access_token ||
+                            balance !== 0
+                          }
                           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                            pending || isCommissionPaid || !hasProof || !session?.access_token
+                            pending || isCommissionPaid || !hasProof || !session?.access_token || balance !== 0
                               ? "cursor-not-allowed bg-slate-100 text-slate-400"
                               : "bg-[#EAFBF0] text-[#169B57] hover:brightness-95"
                           }`}
@@ -472,9 +514,6 @@ export function PaymentsPage() {
                           <X className="size-3.5" />
                           Reject
                         </button>
-                        {index === 0 && approvalError ? (
-                          <span className="text-xs text-rose-600">{approvalError}</span>
-                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -483,34 +522,59 @@ export function PaymentsPage() {
             </tbody>
             <tfoot className="bg-[#FBF8FF] text-sm font-semibold text-slate-800">
               <tr>
-                <td className="px-4 py-4" colSpan={3}>
-                  Total ({formatCount(filteredRows.length)} providers)
+                <td className="px-4 py-4" colSpan={4}>
+                  Total ({formatCount(filteredRows.length)} cash payments)
                 </td>
-                <td className="px-4 py-4">{formatMoney(stats.totalCollected)}</td>
+                <td className="px-4 py-4">{formatMoney(stats.totalAmount)}</td>
                 <td className="px-4 py-4">{formatMoney(stats.totalCommission)}</td>
-                <td className="px-4 py-4" colSpan={2} />
-                <td className="px-4 py-4">{formatMoney(stats.adminNet)}</td>
+                <td className="px-4 py-4" />
+                <td className="px-4 py-4">{formatMoney(stats.totalCommission)}</td>
+                <td className="px-4 py-4" />
+                <td className="px-4 py-4">
+                  {formatMoney(
+                    filteredRows.reduce((sum, row) => {
+                      const key = row.rawId ?? row.id;
+                      return sum + Number(adminAmounts[key] ?? parseMoney(row.companyCommissionAmount));
+                    }, 0)
+                  )}
+                </td>
+                <td className="px-4 py-4">
+                  {formatMoney(
+                    filteredRows.reduce((sum, row) => {
+                      const key = row.rawId ?? row.id;
+                      return (
+                        sum +
+                        (parseMoney(row.companyCommissionAmount) -
+                          Number(adminAmounts[key] ?? parseMoney(row.companyCommissionAmount)))
+                      );
+                    }, 0)
+                  )}
+                </td>
                 <td className="px-4 py-4" />
               </tr>
             </tfoot>
           </table>
         </div>
 
+        {approvalError ? (
+          <div className="border-t border-[#F6F0F7] px-5 py-3 text-sm text-rose-600">{approvalError}</div>
+        ) : null}
+
         {filteredRows.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-slate-500">
-            No cash transaction summaries match the current search.
+            No cash payments match the current provider search.
           </div>
         ) : null}
       </section>
 
-      {selectedPayment ? (
+      {selectedRow ? (
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr),380px]">
           <article className="rounded-[28px] border border-[#EEE8F4] bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-display text-xl font-bold text-slate-950">Transaction Summary</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Provider settlement details for the selected cash transaction group.
+                  Selected cash task details and commission review summary.
                 </p>
               </div>
               <button
@@ -535,26 +599,28 @@ export function PaymentsPage() {
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl bg-[#FAF8FD] px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Provider ID</p>
-                <p className="mt-2 text-base font-bold text-slate-950">{buildProviderId(selectedPayment.id)}</p>
+                <p className="mt-2 text-base font-bold text-slate-950">{buildProviderId(selectedRow.id)}</p>
               </div>
               <div className="rounded-2xl bg-[#FAF8FD] px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Provider</p>
-                <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.provider}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Task ID</p>
+                <p className="mt-2 text-base font-bold text-slate-950">{selectedRow.bookingId ?? "-"}</p>
               </div>
               <div className="rounded-2xl bg-[#FAF8FD] px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Customer</p>
-                <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.customer}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Commission</p>
+                <p className="mt-2 text-base font-bold text-slate-950">
+                  {selectedRow.companyCommissionAmount ?? "RM0.00"}
+                </p>
               </div>
               <div className="rounded-2xl bg-[#FAF8FD] px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Company Paid At</p>
-                <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.companyPaidAt ?? "Not paid yet"}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Status</p>
+                <p className="mt-2 text-base font-bold text-slate-950">{selectedRow.commissionStatus ?? selectedRow.status}</p>
               </div>
             </div>
           </article>
 
           <article className="rounded-[28px] border border-[#EEE8F4] bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
             <h3 className="font-display text-xl font-bold text-slate-950">Reference Preview</h3>
-            <p className="mt-1 text-sm text-slate-500">Uploaded payment proof for quick finance verification.</p>
+            <p className="mt-1 text-sm text-slate-500">Open the image and verify the paid commission amount.</p>
 
             <div className="mt-5 overflow-hidden rounded-[24px] border border-[#EEE6F0] bg-[#FAF8FD]">
               {selectedProof && isImageProof(selectedProof) ? (
