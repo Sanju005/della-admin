@@ -222,6 +222,52 @@ export function PaymentsPage() {
     [filteredRows, selectedRowId]
   );
 
+  const providerList = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        providerId: string;
+        provider: string;
+        cashTasks: number;
+        totalAmount: number;
+        totalCommission: number;
+        pendingToCompany: number;
+      }
+    >();
+
+    filteredRows.forEach((row) => {
+      const normalizedStatus = (row.status ?? "").trim().toLowerCase();
+      const isCompletedTask = normalizedStatus === "paid" || normalizedStatus === "completed";
+
+      if (!isCompletedTask) {
+        return;
+      }
+
+      const key = `${buildProviderId(row.id)}::${row.provider}`;
+      const existing = grouped.get(key) ?? {
+        providerId: buildProviderId(row.id),
+        provider: row.provider,
+        cashTasks: 0,
+        totalAmount: 0,
+        totalCommission: 0,
+        pendingToCompany: 0,
+      };
+
+      const commission = parseMoney(row.companyCommissionAmount);
+      const isPendingToCompany = (row.commissionStatus ?? "").trim().toLowerCase() !== "paid";
+
+      existing.cashTasks += 1;
+      existing.totalAmount += parseMoney(row.amount);
+      existing.totalCommission += commission;
+      existing.pendingToCompany += isPendingToCompany ? commission : 0;
+      grouped.set(key, existing);
+    });
+
+    return [...grouped.values()]
+      .sort((left, right) => right.cashTasks - left.cashTasks || right.totalAmount - left.totalAmount)
+      .slice(0, 5);
+  }, [filteredRows]);
+
   const stats = useMemo(() => {
     const totalBookings = filteredRows.length;
     const totalAmount = filteredRows.reduce((sum, row) => sum + parseMoney(row.amount), 0);
@@ -333,34 +379,51 @@ export function PaymentsPage() {
               ) : null}
             </label>
 
-            {selectedRow ? (
-              <article className="mt-4 rounded-[24px] border border-[#EEE6F0] bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-                <div className="flex items-center gap-4">
-                  <div className="grid size-14 place-items-center rounded-full bg-[linear-gradient(135deg,#D7FBE7,#E3F2FF)] font-bold text-[#14935E]">
-                    {getProviderInitials(selectedRow.provider)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-950">{selectedRow.provider}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#16A34A]">
-                      {buildProviderId(selectedRow.id)}
-                    </p>
-                  </div>
-                </div>
+            {providerList.length ? (
+              <div className="mt-4 space-y-3">
+                {providerList.map((provider) => (
+                  <article
+                    key={`${provider.providerId}-${provider.provider}`}
+                    className="rounded-[24px] border border-[#EEE6F0] bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="grid size-14 place-items-center rounded-full bg-[linear-gradient(135deg,#D7FBE7,#E3F2FF)] font-bold text-[#14935E]">
+                        {getProviderInitials(provider.provider)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">{provider.provider}</p>
+                        <p className="mt-1 text-xs font-semibold text-[#16A34A]">{provider.providerId}</p>
+                      </div>
+                    </div>
 
-                <div className="mt-4 grid gap-3 text-sm text-slate-500 sm:grid-cols-2">
-                  <div className="flex items-center gap-2">
-                    <ReceiptText className="size-4 text-slate-400" />
-                    <span>{selectedRow.bookingId ?? "-"}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <UserRound className="size-4 text-slate-400" />
-                    <span className="truncate">{selectedRow.customer}</span>
-                  </div>
-                </div>
-              </article>
+                    <div className="mt-4 grid gap-3 text-sm text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <ReceiptText className="size-4 text-slate-400" />
+                        <span>{formatCount(provider.cashTasks)} cash task{provider.cashTasks === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                        <div className="rounded-2xl bg-[#FAF8FD] px-3 py-2">
+                          <p className="font-semibold text-slate-400">Total Amount</p>
+                          <p className="mt-1 text-sm font-bold text-slate-900">{formatMoney(provider.totalAmount)}</p>
+                        </div>
+                        <div className="rounded-2xl bg-[#FAF8FD] px-3 py-2">
+                          <p className="font-semibold text-slate-400">Total Commission</p>
+                          <p className="mt-1 text-sm font-bold text-slate-900">{formatMoney(provider.totalCommission)}</p>
+                        </div>
+                        <div className="rounded-2xl bg-[#FAF8FD] px-3 py-2">
+                          <p className="font-semibold text-slate-400">Pending to Company</p>
+                          <p className="mt-1 text-sm font-bold text-[#EF4444]">
+                            {formatMoney(provider.pendingToCompany)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
             ) : (
               <div className="mt-4 rounded-[24px] border border-dashed border-[#E7E1EC] bg-white/70 p-5 text-sm text-slate-500">
-                No provider matches the current search.
+                No completed cash-payment providers match the current search.
               </div>
             )}
           </div>
