@@ -385,7 +385,7 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
     Boolean(paymentRow.provider_company_payment_proof_data_url?.trim()) ||
     Boolean(paymentRow.customer_payment_proof_data_url?.trim());
 
-  if (!hasSettlementProof) {
+  if (payload.action === "mark_paid" && !hasSettlementProof) {
     return json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin);
   }
 

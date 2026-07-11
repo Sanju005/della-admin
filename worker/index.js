@@ -344,7 +344,7 @@ function handlePaymentSettlement(request, env) {
                     }
                     hasSettlementProof = Boolean((_f = paymentRow.provider_company_payment_proof_data_url) === null || _f === void 0 ? void 0 : _f.trim()) ||
                         Boolean((_g = paymentRow.customer_payment_proof_data_url) === null || _g === void 0 ? void 0 : _g.trim());
-                    if (!hasSettlementProof) {
+                    if (payload.action === "mark_paid" && !hasSettlementProof) {
                         return [2 /*return*/, json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin)];
                     }
                     nextStatus = payload.action === "mark_paid" ? "paid" : "rejected";
