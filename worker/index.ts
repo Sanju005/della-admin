@@ -32,7 +32,7 @@ type VerificationAction =
     };
 
 type PaymentSettlementAction = {
-  action: "mark_paid";
+  action: "mark_paid" | "mark_rejected";
   paymentId?: string;
 };
 
@@ -363,7 +363,7 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
   const payload = (await request.json().catch(() => ({}))) as PaymentSettlementAction;
   const paymentId = payload.paymentId?.trim() ?? "";
 
-  if (payload.action !== "mark_paid" || !paymentId) {
+  if ((payload.action !== "mark_paid" && payload.action !== "mark_rejected") || !paymentId) {
     return json({ error: "A valid paymentId is required." }, { status: 400 }, origin);
   }
 
@@ -388,8 +388,9 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
     return json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin);
   }
 
-  const alreadyPaid = (paymentRow.company_payment_status ?? "").trim().toLowerCase() === "paid";
-  if (alreadyPaid) {
+  const nextStatus = payload.action === "mark_paid" ? "paid" : "rejected";
+  const alreadyInTargetStatus = (paymentRow.company_payment_status ?? "").trim().toLowerCase() === nextStatus;
+  if (alreadyInTargetStatus) {
     return json({
       success: true,
       payment: {
@@ -400,11 +401,11 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
     }, undefined, origin);
   }
 
-  const approvedAt = new Date().toISOString();
+  const approvedAt = payload.action === "mark_paid" ? new Date().toISOString() : null;
   const { data: updatedPayment, error: updateError } = await adminClient
     .from("payments")
     .update({
-      company_payment_status: "paid",
+      company_payment_status: nextStatus,
       company_paid_at: approvedAt,
     })
     .eq("id", paymentId)
