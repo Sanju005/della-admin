@@ -1,7 +1,9 @@
 import { Banknote, CalendarDays, Check, Clock3, Eye, Image as ImageIcon, ReceiptText, Search, Wallet, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
 import { StatusBadge } from "../components/status-badge";
+import { TaskDetailPanel } from "../components/task-detail-panel";
+import { getProviderTaskDetail, type ProviderTaskDetail } from "../lib/admin-providers";
 import { approveCompanyPayments, listPaymentsWithFallback } from "../lib/admin-payments";
 import type { PaymentProofAsset, PaymentRow } from "../types";
 
@@ -129,9 +131,13 @@ export function PaymentsPage() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<ProviderTaskDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [approvalPendingId, setApprovalPendingId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [adminAmounts, setAdminAmounts] = useState<Record<string, string>>({});
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -228,6 +234,9 @@ export function PaymentsPage() {
   useEffect(() => {
     if (!filteredRows.length) {
       setSelectedRowId(null);
+      setSelectedTaskDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
       return;
     }
 
@@ -242,6 +251,18 @@ export function PaymentsPage() {
     () => filteredRows.find((row) => (row.rawId ?? row.id) === selectedRowId) ?? filteredRows[0] ?? null,
     [filteredRows, selectedRowId]
   );
+
+  useEffect(() => {
+    if (!detailLoading && !selectedTaskDetail) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+
+    return () => window.clearTimeout(timeout);
+  }, [detailLoading, selectedTaskDetail]);
 
   const stats = useMemo(() => {
     const totalBookings = filteredRows.length;
@@ -290,6 +311,35 @@ export function PaymentsPage() {
       );
     } finally {
       setApprovalPendingId(null);
+    }
+  }
+
+  async function handleRowClick(row: PaymentRow) {
+    const rowKey = row.rawId ?? row.id;
+    setSelectedRowId(rowKey);
+
+    const rawBookingId = row.rawBookingId?.trim();
+    if (!rawBookingId) {
+      setSelectedTaskDetail(null);
+      setDetailError("No task detail is linked to this cash payment row yet.");
+      setDetailLoading(false);
+      return;
+    }
+
+    setDetailLoading(true);
+    setDetailError(null);
+
+    try {
+      const detail = await getProviderTaskDetail(rawBookingId);
+      setSelectedTaskDetail(detail);
+      if (!detail) {
+        setDetailError("No booking detail was returned for this task.");
+      }
+    } catch (error) {
+      setSelectedTaskDetail(null);
+      setDetailError(error instanceof Error ? error.message : "Unable to load booking detail.");
+    } finally {
+      setDetailLoading(false);
     }
   }
 
@@ -514,7 +564,7 @@ export function PaymentsPage() {
                 return (
                   <tr
                     key={rowKey}
-                    onClick={() => setSelectedRowId(rowKey)}
+                    onClick={() => void handleRowClick(row)}
                     className={`border-b border-[#F6F0F7] text-sm transition hover:bg-[#FFFCFF] ${
                       isSelected ? "bg-[#FCFAFF]" : "bg-white"
                     }`}
@@ -711,6 +761,15 @@ export function PaymentsPage() {
           </article>
         </section>
       ) : null}
+
+      <div ref={detailRef}>
+        <TaskDetailPanel detail={selectedTaskDetail} loading={detailLoading} title="Cash Task Detail" />
+        {!detailLoading && detailError ? (
+          <div className="mt-4 rounded-[28px] border border-rose-100 bg-white/90 p-5 text-sm text-rose-600 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+            {detailError}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

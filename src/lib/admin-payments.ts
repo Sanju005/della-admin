@@ -280,6 +280,7 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
       .map((row) => ({
         id: row.id,
         rawId: row.rawId,
+        rawBookingId: row.bookingId,
         rawIds: row.rawId ? [row.rawId] : [],
         unpaidRawIds:
           row.rawId && (row.commissionStatus ?? "").trim().toLowerCase() !== "paid" ? [row.rawId] : [],
@@ -335,6 +336,7 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
       return {
         id: row.provider_id?.trim() || profileNames.get(row.provider_id ?? "") || formatEntityId(row.id, "PV"),
         rawId: row.id,
+        rawBookingId: row.booking_id?.trim() || undefined,
         rawIds: [row.id],
         unpaidRawIds:
           (row.company_payment_status ?? "").trim().toLowerCase() === "paid" ? [] : [row.id],
