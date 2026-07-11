@@ -28,6 +28,102 @@ function SummaryStrip({
   );
 }
 
+function parsePaymentBreakdown(note: string) {
+  const marker = "PAYMENT_BREAKDOWN:";
+  const markerIndex = note.indexOf(marker);
+
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const rawJson = note.slice(markerIndex + marker.length).trim();
+
+  try {
+    const parsed = JSON.parse(rawJson);
+    const entry = Array.isArray(parsed) ? parsed[0] : parsed;
+
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    const baseAmount = typeof entry.baseAmount === "number" ? entry.baseAmount : null;
+    const finalAmount = typeof entry.finalAmount === "number" ? entry.finalAmount : null;
+    const additionalCharge = typeof entry.additionalCharge === "number" ? entry.additionalCharge : null;
+    const discountAmount = typeof entry.discountAmount === "number" ? entry.discountAmount : null;
+    const noteText = typeof entry.note === "string" ? entry.note.trim() : "";
+
+    return {
+      baseAmount,
+      finalAmount,
+      additionalCharge,
+      discountAmount,
+      noteText,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatTimelineNote(note: string) {
+  const breakdown = parsePaymentBreakdown(note);
+
+  if (!breakdown) {
+    return {
+      primary: note,
+      secondary: [] as string[],
+    };
+  }
+
+  const secondary = [
+    breakdown.baseAmount !== null ? `Base amount: RM${breakdown.baseAmount.toFixed(2)}` : "",
+    breakdown.additionalCharge !== null ? `Additional charge: RM${breakdown.additionalCharge.toFixed(2)}` : "",
+    breakdown.discountAmount !== null ? `Discount: RM${breakdown.discountAmount.toFixed(2)}` : "",
+    breakdown.finalAmount !== null ? `Final amount: RM${breakdown.finalAmount.toFixed(2)}` : "",
+  ].filter(Boolean);
+
+  return {
+    primary: breakdown.noteText || "Provider accepted the booking and shared the payment breakdown.",
+    secondary,
+  };
+}
+
+function PathCard({
+  title,
+  status,
+  note,
+  time,
+  children,
+}: {
+  title: string;
+  status?: string;
+  note: string;
+  time?: string;
+  children?: React.ReactNode;
+}) {
+  const formatted = formatTimelineNote(note);
+
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white px-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        {status ? <MiniStatus status={status} /> : null}
+      </div>
+      <p className="mt-1 text-[13px] text-slate-600">{formatted.primary}</p>
+      {formatted.secondary.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {formatted.secondary.map((item) => (
+            <span key={item} className="rounded-full bg-slate-50 px-2.5 py-1 text-[12px] text-slate-600">
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {children ? <div className="mt-3">{children}</div> : null}
+      {time ? <p className="mt-2 text-[12px] text-slate-400">{time}</p> : null}
+    </div>
+  );
+}
+
 function ProofLinkCard({
   title,
   fileName,
@@ -100,6 +196,15 @@ export function TaskDetailPanel({
     return null;
   }
 
+  const completionImages = detail.images.filter((image) =>
+    /completion|completed|job|work|service/i.test(image.label)
+  );
+  const paymentImages = detail.images.filter((image) =>
+    /payment|proof|receipt|cash/i.test(image.label)
+  );
+  const customerReviews = detail.reviews.filter((review) => review.reviewerRole.toLowerCase() === "customer");
+  const providerReviews = detail.reviews.filter((review) => review.reviewerRole.toLowerCase() === "provider");
+
   return (
     <SurfaceCard title={`${title} - ${detail.bookingId}`}>
       <div className="space-y-4">
@@ -139,55 +244,137 @@ export function TaskDetailPanel({
           <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
             <p className="text-sm font-semibold text-slate-900">Task Path</p>
             {detail.timeline.length ? (
-              detail.timeline.map((item) => (
-                <div key={item.id} className="rounded-xl border border-slate-100 bg-white px-3 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                    {item.status ? <MiniStatus status={item.status} /> : null}
-                  </div>
-                  <p className="mt-1 text-[13px] text-slate-600">{item.note}</p>
-                  <p className="mt-1 text-[12px] text-slate-400">{item.time}</p>
-                </div>
-              ))
+              <div className="space-y-3">
+                {detail.timeline.map((item) => {
+                  const normalizedTitle = item.title.toLowerCase();
+                  const isCompletedStep = normalizedTitle.includes("completed");
+                  const isPaidStep = normalizedTitle.includes("payment") || normalizedTitle.includes("paid");
+                  const isReviewStep = normalizedTitle.includes("review");
+
+                  return (
+                    <PathCard key={item.id} title={item.title} status={item.status} note={item.note} time={item.time}>
+                      {isCompletedStep && completionImages.length ? (
+                        <div className="grid gap-3 xl:grid-cols-2">
+                          {completionImages.map((image) => (
+                            <ProofLinkCard
+                              key={image.id}
+                              title={image.label}
+                              fileName={image.fileName}
+                              url={image.url}
+                              mimeType={image.mimeType}
+                              note="Job completion image"
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {isPaidStep && detail.payments.length ? (
+                        <div className="space-y-3">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {detail.payments.map((payment) => (
+                              <div key={payment.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                                <p className="text-sm font-semibold text-slate-900">{payment.id}</p>
+                                <p className="mt-1 text-[13px] text-slate-600">
+                                  {payment.method} • {payment.amount}
+                                </p>
+                                <p className="mt-1 text-[12px] text-slate-500">
+                                  Provider net: {payment.providerNetAmount} • Commission: {payment.companyCommissionAmount}
+                                </p>
+                                <p className="mt-1 text-[12px] text-slate-500">
+                                  Payment: {payment.status} • Company: {payment.companyStatus}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                          {paymentImages.length ? (
+                            <div className="grid gap-3 xl:grid-cols-2">
+                              {paymentImages.map((image) => (
+                                <ProofLinkCard
+                                  key={image.id}
+                                  title={image.label}
+                                  fileName={image.fileName}
+                                  url={image.url}
+                                  mimeType={image.mimeType}
+                                  note="Payment proof image"
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {isReviewStep && detail.reviews.length ? (
+                        <div className="space-y-3">
+                          {customerReviews.length ? (
+                            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                              <p className="text-sm font-semibold text-slate-900">Customer Review for Provider</p>
+                              {customerReviews.map((review) => (
+                                <div key={review.id} className="mt-2 rounded-xl bg-white px-3 py-3">
+                                  <p className="text-sm font-medium text-slate-900">
+                                    {review.reviewer} rated {review.rating}/5
+                                  </p>
+                                  <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
+                                  {review.reply ? (
+                                    <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p>
+                                  ) : null}
+                                  <p className="mt-1 text-[12px] text-slate-400">{review.createdAt}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {providerReviews.length ? (
+                            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                              <p className="text-sm font-semibold text-slate-900">Provider Review for Customer</p>
+                              {providerReviews.map((review) => (
+                                <div key={review.id} className="mt-2 rounded-xl bg-white px-3 py-3">
+                                  <p className="text-sm font-medium text-slate-900">
+                                    {review.reviewer} rated {review.rating}/5
+                                  </p>
+                                  <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
+                                  {review.reply ? (
+                                    <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p>
+                                  ) : null}
+                                  <p className="mt-1 text-[12px] text-slate-400">{review.createdAt}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </PathCard>
+                  );
+                })}
+
+                {!detail.timeline.some((item) => item.title.toLowerCase().includes("review")) && detail.reviews.length ? (
+                  <PathCard
+                    title="Reviews Completed"
+                    status="Reviewed"
+                    note="Both-side reviews linked to this job are available below."
+                    time={detail.reviews[detail.reviews.length - 1]?.createdAt}
+                  >
+                    <div className="space-y-3">
+                      {detail.reviews.map((review) => (
+                        <div key={review.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {review.reviewerRole} review for {review.reviewFor}
+                          </p>
+                          <p className="mt-1 text-[13px] text-slate-600">
+                            {review.reviewer} rated {review.rating}/5
+                          </p>
+                          <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
+                          {review.reply ? <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </PathCard>
+                ) : null}
+              </div>
             ) : (
               <p className="text-sm text-slate-500">No task timeline found.</p>
             )}
           </div>
         </div>
-
-        <TableShell title="Status History">
-          <table className="min-w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-400">
-                <th className="pb-3 font-semibold">From</th>
-                <th className="pb-3 font-semibold">To</th>
-                <th className="pb-3 font-semibold">Actor</th>
-                <th className="pb-3 font-semibold">Note</th>
-                <th className="pb-3 font-semibold">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.statusHistory.length ? (
-                detail.statusHistory.map((item) => (
-                  <tr key={item.id} className="border-b border-slate-50">
-                    <td className="py-3 text-slate-700">{item.fromStatus}</td>
-                    <td className="py-3 text-slate-700">{item.toStatus}</td>
-                    <td className="py-3 text-slate-700">
-                      <div className="font-medium">{item.actor}</div>
-                      <div className="text-xs text-slate-400">{item.actorRole}</div>
-                    </td>
-                    <td className="py-3 text-slate-700">{item.note}</td>
-                    <td className="py-3 text-slate-500">{item.time}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="py-4 text-sm text-slate-500">No status history found for this task.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </TableShell>
 
         <div className="grid gap-4">
           <TableShell title="Payments">
