@@ -69,7 +69,7 @@ function json(data, init, origin) {
 }
 function buildAdminSupabaseClient(env) {
     var _a, _b, _c, _d;
-    var url = (_b = (_a = env.VITE_SUPABASE_URL) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+    var url = ((_a = env.SUPABASE_URL) === null || _a === void 0 ? void 0 : _a.trim()) || ((_b = env.VITE_SUPABASE_URL) === null || _b === void 0 ? void 0 : _b.trim()) || "";
     var serviceKey = (_d = (_c = env.SUPABASE_SERVICE_ROLE_KEY) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
     if (!url || !serviceKey) {
         return null;
@@ -92,7 +92,7 @@ function verifyAdminRequest(request, env) {
                     origin = request.headers.get("origin");
                     if (!adminClient) {
                         return [2 /*return*/, {
-                                error: json({ error: "Worker env is missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 }, origin),
+                                error: json({ error: "Worker env is missing SUPABASE_URL (or VITE_SUPABASE_URL) or SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 }, origin),
                             }];
                     }
                     authorization = request.headers.get("authorization");
@@ -302,7 +302,7 @@ function handleProviderVerification(request, env) {
 }
 function handlePaymentSettlement(request, env) {
     return __awaiter(this, void 0, void 0, function () {
-        var origin, verified, payload, paymentId, adminClient, _a, payment, paymentError, paymentRow, hasSettlementProof, alreadyPaid, approvedAt, _b, updatedPayment, updateError;
+        var origin, verified, payload, paymentId, adminClient, _a, payment, paymentError, paymentRow, hasSettlementProof, nextStatus, alreadyInTargetStatus, approvedAt, _b, updatedPayment, updateError;
         var _c, _d, _e, _f, _g, _h;
         return __generator(this, function (_j) {
             switch (_j.label) {
@@ -327,7 +327,7 @@ function handlePaymentSettlement(request, env) {
                 case 2:
                     payload = (_j.sent());
                     paymentId = (_d = (_c = payload.paymentId) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
-                    if (payload.action !== "mark_paid" || !paymentId) {
+                    if ((payload.action !== "mark_paid" && payload.action !== "mark_rejected") || !paymentId) {
                         return [2 /*return*/, json({ error: "A valid paymentId is required." }, { status: 400 }, origin)];
                     }
                     adminClient = verified.adminClient;
@@ -347,8 +347,9 @@ function handlePaymentSettlement(request, env) {
                     if (!hasSettlementProof) {
                         return [2 /*return*/, json({ error: "Provider payment slip is missing for this payment." }, { status: 400 }, origin)];
                     }
-                    alreadyPaid = ((_h = paymentRow.company_payment_status) !== null && _h !== void 0 ? _h : "").trim().toLowerCase() === "paid";
-                    if (alreadyPaid) {
+                    nextStatus = payload.action === "mark_paid" ? "paid" : "rejected";
+                    alreadyInTargetStatus = ((_h = paymentRow.company_payment_status) !== null && _h !== void 0 ? _h : "").trim().toLowerCase() === nextStatus;
+                    if (alreadyInTargetStatus) {
                         return [2 /*return*/, json({
                                 success: true,
                                 payment: {
@@ -358,11 +359,11 @@ function handlePaymentSettlement(request, env) {
                                 },
                             }, undefined, origin)];
                     }
-                    approvedAt = new Date().toISOString();
+                    approvedAt = payload.action === "mark_paid" ? new Date().toISOString() : null;
                     return [4 /*yield*/, adminClient
                             .from("payments")
                             .update({
-                            company_payment_status: "paid",
+                            company_payment_status: nextStatus,
                             company_paid_at: approvedAt,
                         })
                             .eq("id", paymentId)

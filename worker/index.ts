@@ -6,6 +6,7 @@ type AssetFetcher = {
 
 export interface Env {
   ASSETS: AssetFetcher;
+  SUPABASE_URL?: string;
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_ANON_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
@@ -91,7 +92,7 @@ function json(data: unknown, init?: ResponseInit, origin?: string | null) {
 }
 
 function buildAdminSupabaseClient(env: Env) {
-  const url = env.VITE_SUPABASE_URL?.trim() ?? "";
+  const url = env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim() || "";
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
 
   if (!url || !serviceKey) {
@@ -112,7 +113,7 @@ async function verifyAdminRequest(request: Request, env: Env): Promise<VerifiedA
 
   if (!adminClient) {
     return {
-      error: json({ error: "Worker env is missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 }, origin),
+      error: json({ error: "Worker env is missing SUPABASE_URL (or VITE_SUPABASE_URL) or SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 }, origin),
     };
   }
 
