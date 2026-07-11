@@ -755,19 +755,20 @@ async function tryFetchLiveBookings(userId: string, role: string, profileNames: 
     return null;
   }
 
-  return (data as LiveBookingRow[]).map((row) => {
-    const providerProfile = relationNode(row.provider_profiles);
-    const providerService = relationItem(row.provider_services);
-    const customerName = profileNames.get(row.customer_id ?? "");
-    const providerName = providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "");
+    return (data as LiveBookingRow[]).map((row) => {
+      const providerProfile = relationNode(row.provider_profiles);
+      const providerService = relationItem(row.provider_services);
+      const customerName = profileNames.get(row.customer_id ?? "");
+      const providerName = providerProfile?.marketing_name?.trim() || profileNames.get(row.provider_id ?? "");
 
-    return {
-      id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
-      service: humanizeServiceType(providerService?.service_type),
-      provider: providerName || "DELLA Provider",
-      customer: customerName || "Customer",
-      status: mapBookingStatus(row.booking_status),
-      amount: formatCurrency(row.quoted_amount ?? 0),
+      return {
+        id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+        rawId: row.id,
+        service: humanizeServiceType(providerService?.service_type),
+        provider: providerName || "DELLA Provider",
+        customer: customerName || "Customer",
+        status: mapBookingStatus(row.booking_status),
+        amount: formatCurrency(row.quoted_amount ?? 0),
       schedule: formatSchedule(row.scheduled_date, row.scheduled_start_time),
     } satisfies DashboardBooking;
   });

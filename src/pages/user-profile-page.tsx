@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { TaskDetailModal } from "../components/task-detail-modal";
 import {
   InfoRow,
   MetricTile,
@@ -34,6 +35,7 @@ import {
   VerificationDot,
 } from "../components/user-detail-ui";
 import { userDetailRecords } from "../data/user-detail-mocks";
+import { getProviderTaskDetail, type ProviderTaskDetail } from "../lib/admin-providers";
 import {
   deleteUserRecord,
   getUserProfileWithFallback,
@@ -246,6 +248,10 @@ export function UserProfilePage() {
   const [taskDateFilter, setTaskDateFilter] = useState<DateFilterKey>("all");
   const [taskSort, setTaskSort] = useState<SortKey>("recent");
   const [taskStatusFilter, setTaskStatusFilter] = useState<UserTaskStatusKey>("all");
+  const [selectedTaskRawId, setSelectedTaskRawId] = useState<string | null>(null);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<ProviderTaskDetail | null>(null);
+  const [taskDetailLoading, setTaskDetailLoading] = useState(false);
+  const [taskDetailError, setTaskDetailError] = useState<string | null>(null);
   const [paymentDateFilter, setPaymentDateFilter] = useState<DateFilterKey>("all");
   const [paymentSort, setPaymentSort] = useState<SortKey>("recent");
   const [reviewDateFilter, setReviewDateFilter] = useState<DateFilterKey>("all");
@@ -303,6 +309,33 @@ export function UserProfilePage() {
       active = false;
     };
   }, [userId]);
+
+  async function handleTaskClick(rawId?: string) {
+    const normalizedRawId = rawId?.trim();
+
+    if (!normalizedRawId) {
+      return;
+    }
+
+    setSelectedTaskRawId(normalizedRawId);
+    setSelectedTaskDetail(null);
+    setTaskDetailError(null);
+    setTaskDetailLoading(true);
+
+    try {
+      const detail = await getProviderTaskDetail(normalizedRawId);
+      setSelectedTaskDetail(detail);
+
+      if (!detail) {
+        setTaskDetailError("No booking detail was returned for this task.");
+      }
+    } catch (error) {
+      setSelectedTaskDetail(null);
+      setTaskDetailError(error instanceof Error ? error.message : "Unable to load booking detail.");
+    } finally {
+      setTaskDetailLoading(false);
+    }
+  }
 
   const defaultUserDetail = Object.values(userDetailRecords)[0]!;
   const safeDetail =
@@ -1136,7 +1169,13 @@ export function UserProfilePage() {
               <tbody>
                 {filteredTaskRows.length ? (
                   filteredTaskRows.map((task) => (
-                    <tr key={`${task.taskType}-${task.id}`} className="border-b border-slate-50">
+                    <tr
+                      key={`${task.taskType}-${task.id}`}
+                      className={`border-b border-slate-50 transition hover:bg-emerald-50/40 ${
+                        task.rawId && selectedTaskRawId === task.rawId ? "bg-emerald-50/50" : ""
+                      } ${task.rawId ? "cursor-pointer" : ""}`}
+                      onClick={() => void handleTaskClick(task.rawId)}
+                    >
                       <td className="py-3 font-semibold text-emerald-700">{task.id}</td>
                       <td className="py-3 text-slate-700">{task.service}</td>
                       <td className="py-3 text-slate-700">{task.provider}</td>
@@ -1421,6 +1460,20 @@ export function UserProfilePage() {
           </div>
         </SurfaceCard>
       ) : null}
+
+      <TaskDetailModal
+        open={Boolean(selectedTaskRawId && (taskDetailLoading || selectedTaskDetail || taskDetailError))}
+        detail={selectedTaskDetail}
+        loading={taskDetailLoading}
+        error={taskDetailError}
+        title="Booking Detail"
+        onClose={() => {
+          setSelectedTaskRawId(null);
+          setSelectedTaskDetail(null);
+          setTaskDetailError(null);
+          setTaskDetailLoading(false);
+        }}
+      />
     </div>
   );
 }
