@@ -26,6 +26,7 @@ const statusToneMap: Record<string, StatusTone> = {
   open: "rose",
   flagged: "rose",
   suspended: "rose",
+  rejected: "rose",
   cancelled: "rose",
   refunded: "violet",
   escalated: "violet",

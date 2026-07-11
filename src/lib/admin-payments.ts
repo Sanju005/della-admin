@@ -45,6 +45,8 @@ type PaymentApprovalResponse = {
   error?: string;
 };
 
+type PaymentSettlementAction = "mark_paid" | "mark_rejected";
+
 type PaymentAggregateBucket = {
   id: string;
   rawIds: string[];
@@ -358,9 +360,10 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
     });
 }
 
-export async function approveCompanyPayment(params: {
+async function updateCompanyPaymentStatus(params: {
   accessToken: string;
   paymentId: string;
+  action: PaymentSettlementAction;
 }) {
   const response = await fetch("/api/admin/payments/settlement", {
     method: "POST",
@@ -369,7 +372,7 @@ export async function approveCompanyPayment(params: {
       Authorization: `Bearer ${params.accessToken}`,
     },
     body: JSON.stringify({
-      action: "mark_paid",
+      action: params.action,
       paymentId: params.paymentId,
     }),
   });
@@ -383,12 +386,46 @@ export async function approveCompanyPayment(params: {
   return payload.payment ?? null;
 }
 
+export async function approveCompanyPayment(params: {
+  accessToken: string;
+  paymentId: string;
+}) {
+  return updateCompanyPaymentStatus({
+    accessToken: params.accessToken,
+    paymentId: params.paymentId,
+    action: "mark_paid",
+  });
+}
+
+export async function rejectCompanyPayment(params: {
+  accessToken: string;
+  paymentId: string;
+}) {
+  return updateCompanyPaymentStatus({
+    accessToken: params.accessToken,
+    paymentId: params.paymentId,
+    action: "mark_rejected",
+  });
+}
+
 export async function approveCompanyPayments(params: {
   accessToken: string;
   paymentIds: string[];
 }) {
   for (const paymentId of params.paymentIds) {
     await approveCompanyPayment({
+      accessToken: params.accessToken,
+      paymentId,
+    });
+  }
+}
+
+export async function rejectCompanyPayments(params: {
+  accessToken: string;
+  paymentIds: string[];
+}) {
+  for (const paymentId of params.paymentIds) {
+    await rejectCompanyPayment({
       accessToken: params.accessToken,
       paymentId,
     });

@@ -4,7 +4,7 @@ import { useAuth } from "../auth/auth-provider";
 import { StatusBadge } from "../components/status-badge";
 import { TaskDetailPanel } from "../components/task-detail-panel";
 import { getProviderTaskDetail, type ProviderTaskDetail } from "../lib/admin-providers";
-import { approveCompanyPayments, listPaymentsWithFallback } from "../lib/admin-payments";
+import { approveCompanyPayments, listPaymentsWithFallback, rejectCompanyPayments } from "../lib/admin-payments";
 import type { PaymentProofAsset, PaymentRow } from "../types";
 
 function parseMoney(value: string | undefined) {
@@ -314,6 +314,32 @@ export function PaymentsPage() {
     }
   }
 
+  async function handleRejectPayment(row: PaymentRow) {
+    if (!row.unpaidRawIds?.length || !session?.access_token || approvalPendingId) {
+      return;
+    }
+
+    setApprovalPendingId(row.rawId ?? row.id);
+    setApprovalError(null);
+
+    try {
+      await rejectCompanyPayments({
+        accessToken: session.access_token,
+        paymentIds: row.unpaidRawIds,
+      });
+
+      const nextRows = await listPaymentsWithFallback();
+      setRows(nextRows);
+      setSelectedRowId(row.rawId ?? row.id);
+    } catch (error) {
+      setApprovalError(
+        error instanceof Error ? error.message : "Unable to reject provider commission payment."
+      );
+    } finally {
+      setApprovalPendingId(null);
+    }
+  }
+
   async function handleRowClick(row: PaymentRow) {
     const rowKey = row.rawId ?? row.id;
     setSelectedRowId(rowKey);
@@ -556,6 +582,7 @@ export function PaymentsPage() {
                 const adminAmount = Number(adminAmounts[rowKey] ?? commission);
                 const balance = paidByProvider - (Number.isFinite(adminAmount) ? adminAmount : 0);
                 const isCommissionPaid = (row.commissionStatus ?? "").trim().toLowerCase() === "paid";
+                const isCommissionRejected = (row.commissionStatus ?? "").trim().toLowerCase() === "rejected";
                 const hasProof = Boolean(
                   row.providerCompanyPaymentProof?.url?.trim() || row.customerPaymentProof?.url?.trim()
                 );
@@ -616,12 +643,13 @@ export function PaymentsPage() {
                           disabled={
                             pending ||
                             isCommissionPaid ||
+                            isCommissionRejected ||
                             !hasProof ||
                             !session?.access_token ||
                             balance !== 0
                           }
                           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                            pending || isCommissionPaid || !hasProof || !session?.access_token || balance !== 0
+                            pending || isCommissionPaid || isCommissionRejected || !hasProof || !session?.access_token || balance !== 0
                               ? "cursor-not-allowed bg-slate-100 text-slate-400"
                               : "bg-[#EAFBF0] text-[#169B57] hover:brightness-95"
                           }`}
@@ -631,11 +659,19 @@ export function PaymentsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={(event) => event.stopPropagation()}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF1F1] px-3 py-1.5 text-xs font-semibold text-[#EF4444]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleRejectPayment(row);
+                          }}
+                          disabled={pending || isCommissionPaid || isCommissionRejected || !session?.access_token}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            pending || isCommissionPaid || isCommissionRejected || !session?.access_token
+                              ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                              : "bg-[#FFF1F1] text-[#EF4444] hover:brightness-95"
+                          }`}
                         >
                           <X className="size-3.5" />
-                          Reject
+                          {pending ? "Working..." : "Reject"}
                         </button>
                       </div>
                     </td>
