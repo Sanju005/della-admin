@@ -1,16 +1,4 @@
-import {
-  Banknote,
-  CalendarDays,
-  Check,
-  Clock3,
-  Eye,
-  Image as ImageIcon,
-  ReceiptText,
-  Search,
-  UserRound,
-  Wallet,
-  X,
-} from "lucide-react";
+import { Banknote, CalendarDays, Check, Clock3, Eye, Image as ImageIcon, ReceiptText, Search, Wallet, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
 import { StatusBadge } from "../components/status-badge";
@@ -42,17 +30,6 @@ function formatCount(value: number) {
 function buildProviderId(source: string) {
   const normalized = source.replace(/[^a-z0-9]/gi, "").toUpperCase();
   return normalized.startsWith("PV") ? normalized : `PV${normalized.slice(0, 5).padEnd(5, "0")}`;
-}
-
-function getProviderInitials(name: string) {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("") || "PV"
-  );
 }
 
 function isImageProof(asset: PaymentProofAsset | null | undefined) {
@@ -147,6 +124,10 @@ export function PaymentsPage() {
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "custom">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid" | "payment process">("all");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [approvalPendingId, setApprovalPendingId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
@@ -190,19 +171,59 @@ export function PaymentsPage() {
     };
   }, []);
 
+  function parseRowDate(value: string | undefined) {
+    if (!value?.trim()) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed;
+  }
+
   const filteredRows = useMemo(() => {
     const baseRows = rows.filter((row) => (row.method ?? "").trim().toLowerCase() === "cash");
     const trimmed = query.trim().toLowerCase();
-
-    if (!trimmed) {
-      return baseRows;
-    }
+    const today = new Date();
+    const todayString = today.toDateString();
 
     return baseRows.filter((row) => {
       const providerId = buildProviderId(row.id);
-      return [providerId, row.provider].join(" ").toLowerCase().includes(trimmed);
+      const matchesSearch =
+        !trimmed || [providerId, row.provider].join(" ").toLowerCase().includes(trimmed);
+
+      const normalizedStatus = (row.commissionStatus ?? row.status ?? "").trim().toLowerCase();
+      const matchesStatus = statusFilter === "all" || normalizedStatus === statusFilter;
+
+      const parsedDate = parseRowDate(row.date);
+      let matchesDate = true;
+
+      if (dateFilter === "today") {
+        matchesDate = parsedDate ? parsedDate.toDateString() === todayString : false;
+      }
+
+      if (dateFilter === "custom") {
+        if (!customStartDate && !customEndDate) {
+          matchesDate = true;
+        } else if (!parsedDate) {
+          matchesDate = false;
+        } else {
+          const rowTime = parsedDate.getTime();
+          const startTime = customStartDate ? new Date(`${customStartDate}T00:00:00`).getTime() : null;
+          const endTime = customEndDate ? new Date(`${customEndDate}T23:59:59`).getTime() : null;
+
+          matchesDate =
+            (startTime === null || rowTime >= startTime) &&
+            (endTime === null || rowTime <= endTime);
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [query, rows]);
+  }, [customEndDate, customStartDate, dateFilter, query, rows, statusFilter]);
 
   useEffect(() => {
     if (!filteredRows.length) {
@@ -221,52 +242,6 @@ export function PaymentsPage() {
     () => filteredRows.find((row) => (row.rawId ?? row.id) === selectedRowId) ?? filteredRows[0] ?? null,
     [filteredRows, selectedRowId]
   );
-
-  const providerList = useMemo(() => {
-    const grouped = new Map<
-      string,
-      {
-        providerId: string;
-        provider: string;
-        cashTasks: number;
-        totalAmount: number;
-        totalCommission: number;
-        pendingToCompany: number;
-      }
-    >();
-
-    filteredRows.forEach((row) => {
-      const normalizedStatus = (row.status ?? "").trim().toLowerCase();
-      const isCompletedTask = normalizedStatus === "paid" || normalizedStatus === "completed";
-
-      if (!isCompletedTask) {
-        return;
-      }
-
-      const key = `${buildProviderId(row.id)}::${row.provider}`;
-      const existing = grouped.get(key) ?? {
-        providerId: buildProviderId(row.id),
-        provider: row.provider,
-        cashTasks: 0,
-        totalAmount: 0,
-        totalCommission: 0,
-        pendingToCompany: 0,
-      };
-
-      const commission = parseMoney(row.companyCommissionAmount);
-      const isPendingToCompany = (row.commissionStatus ?? "").trim().toLowerCase() !== "paid";
-
-      existing.cashTasks += 1;
-      existing.totalAmount += parseMoney(row.amount);
-      existing.totalCommission += commission;
-      existing.pendingToCompany += isPendingToCompany ? commission : 0;
-      grouped.set(key, existing);
-    });
-
-    return [...grouped.values()]
-      .sort((left, right) => right.cashTasks - left.cashTasks || right.totalAmount - left.totalAmount)
-      .slice(0, 5);
-  }, [filteredRows]);
 
   const stats = useMemo(() => {
     const totalBookings = filteredRows.length;
@@ -349,83 +324,118 @@ export function PaymentsPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <FilterPill label="Today" active />
-            <FilterPill label="Custom Range" />
-            <div className="inline-flex items-center rounded-2xl border border-[#EEE6F2] bg-white px-4 py-2 text-sm font-medium text-slate-500">
-              Cash transactions only
-            </div>
+            <button
+              type="button"
+              onClick={() => setDateFilter("today")}
+              className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
+                dateFilter === "today"
+                  ? "border-[#E6D9FF] bg-[#F7F1FF] text-[#6D41DD]"
+                  : "border-[#EEE6F2] bg-white text-slate-600"
+              }`}
+            >
+              <CalendarDays className="size-4" />
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateFilter("custom")}
+              className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
+                dateFilter === "custom"
+                  ? "border-[#E6D9FF] bg-[#F7F1FF] text-[#6D41DD]"
+                  : "border-[#EEE6F2] bg-white text-slate-600"
+              }`}
+            >
+              <CalendarDays className="size-4" />
+              Custom Range
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDateFilter("all");
+                setStatusFilter("all");
+                setCustomStartDate("");
+                setCustomEndDate("");
+              }}
+              className="inline-flex items-center rounded-2xl border border-[#EEE6F2] bg-white px-4 py-2 text-sm font-medium text-slate-500"
+            >
+              Reset Filters
+            </button>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-5 xl:grid-cols-[320px,minmax(0,1fr)]">
-          <div>
-            <p className="text-sm font-semibold text-slate-700">Search by Provider ID or Name</p>
-            <label className="mt-3 flex items-center gap-3 rounded-2xl border border-[#E7E1EC] bg-white px-4 py-3 text-sm text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-              <Search className="size-4" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search provider name"
-                className="w-full bg-transparent outline-none placeholder:text-slate-400"
-              />
-              {query ? (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="text-slate-400 transition hover:text-slate-600"
-                >
-                  <X className="size-4" />
-                </button>
-              ) : null}
-            </label>
-
-            {providerList.length ? (
-              <div className="mt-4 space-y-3">
-                {providerList.map((provider) => (
-                  <article
-                    key={`${provider.providerId}-${provider.provider}`}
-                    className="rounded-[24px] border border-[#EEE6F0] bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]"
+        <div className="mt-6 space-y-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,420px),auto,1fr] xl:items-end">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Search by Provider ID or Name</p>
+              <label className="mt-3 flex items-center gap-3 rounded-2xl border border-[#E7E1EC] bg-white px-4 py-3 text-sm text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                <Search className="size-4" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search provider name"
+                  className="w-full bg-transparent outline-none placeholder:text-slate-400"
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="text-slate-400 transition hover:text-slate-600"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="grid size-14 place-items-center rounded-full bg-[linear-gradient(135deg,#D7FBE7,#E3F2FF)] font-bold text-[#14935E]">
-                        {getProviderInitials(provider.provider)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">{provider.provider}</p>
-                        <p className="mt-1 text-xs font-semibold text-[#16A34A]">{provider.providerId}</p>
-                      </div>
-                    </div>
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+              </label>
+            </div>
 
-                    <div className="mt-4 grid gap-3 text-sm text-slate-500">
-                      <div className="flex items-center gap-2">
-                        <ReceiptText className="size-4 text-slate-400" />
-                        <span>{formatCount(provider.cashTasks)} cash task{provider.cashTasks === 1 ? "" : "s"}</span>
-                      </div>
-                      <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
-                        <div className="rounded-2xl bg-[#FAF8FD] px-3 py-2">
-                          <p className="font-semibold text-slate-400">Total Amount</p>
-                          <p className="mt-1 text-sm font-bold text-slate-900">{formatMoney(provider.totalAmount)}</p>
-                        </div>
-                        <div className="rounded-2xl bg-[#FAF8FD] px-3 py-2">
-                          <p className="font-semibold text-slate-400">Total Commission</p>
-                          <p className="mt-1 text-sm font-bold text-slate-900">{formatMoney(provider.totalCommission)}</p>
-                        </div>
-                        <div className="rounded-2xl bg-[#FAF8FD] px-3 py-2">
-                          <p className="font-semibold text-slate-400">Pending to Company</p>
-                          <p className="mt-1 text-sm font-bold text-[#EF4444]">
-                            {formatMoney(provider.pendingToCompany)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                ))}
+            {dateFilter === "custom" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                  Start Date
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(event) => setCustomStartDate(event.target.value)}
+                    className="rounded-2xl border border-[#E7E1EC] bg-white px-4 py-3 text-sm font-medium text-slate-600 outline-none"
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                  End Date
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(event) => setCustomEndDate(event.target.value)}
+                    className="rounded-2xl border border-[#E7E1EC] bg-white px-4 py-3 text-sm font-medium text-slate-600 outline-none"
+                  />
+                </label>
               </div>
             ) : (
-              <div className="mt-4 rounded-[24px] border border-dashed border-[#E7E1EC] bg-white/70 p-5 text-sm text-slate-500">
-                No completed cash-payment providers match the current search.
-              </div>
+              <div />
             )}
+
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Sort by Status</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ["all", "All"],
+                  ["pending", "Pending"],
+                  ["paid", "Paid"],
+                  ["payment process", "Process"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setStatusFilter(value as "all" | "pending" | "paid" | "payment process")}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      statusFilter === value
+                        ? "bg-slate-950 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
