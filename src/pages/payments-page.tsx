@@ -691,7 +691,7 @@ export function PaymentsPage() {
       </section>
 
       {selectedRow ? (
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr),380px]">
+        <section>
           <article className="rounded-[28px] border border-[#EEE8F4] bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -738,25 +738,6 @@ export function PaymentsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Status</p>
                 <p className="mt-2 text-base font-bold text-slate-950">{selectedRow.commissionStatus ?? selectedRow.status}</p>
               </div>
-            </div>
-          </article>
-
-          <article className="rounded-[28px] border border-[#EEE8F4] bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-            <h3 className="font-display text-xl font-bold text-slate-950">Reference Preview</h3>
-            <p className="mt-1 text-sm text-slate-500">Open the image and verify the paid commission amount.</p>
-
-            <div className="mt-5 overflow-hidden rounded-[24px] border border-[#EEE6F0] bg-[#FAF8FD]">
-              {selectedProof && isImageProof(selectedProof) ? (
-                <img
-                  src={selectedProof.url}
-                  alt={selectedProof.fileName ?? selectedProof.label}
-                  className="max-h-[320px] w-full object-contain"
-                />
-              ) : (
-                <div className="grid min-h-[260px] place-items-center p-6 text-center text-sm text-slate-500">
-                  {selectedProof ? "Preview is available through the View Proof button." : "No payment proof uploaded yet."}
-                </div>
-              )}
             </div>
           </article>
         </section>
