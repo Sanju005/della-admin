@@ -1553,6 +1553,13 @@ function pickFirstText(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
+function timelineHasStatus(
+  timeline: ProviderTaskDetail["timeline"],
+  matcher: (item: ProviderTaskDetail["timeline"][number]) => boolean,
+) {
+  return timeline.some(matcher);
+}
+
 async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderTaskDetail | null> {
   if (!supabase) {
     return null;
@@ -1772,6 +1779,71 @@ async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderT
         createdAt: formatDateTime(normalizeOptionalText(item.created_at) || null),
       };
     });
+
+  const hasPaymentStep = timelineHasStatus(
+    timeline,
+    (item) => item.title.toLowerCase().includes("payment") || item.title.toLowerCase().includes("paid")
+  );
+  const hasCompletedStep = timelineHasStatus(
+    timeline,
+    (item) => item.title.toLowerCase().includes("completed")
+  );
+  const hasReviewStep = timelineHasStatus(
+    timeline,
+    (item) => item.title.toLowerCase().includes("review")
+  );
+
+  const latestPaymentTime =
+    paymentsRows.length > 0
+      ? formatDateTime(normalizeOptionalText((paymentsRows[0] as Record<string, unknown>).created_at) || null)
+      : null;
+  const latestReviewTime =
+    reviews.length > 0 ? reviews[0]?.createdAt ?? null : null;
+
+  if (!hasCompletedStep) {
+    const bookingStatus = normalizeOptionalText(booking.booking_status).toLowerCase();
+    const shouldShowCompleted =
+      bookingStatus === "completed" ||
+      bookingStatus === "paid" ||
+      paymentsRows.length > 0 ||
+      reviews.length > 0;
+
+    if (shouldShowCompleted) {
+      timeline.push({
+        id: "completed_fallback",
+        title: "Completed",
+        note: images.length
+          ? "Task was completed and supporting images are attached below."
+          : "Task was marked completed.",
+        time:
+          formatDateTime(normalizeOptionalText(booking.completed_at) || null) ||
+          latestPaymentTime ||
+          latestReviewTime ||
+          "Recently active",
+        status: "Completed",
+      });
+    }
+  }
+
+  if (!hasPaymentStep && paymentsRows.length > 0) {
+    timeline.push({
+      id: "payment_fallback",
+      title: "Payment Done",
+      note: "Payment records and proof images are attached below.",
+      time: latestPaymentTime || "Recently active",
+      status: "Paid",
+    });
+  }
+
+  if (!hasReviewStep && reviews.length > 0) {
+    timeline.push({
+      id: "review_fallback",
+      title: "Reviewed",
+      note: "Customer and provider review activity is linked to this task.",
+      time: latestReviewTime || "Recently active",
+      status: "Reviewed",
+    });
+  }
 
   return {
     bookingId: rawBookingId.startsWith("#") ? rawBookingId : `#${rawBookingId.slice(0, 8).toUpperCase()}`,

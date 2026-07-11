@@ -37,9 +37,13 @@ function parsePaymentBreakdown(note: string) {
   }
 
   const rawJson = note.slice(markerIndex + marker.length).trim();
+  const objectStart = rawJson.search(/[\[{]/);
+  const objectEnd = Math.max(rawJson.lastIndexOf("}"), rawJson.lastIndexOf("]"));
+  const candidate =
+    objectStart >= 0 && objectEnd > objectStart ? rawJson.slice(objectStart, objectEnd + 1) : rawJson;
 
   try {
-    const parsed = JSON.parse(rawJson);
+    const parsed = JSON.parse(candidate);
     const entry = Array.isArray(parsed) ? parsed[0] : parsed;
 
     if (!entry || typeof entry !== "object") {
@@ -141,7 +145,7 @@ function ProofLinkCard({
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4">
         <p className="text-sm font-semibold text-slate-900">{title}</p>
-        <p className="mt-2 text-sm text-slate-500">No proof uploaded yet.</p>
+        <p className="mt-2 text-sm text-slate-500">No image uploaded.</p>
         {note ? <p className="mt-1 text-[12px] text-slate-400">{note}</p> : null}
       </div>
     );
@@ -175,6 +179,22 @@ function ProofLinkCard({
   );
 }
 
+function EmptyPathState({ message }: { message: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+      {message}
+    </div>
+  );
+}
+
+function findTimelineStep(detail: ProviderTaskDetail, matcher: (item: ProviderTaskDetail["timeline"][number]) => boolean) {
+  return detail.timeline.find(matcher) ?? null;
+}
+
+function latestValue(values: Array<string | undefined>) {
+  return values.find((value) => Boolean(value?.trim())) ?? undefined;
+}
+
 export function TaskDetailPanel({
   detail,
   loading,
@@ -196,14 +216,27 @@ export function TaskDetailPanel({
     return null;
   }
 
-  const completionImages = detail.images.filter((image) =>
-    /completion|completed|job|work|service/i.test(image.label)
-  );
-  const paymentImages = detail.images.filter((image) =>
-    /payment|proof|receipt|cash/i.test(image.label)
-  );
+  const completionImages = detail.images.filter((image) => /completion|completed|job|work|service/i.test(image.label));
+  const paymentImages = detail.images.filter((image) => /payment|proof|receipt|cash/i.test(image.label));
   const customerReviews = detail.reviews.filter((review) => review.reviewerRole.toLowerCase() === "customer");
   const providerReviews = detail.reviews.filter((review) => review.reviewerRole.toLowerCase() === "provider");
+  const createdStep = findTimelineStep(detail, (item) => item.title.toLowerCase().includes("booking created"));
+  const acceptedStep = findTimelineStep(detail, (item) => item.title.toLowerCase().includes("accepted"));
+  const onTheWayStep = findTimelineStep(detail, (item) => item.title.toLowerCase().includes("on the way"));
+  const arrivedStep = findTimelineStep(detail, (item) => item.title.toLowerCase().includes("arrived"));
+  const completedStep = findTimelineStep(detail, (item) => item.title.toLowerCase().includes("completed"));
+  const paymentStep = findTimelineStep(
+    detail,
+    (item) => item.title.toLowerCase().includes("payment") || item.title.toLowerCase().includes("paid")
+  );
+  const reviewStep = findTimelineStep(detail, (item) => item.title.toLowerCase().includes("review"));
+  const hasCompletionState = ["completed", "paid", "reviewed"].includes(detail.status.trim().toLowerCase());
+  const hasPaymentReceivedState =
+    detail.payments.length > 0 &&
+    detail.payments.some((payment) => payment.status.trim().toLowerCase() === "paid");
+  const latestPaymentTime = latestValue(detail.payments.map((payment) => payment.createdAt));
+  const latestCustomerReviewTime = latestValue(customerReviews.map((review) => review.createdAt));
+  const latestProviderReviewTime = latestValue(providerReviews.map((review) => review.createdAt));
 
   return (
     <SurfaceCard title={`${title} - ${detail.bookingId}`}>
@@ -245,130 +278,185 @@ export function TaskDetailPanel({
             <p className="text-sm font-semibold text-slate-900">Task Path</p>
             {detail.timeline.length ? (
               <div className="space-y-3">
-                {detail.timeline.map((item) => {
-                  const normalizedTitle = item.title.toLowerCase();
-                  const isCompletedStep = normalizedTitle.includes("completed");
-                  const isPaidStep = normalizedTitle.includes("payment") || normalizedTitle.includes("paid");
-                  const isReviewStep = normalizedTitle.includes("review");
+                <PathCard
+                  title="User Sent Request"
+                  status="Created"
+                  note={`Customer ${detail.customer} created the booking request for ${detail.service}.`}
+                  time={createdStep?.time ?? detail.createdAt}
+                />
 
-                  return (
-                    <PathCard key={item.id} title={item.title} status={item.status} note={item.note} time={item.time}>
-                      {isCompletedStep && completionImages.length ? (
+                <PathCard
+                  title="Provider On The Way"
+                  status={onTheWayStep?.status ?? "On The Way"}
+                  note={onTheWayStep?.note ?? "Provider started travelling to the task location."}
+                  time={onTheWayStep?.time}
+                />
+
+                <PathCard
+                  title="Provider Arrived"
+                  status={arrivedStep?.status ?? "Arrived"}
+                  note={arrivedStep?.note ?? "Provider arrived at the task location."}
+                  time={arrivedStep?.time}
+                />
+
+                <PathCard
+                  title="Provider Sent Final Amount With Task Completion Images"
+                  status={acceptedStep?.status ?? completedStep?.status ?? "Accepted"}
+                  note={
+                    acceptedStep?.note ||
+                    completedStep?.note ||
+                    "Provider sent the final amount and completion update for the task."
+                  }
+                  time={acceptedStep?.time ?? completedStep?.time}
+                >
+                  {completionImages.length ? (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {completionImages.map((image) => (
+                        <ProofLinkCard
+                          key={image.id}
+                          title={image.label}
+                          fileName={image.fileName}
+                          url={image.url}
+                          mimeType={image.mimeType}
+                          note="Job completion image"
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyPathState message="No completion images uploaded." />
+                  )}
+                </PathCard>
+
+                <PathCard
+                  title="User Agreed And Paid With Attached Payment Slip"
+                  status={paymentStep?.status ?? (detail.payments.length ? "Paid" : "Pending")}
+                  note={
+                    detail.payments.length
+                      ? "User payment details and attached slip are shown below."
+                      : "No payment record is linked to this task yet."
+                  }
+                  time={paymentStep?.time ?? latestPaymentTime}
+                >
+                  {detail.payments.length ? (
+                    <div className="space-y-3">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {detail.payments.map((payment) => (
+                          <div key={payment.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                            <p className="text-sm font-semibold text-slate-900">{payment.id}</p>
+                            <p className="mt-1 text-[13px] text-slate-600">
+                              {payment.method} • {payment.amount}
+                            </p>
+                            <p className="mt-1 text-[12px] text-slate-500">
+                              Provider net: {payment.providerNetAmount} • Commission: {payment.companyCommissionAmount}
+                            </p>
+                            <p className="mt-1 text-[12px] text-slate-500">
+                              Payment: {payment.status} • Company: {payment.companyStatus}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {paymentImages.length ? (
                         <div className="grid gap-3 xl:grid-cols-2">
-                          {completionImages.map((image) => (
+                          {paymentImages.map((image) => (
                             <ProofLinkCard
                               key={image.id}
                               title={image.label}
                               fileName={image.fileName}
                               url={image.url}
                               mimeType={image.mimeType}
-                              note="Job completion image"
+                              note="Payment slip image"
                             />
                           ))}
                         </div>
-                      ) : null}
+                      ) : (
+                        <EmptyPathState message="No payment slip image uploaded." />
+                      )}
+                    </div>
+                  ) : (
+                    <EmptyPathState message="No payment record is linked to this task yet." />
+                  )}
+                </PathCard>
 
-                      {isPaidStep && detail.payments.length ? (
-                        <div className="space-y-3">
-                          <div className="grid gap-2 md:grid-cols-2">
-                            {detail.payments.map((payment) => (
-                              <div key={payment.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                                <p className="text-sm font-semibold text-slate-900">{payment.id}</p>
-                                <p className="mt-1 text-[13px] text-slate-600">
-                                  {payment.method} • {payment.amount}
-                                </p>
-                                <p className="mt-1 text-[12px] text-slate-500">
-                                  Provider net: {payment.providerNetAmount} • Commission: {payment.companyCommissionAmount}
-                                </p>
-                                <p className="mt-1 text-[12px] text-slate-500">
-                                  Payment: {payment.status} • Company: {payment.companyStatus}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                          {paymentImages.length ? (
-                            <div className="grid gap-3 xl:grid-cols-2">
-                              {paymentImages.map((image) => (
-                                <ProofLinkCard
-                                  key={image.id}
-                                  title={image.label}
-                                  fileName={image.fileName}
-                                  url={image.url}
-                                  mimeType={image.mimeType}
-                                  note="Payment proof image"
-                                />
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {isReviewStep && detail.reviews.length ? (
-                        <div className="space-y-3">
-                          {customerReviews.length ? (
-                            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                              <p className="text-sm font-semibold text-slate-900">Customer Review for Provider</p>
-                              {customerReviews.map((review) => (
-                                <div key={review.id} className="mt-2 rounded-xl bg-white px-3 py-3">
-                                  <p className="text-sm font-medium text-slate-900">
-                                    {review.reviewer} rated {review.rating}/5
-                                  </p>
-                                  <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
-                                  {review.reply ? (
-                                    <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p>
-                                  ) : null}
-                                  <p className="mt-1 text-[12px] text-slate-400">{review.createdAt}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          {providerReviews.length ? (
-                            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                              <p className="text-sm font-semibold text-slate-900">Provider Review for Customer</p>
-                              {providerReviews.map((review) => (
-                                <div key={review.id} className="mt-2 rounded-xl bg-white px-3 py-3">
-                                  <p className="text-sm font-medium text-slate-900">
-                                    {review.reviewer} rated {review.rating}/5
-                                  </p>
-                                  <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
-                                  {review.reply ? (
-                                    <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p>
-                                  ) : null}
-                                  <p className="mt-1 text-[12px] text-slate-400">{review.createdAt}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </PathCard>
-                  );
-                })}
-
-                {!detail.timeline.some((item) => item.title.toLowerCase().includes("review")) && detail.reviews.length ? (
-                  <PathCard
-                    title="Reviews Completed"
-                    status="Reviewed"
-                    note="Both-side reviews linked to this job are available below."
-                    time={detail.reviews[detail.reviews.length - 1]?.createdAt}
-                  >
+                <PathCard
+                  title="User Review With Images"
+                  status={customerReviews.length ? "Reviewed" : "Pending"}
+                  note={
+                    customerReviews.length
+                      ? "Customer review for the provider is linked below."
+                      : "Customer review is not linked to this task yet."
+                  }
+                  time={reviewStep?.time ?? latestCustomerReviewTime}
+                >
+                  {customerReviews.length ? (
                     <div className="space-y-3">
-                      {detail.reviews.map((review) => (
+                      {customerReviews.map((review) => (
                         <div key={review.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
                           <p className="text-sm font-semibold text-slate-900">
-                            {review.reviewerRole} review for {review.reviewFor}
-                          </p>
-                          <p className="mt-1 text-[13px] text-slate-600">
                             {review.reviewer} rated {review.rating}/5
                           </p>
                           <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
                           {review.reply ? <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p> : null}
+                          <p className="mt-1 text-[12px] text-slate-400">{review.createdAt}</p>
+                          <div className="mt-3">
+                            <EmptyPathState message="No review images uploaded." />
+                          </div>
                         </div>
                       ))}
                     </div>
-                  </PathCard>
-                ) : null}
+                  ) : (
+                    <EmptyPathState message="No review images uploaded." />
+                  )}
+                </PathCard>
+
+                <PathCard
+                  title="Provider Marked Payment Received"
+                  status={hasPaymentReceivedState ? "Paid" : "Pending"}
+                  note={
+                    hasPaymentReceivedState
+                      ? "Provider marked the user payment as received."
+                      : "Provider has not marked payment as received yet."
+                  }
+                  time={latestPaymentTime}
+                />
+
+                <PathCard
+                  title="Provider Gave Review To User"
+                  status={providerReviews.length ? "Reviewed" : "Pending"}
+                  note={
+                    providerReviews.length
+                      ? "Provider review for the customer is linked below."
+                      : "Provider review is not linked to this task yet."
+                  }
+                  time={latestProviderReviewTime}
+                >
+                  {providerReviews.length ? (
+                    <div className="space-y-3">
+                      {providerReviews.map((review) => (
+                        <div key={review.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {review.reviewer} rated {review.rating}/5
+                          </p>
+                          <p className="mt-1 text-[13px] text-slate-600">{review.comment}</p>
+                          {review.reply ? <p className="mt-1 text-[12px] text-slate-500">Reply: {review.reply}</p> : null}
+                          <p className="mt-1 text-[12px] text-slate-400">{review.createdAt}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyPathState message="No provider review uploaded." />
+                  )}
+                </PathCard>
+
+                <PathCard
+                  title="Task Completed"
+                  status={hasCompletionState ? "Completed" : detail.status}
+                  note={
+                    hasCompletionState
+                      ? "Task workflow is completed."
+                      : "Task is still in progress."
+                  }
+                  time={completedStep?.time ?? latestValue([latestProviderReviewTime, latestCustomerReviewTime, latestPaymentTime])}
+                />
               </div>
             ) : (
               <p className="text-sm text-slate-500">No task timeline found.</p>
@@ -495,7 +583,9 @@ export function TaskDetailPanel({
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-sm text-slate-500">No task images are stored yet for this booking. When proof files or related uploads exist, they will appear here.</p>
+            <p className="mt-2 text-sm text-slate-500">
+              No images uploaded.
+            </p>
           )}
         </div>
       </div>
