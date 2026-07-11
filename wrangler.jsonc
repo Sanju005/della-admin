@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "della-admin-dashboard",
+  "name": "della-admin",
   "main": "worker/index.ts",
   "compatibility_date": "2026-06-04",
   "workers_dev": false,
