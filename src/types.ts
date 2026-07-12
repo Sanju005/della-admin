@@ -83,6 +83,7 @@ export type PaymentRow = {
   method: string;
   status: string;
   date: string;
+  paymentTime?: string;
   bookingId?: string;
   paymentCount?: number;
   providerNetAmount?: string;

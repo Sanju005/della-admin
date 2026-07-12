@@ -97,6 +97,8 @@ type UserProfileUpdateInput = {
   dob?: string;
   gender?: string;
   city?: string;
+  region?: string;
+  country?: string;
   status?: string;
 };
 
@@ -127,11 +129,22 @@ type LiveBookingRow = {
 
 type LivePaymentRow = {
   id: string;
+  booking_id?: string | null;
   status?: string | null;
   amount?: number | null;
   payment_method?: string | null;
   payment_option?: string | null;
   created_at?: string | null;
+  company_payment_status?: string | null;
+  company_paid_at?: string | null;
+  company_commission_amount?: number | null;
+  provider_net_amount?: number | null;
+  customer_payment_proof_data_url?: string | null;
+  customer_payment_proof_file_name?: string | null;
+  customer_payment_proof_mime_type?: string | null;
+  provider_company_payment_proof_data_url?: string | null;
+  provider_company_payment_proof_file_name?: string | null;
+  provider_company_payment_proof_mime_type?: string | null;
   customer_id?: string | null;
   provider_id?: string | null;
 };
@@ -355,6 +368,26 @@ function formatDateTime(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function buildProofAsset(
+  label: string,
+  url: string | null | undefined,
+  fileName: string | null | undefined,
+  mimeType: string | null | undefined,
+) {
+  const trimmedUrl = url?.trim();
+
+  if (!trimmedUrl) {
+    return null;
+  }
+
+  return {
+    label,
+    url: trimmedUrl,
+    fileName: fileName?.trim() || undefined,
+    mimeType: mimeType?.trim() || undefined,
+  };
 }
 
 function formatDateOfBirth(value: string | null | undefined) {
@@ -781,18 +814,29 @@ async function tryFetchLivePayments(userId: string, role: string, profileNames: 
 
   const column = isProviderRole(role) ? "provider_id" : "customer_id";
 
-  const { data, error } = await supabase
-    .from("payments")
-    .select(`
-      id,
-      status,
-      amount,
-      payment_method,
-      payment_option,
-      created_at,
-      customer_id,
-      provider_id
-    `)
+    const { data, error } = await supabase
+      .from("payments")
+      .select(`
+        id,
+        booking_id,
+        status,
+        amount,
+        payment_method,
+        payment_option,
+        created_at,
+        company_payment_status,
+        company_paid_at,
+        company_commission_amount,
+        provider_net_amount,
+        customer_payment_proof_data_url,
+        customer_payment_proof_file_name,
+        customer_payment_proof_mime_type,
+        provider_company_payment_proof_data_url,
+        provider_company_payment_proof_file_name,
+        provider_company_payment_proof_mime_type,
+        customer_id,
+        provider_id
+      `)
     .eq(column, userId)
     .order("created_at", { ascending: false })
     .limit(12);
@@ -801,21 +845,43 @@ async function tryFetchLivePayments(userId: string, role: string, profileNames: 
     return null;
   }
 
-  return (data as LivePaymentRow[]).map((row) => {
-    const customerName = profileNames.get(row.customer_id ?? "");
-    const providerName = profileNames.get(row.provider_id ?? "");
-
-    return {
-      id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
-      customer: customerName || "Customer",
-      provider: providerName || "Provider",
-      amount: formatCurrency(row.amount ?? 0),
-      method: row.payment_option?.trim() || row.payment_method?.trim() || "Online",
-      status: mapBookingStatus(row.status),
-      date: formatDate(row.created_at),
-    };
-  });
-}
+    return (data as LivePaymentRow[]).map((row) => {
+      const customerName = profileNames.get(row.customer_id ?? "");
+      const providerName = profileNames.get(row.provider_id ?? "");
+      const customerProof = buildProofAsset(
+        "Customer payment proof",
+        row.customer_payment_proof_data_url,
+        row.customer_payment_proof_file_name,
+        row.customer_payment_proof_mime_type,
+      );
+      const providerProof = buildProofAsset(
+        "Provider company payment proof",
+        row.provider_company_payment_proof_data_url,
+        row.provider_company_payment_proof_file_name,
+        row.provider_company_payment_proof_mime_type,
+      );
+  
+      return {
+        id: row.id.startsWith("#") ? row.id : `#${row.id.slice(0, 8).toUpperCase()}`,
+        rawId: row.id,
+        rawBookingId: row.booking_id?.trim() || undefined,
+        customer: customerName || "Customer",
+        provider: providerName || "Provider",
+        amount: formatCurrency(row.amount ?? 0),
+        method: row.payment_option?.trim() || row.payment_method?.trim() || "Online",
+        status: mapBookingStatus(row.status),
+        date: formatDate(row.created_at),
+        paymentTime: formatDateTime(row.created_at),
+        bookingId: row.booking_id ? `#${row.booking_id.slice(0, 8).toUpperCase()}` : undefined,
+        providerNetAmount: formatCurrency(row.provider_net_amount ?? 0),
+        companyCommissionAmount: formatCurrency(row.company_commission_amount ?? 0),
+        commissionStatus: formatStatus(row.company_payment_status ?? "unpaid", "Unpaid"),
+        companyPaidAt: formatDateTime(row.company_paid_at),
+        customerPaymentProof: customerProof,
+        providerCompanyPaymentProof: providerProof,
+      };
+    });
+  }
 
 async function tryFetchLiveReviews(userId: string, role: string, profileNames: ProfileNameMap) {
   if (!supabase) {
@@ -1293,6 +1359,8 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
   const normalizedDob = updates.dob?.trim() ?? "";
   const normalizedGender = updates.gender?.trim() ?? "";
   const normalizedCity = updates.city?.trim() ?? "";
+  const normalizedRegion = updates.region?.trim() ?? "";
+  const normalizedCountry = updates.country?.trim() ?? "";
   const normalizedName = updates.full_name?.trim() ?? "";
   const normalizedEmail = updates.email?.trim() ?? "";
   const normalizedStatus = updates.status?.trim() ?? "";
@@ -1307,7 +1375,14 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
     }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
   );
 
-  if (Object.keys(profilePayload).length === 0 && !normalizedDob && !normalizedGender && !normalizedCity) {
+  if (
+    Object.keys(profilePayload).length === 0 &&
+    !normalizedDob &&
+    !normalizedGender &&
+    !normalizedCity &&
+    !normalizedRegion &&
+    !normalizedCountry
+  ) {
     return { error: "Nothing to update." };
   }
 
@@ -1348,6 +1423,8 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
         phone_number: splitPhone.phoneNumber,
         country_code: splitPhone.countryCode,
         city: normalizedCity || undefined,
+        region: normalizedRegion || undefined,
+        country: normalizedCountry || undefined,
       }).filter(([, value]) => typeof value === "string" && value.trim() !== "")
     );
 

@@ -5,8 +5,10 @@ import {
   CheckCircle2,
   CreditCard,
   Edit3,
+  Eye,
   FileClock,
   FileText,
+  Image as ImageIcon,
   KeyRound,
   Mail,
   MapPin,
@@ -35,14 +37,19 @@ import {
   VerificationDot,
 } from "../components/user-detail-ui";
 import { userDetailRecords } from "../data/user-detail-mocks";
-import { getProviderTaskDetail, type ProviderTaskDetail } from "../lib/admin-providers";
+import {
+  approveProviderVerification,
+  getProviderProfileWithFallback,
+  getProviderTaskDetail,
+  type ProviderTaskDetail,
+} from "../lib/admin-providers";
 import {
   deleteUserRecord,
   getUserProfileWithFallback,
   setUserSuspended,
   updateUserProfile,
 } from "../lib/admin-users";
-import type { DashboardBooking, PaymentRow, UserDetailRecord } from "../types";
+import type { DashboardBooking, PaymentRow, ProviderDetailRecord, UserDetailRecord } from "../types";
 
 const tabs = [
   "Overview",
@@ -51,7 +58,6 @@ const tabs = [
   "Reviews",
   "Reports",
   "Documents & Verification",
-  "Service Areas",
   "Activity Log",
 ] as const;
 
@@ -233,6 +239,68 @@ function SummaryStrip({
   );
 }
 
+function isImageProofUrl(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.startsWith("data:image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(normalized);
+}
+
+function PaymentProofCard({
+  title,
+  url,
+  fileName,
+  mimeType,
+}: {
+  title: string;
+  url?: string;
+  fileName?: string;
+  mimeType?: string;
+}) {
+  if (!url) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="mt-2 text-sm text-slate-500">No proof uploaded.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          <p className="mt-1 text-[13px] text-slate-600">{fileName || "Uploaded proof file"}</p>
+          {mimeType ? <p className="mt-1 text-[12px] text-slate-400">{mimeType}</p> : null}
+        </div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+        >
+          {isImageProofUrl(url) ? <Eye className="size-4" /> : <ImageIcon className="size-4" />}
+          Open
+        </a>
+      </div>
+      {isImageProofUrl(url) ? (
+        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100 bg-white">
+          <img src={url} alt={fileName || title} className="max-h-56 w-full object-contain" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function isProviderRoleValue(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized === "provider" || normalized === "service_provider";
+}
+
+function isRenderableAsset(value: string | undefined) {
+  const normalized = value?.trim() ?? "";
+  return /^(https?:\/\/|data:image\/|blob:)/i.test(normalized);
+}
+
 export function UserProfilePage() {
   const { userId = "" } = useParams();
   const navigate = useNavigate();
@@ -244,6 +312,8 @@ export function UserProfilePage() {
   const [status, setStatus] = useState(record?.status ?? "Active");
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [providerVerificationDetail, setProviderVerificationDetail] = useState<ProviderDetailRecord | null>(null);
+  const [providerVerificationNote, setProviderVerificationNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [taskDateFilter, setTaskDateFilter] = useState<DateFilterKey>("all");
   const [taskSort, setTaskSort] = useState<SortKey>("recent");
@@ -252,6 +322,7 @@ export function UserProfilePage() {
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<ProviderTaskDetail | null>(null);
   const [taskDetailLoading, setTaskDetailLoading] = useState(false);
   const [taskDetailError, setTaskDetailError] = useState<string | null>(null);
+  const [selectedPaymentKey, setSelectedPaymentKey] = useState<string | null>(null);
   const [paymentDateFilter, setPaymentDateFilter] = useState<DateFilterKey>("all");
   const [paymentSort, setPaymentSort] = useState<SortKey>("recent");
   const [reviewDateFilter, setReviewDateFilter] = useState<DateFilterKey>("all");
@@ -265,6 +336,8 @@ export function UserProfilePage() {
     dob: normalizeEditableDate(record?.dob ?? ""),
     gender: record?.gender === "Not provided" ? "" : (record?.gender ?? ""),
     city: record?.city === "Malaysia" ? "" : (record?.city ?? ""),
+    region: record?.region === "Not provided" ? "" : (record?.region ?? ""),
+    country: record?.country === "Malaysia" ? "" : (record?.country ?? "Malaysia"),
   });
 
   useEffect(() => {
@@ -283,6 +356,11 @@ export function UserProfilePage() {
       }
 
       const payload = await getUserProfileWithFallback(userId);
+      const normalizedRole = payload.detail?.role?.trim().toLowerCase();
+      const providerPayload =
+        normalizedRole === "provider" || normalizedRole === "service_provider"
+          ? await getProviderProfileWithFallback(userId)
+          : null;
 
       if (!active) {
         return;
@@ -291,6 +369,8 @@ export function UserProfilePage() {
       setRecord(payload.detail);
       setRelatedBookings(payload.relatedBookings);
       setRelatedPayments(payload.relatedPayments);
+      setProviderVerificationDetail(providerPayload?.detail ?? null);
+      setProviderVerificationNote(providerPayload?.detail?.verificationNote ?? "");
       setStatus(payload.detail?.status ?? "Active");
       setForm({
         name: payload.detail?.name ?? "",
@@ -299,6 +379,8 @@ export function UserProfilePage() {
         dob: normalizeEditableDate(payload.detail?.dob ?? ""),
         gender: payload.detail?.gender === "Not provided" ? "" : (payload.detail?.gender ?? ""),
         city: payload.detail?.city === "Malaysia" ? "" : (payload.detail?.city ?? ""),
+        region: payload.detail?.region === "Not provided" ? "" : (payload.detail?.region ?? ""),
+        country: payload.detail?.country === "Malaysia" ? "" : (payload.detail?.country ?? "Malaysia"),
       });
       setLoading(false);
     }
@@ -340,6 +422,7 @@ export function UserProfilePage() {
   const defaultUserDetail = Object.values(userDetailRecords)[0]!;
   const safeDetail =
     record ?? userDetailRecords[userId] ?? defaultUserDetail;
+  const isProviderAccount = isProviderRoleValue(record?.role ?? safeDetail.role);
   const recentReviews = safeDetail.recentReviews;
   const taskRows = useMemo(
     () =>
@@ -382,6 +465,10 @@ export function UserProfilePage() {
     const dateFiltered = paymentRows.filter((payment) => matchesDateFilter(payment.date, paymentDateFilter));
     return sortByRecentOrAz(dateFiltered, paymentSort);
   }, [paymentRows, paymentDateFilter, paymentSort]);
+  const selectedPayment = useMemo(
+    () => filteredPaymentRows.find((payment) => (payment.rawId ?? payment.id) === selectedPaymentKey) ?? null,
+    [filteredPaymentRows, selectedPaymentKey]
+  );
 
   const totalPaidValue = filteredPaymentRows.reduce((sum, payment) => sum + payment.numericAmount, 0);
   const earningPoints = Math.floor(totalPaidValue);
@@ -398,6 +485,14 @@ export function UserProfilePage() {
       }));
     return sortByRecentOrAz(rows, reviewSort);
   }, [recentReviews, reviewDateFilter, reviewSort]);
+  const givenReviewRows = useMemo(
+    () => (isProviderAccount ? [] : filteredReviewRows),
+    [filteredReviewRows, isProviderAccount]
+  );
+  const receivedReviewRows = useMemo(
+    () => (isProviderAccount ? filteredReviewRows : []),
+    [filteredReviewRows, isProviderAccount]
+  );
 
   const filteredReportRows = useMemo(() => {
     const rows = safeDetail.reports
@@ -409,6 +504,14 @@ export function UserProfilePage() {
       }));
     return sortByRecentOrAz(rows, reportSort);
   }, [safeDetail.reports, reportDateFilter, reportSort]);
+  const givenReportRows = useMemo(
+    () => (isProviderAccount ? [] : filteredReportRows),
+    [filteredReportRows, isProviderAccount]
+  );
+  const receivedReportRows = useMemo(
+    () => (isProviderAccount ? filteredReportRows : []),
+    [filteredReportRows, isProviderAccount]
+  );
 
   const verificationDocuments = useMemo(
     () => [
@@ -457,6 +560,55 @@ export function UserProfilePage() {
     ],
     [safeDetail]
   );
+  const providerDocumentRows = useMemo(() => {
+    if (!providerVerificationDetail) {
+      return [];
+    }
+
+    const identityFront = providerVerificationDetail.documents.find((item: ProviderDetailRecord["documents"][number]) => item.label === "Identity Verification");
+    const identityBack = providerVerificationDetail.documents.find((item: ProviderDetailRecord["documents"][number]) => item.label === "Back of Document");
+
+    return [
+      {
+        id: "provider-email",
+        label: "Email Verification",
+        status: providerVerificationDetail.emailVerified ? "Verified" : "Pending",
+        detail: providerVerificationDetail.email,
+      },
+      {
+        id: "provider-phone",
+        label: "Phone Verification",
+        status: providerVerificationDetail.phoneVerified ? "Verified" : "Pending",
+        detail: providerVerificationDetail.phone,
+      },
+      {
+        id: "provider-ic-front",
+        label: providerVerificationDetail.nationalId || "IC / Passport Front",
+        status: identityFront?.status ?? "Pending",
+        detail: identityFront?.fileName || "No front document uploaded",
+      },
+      {
+        id: "provider-ic-back",
+        label: "IC / Passport Back",
+        status: identityBack?.status ?? "Pending",
+        detail: identityBack?.fileName || "No back document uploaded",
+      },
+      {
+        id: "provider-certificates",
+        label: "Certificates",
+        status: (providerVerificationDetail.certificateImageFiles ?? []).length ? "Uploaded" : "Pending",
+        detail:
+          (providerVerificationDetail.certificateImageFiles ?? []).join(", ") || "No certificates uploaded",
+      },
+      {
+        id: "provider-service-images",
+        label: "Service Images",
+        status: (providerVerificationDetail.serviceImageFiles ?? []).length ? "Uploaded" : "Pending",
+        detail:
+          (providerVerificationDetail.serviceImageFiles ?? []).join(", ") || "No service images uploaded",
+      },
+    ];
+  }, [providerVerificationDetail]);
 
   if (loading && !record) {
     return (
@@ -513,6 +665,8 @@ export function UserProfilePage() {
       dob: form.dob,
       gender: form.gender,
       city: form.city,
+      region: form.region,
+      country: form.country,
     });
     setSaving(false);
 
@@ -531,6 +685,8 @@ export function UserProfilePage() {
             dob: form.dob ? form.dob : "Not provided",
             gender: form.gender || "Not provided",
             city: form.city || "Malaysia",
+            region: form.region || "Not provided",
+            country: form.country || "Malaysia",
           }
         : current
     );
@@ -561,6 +717,34 @@ export function UserProfilePage() {
     window.setTimeout(() => {
       navigate("/users");
     }, 500);
+  }
+
+  async function refreshProviderVerification() {
+    if (!isProviderAccount) {
+      return;
+    }
+
+    const payload = await getProviderProfileWithFallback(userId);
+    setProviderVerificationDetail(payload.detail);
+    setProviderVerificationNote(payload.detail?.verificationNote ?? "");
+  }
+
+  async function handleApproveProviderDocuments() {
+    if (!providerVerificationDetail || saving) {
+      return;
+    }
+
+    setSaving(true);
+    const result = await approveProviderVerification(providerVerificationDetail.providerId, providerVerificationNote);
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    await refreshProviderVerification();
+    flash(result.warning || "Provider IC / passport and verification documents approved.");
   }
 
   function renderOverview() {
@@ -674,12 +858,32 @@ export function UserProfilePage() {
                 />
                 <InfoRow
                   label="Region / State"
-                  value={detail.region || "Not provided"}
+                  value={
+                    editing ? (
+                      <input
+                        value={form.region}
+                        onChange={(event) => setForm((current) => ({ ...current, region: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.region || "Not provided"
+                    )
+                  }
                   icon={<MapPin className="size-4" />}
                 />
                 <InfoRow
                   label="Country"
-                  value={detail.country || "Malaysia"}
+                  value={
+                    editing ? (
+                      <input
+                        value={form.country}
+                        onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      />
+                    ) : (
+                      detail.country || "Malaysia"
+                    )
+                  }
                   icon={<MapPin className="size-4" />}
                 />
               </div>
@@ -1246,17 +1450,23 @@ export function UserProfilePage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPaymentRows.length ? (
-                  filteredPaymentRows.map((payment) => (
-                    <tr key={payment.id} className="border-b border-slate-50">
-                      <td className="py-3 font-semibold text-slate-700">{payment.id}</td>
-                      <td className="py-3 text-slate-700">{payment.method}</td>
-                      <td className="py-3 text-slate-700">{payment.amount}</td>
-                      <td className="py-3"><MiniStatus status={payment.status} /></td>
-                      <td className="py-3 text-slate-500">{payment.date}</td>
-                    </tr>
-                  ))
-                ) : (
+                  {filteredPaymentRows.length ? (
+                    filteredPaymentRows.map((payment) => (
+                      <tr
+                        key={payment.rawId ?? payment.id}
+                        className={`border-b border-slate-50 transition hover:bg-emerald-50/40 ${
+                          selectedPaymentKey === (payment.rawId ?? payment.id) ? "bg-emerald-50/50" : ""
+                        } cursor-pointer`}
+                        onClick={() => setSelectedPaymentKey(payment.rawId ?? payment.id)}
+                      >
+                        <td className="py-3 font-semibold text-slate-700">{payment.id}</td>
+                        <td className="py-3 text-slate-700">{payment.method}</td>
+                        <td className="py-3 text-slate-700">{payment.amount}</td>
+                        <td className="py-3"><MiniStatus status={payment.commissionStatus ?? payment.status} /></td>
+                        <td className="py-3 text-slate-500">{payment.date}</td>
+                      </tr>
+                    ))
+                  ) : (
                   <tr>
                     <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
                       No payments found for this filter.
@@ -1266,6 +1476,60 @@ export function UserProfilePage() {
               </tbody>
             </table>
           </TableShell>
+
+          {selectedPayment ? (
+            <SurfaceCard title="Payment Detail">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Payment ID</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.id}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Payment Time</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.paymentTime ?? selectedPayment.date}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Method</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.method}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Commission Status</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.commissionStatus ?? selectedPayment.status}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Task ID</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.bookingId ?? "-"}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Total Amount</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.amount}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Commission</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.companyCommissionAmount ?? "RM0.00"}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50/80 px-4 py-4">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Paid To Company At</p>
+                  <p className="mt-2 text-base font-bold text-slate-950">{selectedPayment.companyPaidAt ?? "Not paid yet"}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                <PaymentProofCard
+                  title="Customer Payment Proof"
+                  url={selectedPayment.customerPaymentProof?.url}
+                  fileName={selectedPayment.customerPaymentProof?.fileName}
+                  mimeType={selectedPayment.customerPaymentProof?.mimeType}
+                />
+                <PaymentProofCard
+                  title="Provider Company Payment Proof"
+                  url={selectedPayment.providerCompanyPaymentProof?.url}
+                  fileName={selectedPayment.providerCompanyPaymentProof?.fileName}
+                  mimeType={selectedPayment.providerCompanyPaymentProof?.mimeType}
+                />
+              </div>
+            </SurfaceCard>
+          ) : null}
         </div>
       ) : null}
 
@@ -1297,38 +1561,76 @@ export function UserProfilePage() {
             </div>
           </SurfaceCard>
 
-          <SummaryStrip items={[{ label: "Given Reviews", value: String(filteredReviewRows.length) }]} />
+          <SummaryStrip
+            items={[
+              { label: "Given Reviews", value: String(givenReviewRows.length) },
+              { label: "Received Reviews", value: String(receivedReviewRows.length) },
+            ]}
+          />
 
-          <TableShell title="Given Reviews">
-            <table className="min-w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-slate-100 text-slate-400">
-                  <th className="pb-3 font-semibold">Provider</th>
-                  <th className="pb-3 font-semibold">Rating</th>
-                  <th className="pb-3 font-semibold">Review</th>
-                  <th className="pb-3 font-semibold">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredReviewRows.length ? (
-                  filteredReviewRows.map((review) => (
-                    <tr key={review.id} className="border-b border-slate-50">
-                      <td className="py-3 text-slate-700">{review.provider}</td>
-                      <td className="py-3 text-slate-700">{review.rating}/5</td>
-                      <td className="py-3 text-slate-700">{review.review}</td>
-                      <td className="py-3 text-slate-500">{review.date}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
-                      No reviews found for this filter.
-                    </td>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <TableShell title="Given Reviews">
+              <table className="min-w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400">
+                    <th className="pb-3 font-semibold">{isProviderAccount ? "Customer" : "Provider"}</th>
+                    <th className="pb-3 font-semibold">Rating</th>
+                    <th className="pb-3 font-semibold">Review</th>
+                    <th className="pb-3 font-semibold">Date</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </TableShell>
+                </thead>
+                <tbody>
+                  {givenReviewRows.length ? (
+                    givenReviewRows.map((review) => (
+                      <tr key={`given-${review.id}`} className="border-b border-slate-50">
+                        <td className="py-3 text-slate-700">{review.provider}</td>
+                        <td className="py-3 text-slate-700">{review.rating}/5</td>
+                        <td className="py-3 text-slate-700">{review.review}</td>
+                        <td className="py-3 text-slate-500">{review.date}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                        No given reviews found for this filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </TableShell>
+
+            <TableShell title="Received Reviews">
+              <table className="min-w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400">
+                    <th className="pb-3 font-semibold">{isProviderAccount ? "Customer" : "Provider"}</th>
+                    <th className="pb-3 font-semibold">Rating</th>
+                    <th className="pb-3 font-semibold">Review</th>
+                    <th className="pb-3 font-semibold">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receivedReviewRows.length ? (
+                    receivedReviewRows.map((review) => (
+                      <tr key={`received-${review.id}`} className="border-b border-slate-50">
+                        <td className="py-3 text-slate-700">{review.provider}</td>
+                        <td className="py-3 text-slate-700">{review.rating}/5</td>
+                        <td className="py-3 text-slate-700">{review.review}</td>
+                        <td className="py-3 text-slate-500">{review.date}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                        No received reviews found for this filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </TableShell>
+          </div>
         </div>
       ) : null}
 
@@ -1351,17 +1653,121 @@ export function UserProfilePage() {
 
       {activeTab === "Documents & Verification" ? (
         <SurfaceCard title="Documents & Verification">
-          <div className="space-y-3">
-            {verificationDocuments.map((document) => (
-              <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{document.label}</p>
-                  <p className="mt-1 text-[13px] text-slate-500">Updated {document.updated}</p>
+          {isProviderAccount && providerVerificationDetail ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="space-y-3">
+                  {providerDocumentRows.map((document) => (
+                    <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{document.label}</p>
+                        <p className="mt-1 text-[13px] text-slate-500">{document.detail}</p>
+                      </div>
+                      <MiniStatus status={document.status} />
+                    </div>
+                  ))}
                 </div>
-                <MiniStatus status={document.status} />
+
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-900">Requested Documents</p>
+                    <p className="mt-2 text-[13px] text-slate-600">
+                      {providerVerificationDetail.requestedDocuments.length
+                        ? providerVerificationDetail.requestedDocuments.join(", ")
+                        : "No additional documents requested by admin."}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-900">Service Images</p>
+                    {(providerVerificationDetail.serviceImageFiles ?? []).length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(providerVerificationDetail.serviceImageFiles ?? []).map((file: string) =>
+                          isRenderableAsset(file) ? (
+                            <a
+                              key={file}
+                              href={file}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700"
+                            >
+                              Open service image
+                            </a>
+                          ) : (
+                            <span key={file} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                              {file}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[13px] text-slate-500">No service images uploaded.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-900">Certificates</p>
+                    {(providerVerificationDetail.certificateImageFiles ?? []).length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(providerVerificationDetail.certificateImageFiles ?? []).map((file: string) =>
+                          isRenderableAsset(file) ? (
+                            <a
+                              key={file}
+                              href={file}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700"
+                            >
+                              Open certificate
+                            </a>
+                          ) : (
+                            <span key={file} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                              {file}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[13px] text-slate-500">No certificates uploaded.</p>
+                    )}
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+
+              <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                <p className="text-sm font-semibold text-slate-900">Admin Verification Note</p>
+                <textarea
+                  value={providerVerificationNote}
+                  onChange={(event) => setProviderVerificationNote(event.target.value)}
+                  rows={4}
+                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+                  placeholder="Add approval note for IC / passport review..."
+                />
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleApproveProviderDocuments()}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Approve IC / Passport
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {verificationDocuments.map((document) => (
+                <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{document.label}</p>
+                    <p className="mt-1 text-[13px] text-slate-500">Updated {document.updated}</p>
+                  </div>
+                  <MiniStatus status={document.status} />
+                </div>
+              ))}
+            </div>
+          )}
         </SurfaceCard>
       ) : null}
 
@@ -1424,41 +1830,6 @@ export function UserProfilePage() {
             </table>
           </TableShell>
         </div>
-      ) : null}
-
-      {activeTab === "Service Areas" ? (
-        <SurfaceCard title="Service Areas">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Primary Area</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{detail.city || "Malaysia"}</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Radius</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">Not captured</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">Current Live Location</p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{detail.city || "Not captured"}</p>
-            </div>
-            {detail.addresses.map((address) => (
-              <div key={address.id} className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-700">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900">{address.label}</p>
-                    <p className="mt-1 text-[13px] text-slate-500">{address.line1}</p>
-                    <p className="text-[13px] text-slate-500">{address.line2}</p>
-                  </div>
-                  {address.tag ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                      {address.tag}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        </SurfaceCard>
       ) : null}
 
       <TaskDetailModal

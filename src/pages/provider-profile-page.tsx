@@ -721,6 +721,7 @@ export function ProviderProfilePage() {
           }
         : current
     );
+    await refreshProvider();
     setEditing(false);
     flash("Provider details updated.");
   }
@@ -978,6 +979,21 @@ export function ProviderProfilePage() {
                   )
                 }
                 icon={<ShieldCheck className="size-4" />}
+              />
+              <InfoRow
+                label="Service Area"
+                value={
+                  editing ? (
+                    <input
+                      value={form.serviceArea}
+                      onChange={(event) => setForm((current) => ({ ...current, serviceArea: event.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : (
+                    detail.serviceArea
+                  )
+                }
+                icon={<MapPin className="size-4" />}
               />
               <InfoRow label="Service Radius" value={detail.serviceRadiusKm || "Not set"} icon={<MapPin className="size-4" />} />
               <InfoRow label="Current Coordinates" value={detail.currentCoordinates || "Not captured"} icon={<MapPin className="size-4" />} />
