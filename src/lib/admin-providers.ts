@@ -86,6 +86,7 @@ export type ProviderTaskDetail = {
 type ProviderProfileRow = {
   id: string;
   marketing_name?: string | null;
+  profile_photo_url?: string | null;
   service_location?: string | null;
   service_radius_km?: number | null;
   date_of_birth?: string | null;
@@ -692,7 +693,7 @@ async function fetchProviderProfiles() {
 
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select("id, marketing_name, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
+    .select("id, marketing_name, profile_photo_url, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
     .order("average_rating", { ascending: false })
     .limit(200);
 
@@ -756,7 +757,7 @@ async function fetchProviderProfileById(providerId: string) {
 
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select("id, marketing_name, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
+    .select("id, marketing_name, profile_photo_url, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
     .eq("id", providerId)
     .maybeSingle();
 
@@ -1150,6 +1151,7 @@ function buildGeneratedProviderDetail(
     providerId,
     name,
     email: liveAccount?.email?.trim() || "Not provided",
+    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || undefined,
     status: formatStatus(liveAccount?.status ?? (liveProfile.is_visible === false ? "paused" : "active")),
     visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     roleBadge: "Provider",
@@ -1389,6 +1391,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     providerId,
     name: liveProfile.marketing_name?.trim() || liveAccount?.full_name?.trim() || baseDetail.name,
     email: liveAccount?.email?.trim() || baseDetail.email,
+    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || baseDetail.profilePhotoUrl,
     status,
     visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     joinedAt: formatDateTime(liveAccount?.created_at) || baseDetail.joinedAt,
@@ -1935,6 +1938,7 @@ export async function updateProviderProfile(
     phone?: string;
     status?: string;
     marketing_name?: string;
+    profile_photo_url?: string;
     service_location?: string;
     date_of_birth?: string;
     sex?: string;
@@ -1958,6 +1962,7 @@ export async function updateProviderProfile(
   const providerPayload = Object.fromEntries(
     Object.entries({
       marketing_name: updates.marketing_name,
+      profile_photo_url: updates.profile_photo_url,
       service_location: updates.service_location,
       date_of_birth: updates.date_of_birth,
       sex: updates.sex,

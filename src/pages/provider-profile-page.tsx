@@ -402,6 +402,7 @@ export function ProviderProfilePage() {
     name: provider?.name ?? "",
     email: provider?.email ?? "",
     phone: provider?.phone ?? "",
+    profilePhotoUrl: provider?.profilePhotoUrl ?? "",
     dob: normalizeEditableDate(provider?.dob ?? ""),
     gender: provider?.gender === "Not provided" ? "" : (provider?.gender ?? ""),
     serviceArea: provider?.serviceArea ?? "",
@@ -440,6 +441,7 @@ export function ProviderProfilePage() {
         name: payload.detail?.name ?? "",
         email: payload.detail?.email ?? "",
         phone: payload.detail?.phone ?? "",
+        profilePhotoUrl: payload.detail?.profilePhotoUrl ?? "",
         dob: normalizeEditableDate(payload.detail?.dob ?? ""),
         gender: payload.detail?.gender === "Not provided" ? "" : (payload.detail?.gender ?? ""),
         serviceArea: payload.detail?.serviceArea ?? "",
@@ -485,9 +487,11 @@ export function ProviderProfilePage() {
   const safeDetail =
     provider ?? providerDetailRecords[providerId] ?? defaultProviderDetail;
   const providerHeroImage =
+    (isRenderableImageUrl(safeDetail.profilePhotoUrl) ? safeDetail.profilePhotoUrl!.trim() : null) ??
     [...(safeDetail.serviceImageFiles ?? []), ...(safeDetail.certificateImageFiles ?? [])].find((value) =>
       isRenderableImageUrl(value)
-    ) ?? null;
+    ) ??
+    null;
   const allTaskRows = useMemo(
     () =>
       [
@@ -693,6 +697,7 @@ export function ProviderProfilePage() {
       email: form.email,
       phone: form.phone,
       marketing_name: form.name,
+      profile_photo_url: form.profilePhotoUrl,
       service_location: form.serviceArea,
       date_of_birth: form.dob,
       sex: form.gender,
@@ -713,6 +718,7 @@ export function ProviderProfilePage() {
             name: form.name,
             email: form.email,
             phone: form.phone,
+            profilePhotoUrl: form.profilePhotoUrl || undefined,
             dob: form.dob || "Not provided",
             gender: form.gender || "Not provided",
             serviceArea: form.serviceArea,
@@ -948,6 +954,32 @@ export function ProviderProfilePage() {
                   )
                 }
                 icon={<Phone className="size-4" />}
+              />
+              <InfoRow
+                label="Profile Image URL"
+                value={
+                  editing ? (
+                    <input
+                      value={form.profilePhotoUrl}
+                      onChange={(event) => setForm((current) => ({ ...current, profilePhotoUrl: event.target.value }))}
+                      placeholder="https://... or Supabase public URL"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                    />
+                  ) : detail.profilePhotoUrl ? (
+                    <a
+                      href={detail.profilePhotoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-emerald-700 hover:text-emerald-800"
+                    >
+                      <Eye className="size-4" />
+                      Open image
+                    </a>
+                  ) : (
+                    "Not provided"
+                  )
+                }
+                icon={<UserCircle2 className="size-4" />}
               />
               <InfoRow
                 label="Date of Birth"

@@ -305,6 +305,7 @@ export type ProviderDetailRecord = {
   providerId: string;
   name: string;
   email: string;
+  profilePhotoUrl?: string;
   status: string;
   visibilityStatus?: string;
   roleBadge: string;
