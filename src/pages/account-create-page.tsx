@@ -403,26 +403,26 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
     }
 
     const providerServices: ProviderServiceCreateInput[] = isProvider
-      ? services
-          .map((service) => {
-            const selectedType =
-              service.serviceType === "Other" ? service.customServiceType.trim() : service.serviceType.trim();
+      ? services.reduce<ProviderServiceCreateInput[]>((collection, service) => {
+          const selectedType =
+            service.serviceType === "Other" ? service.customServiceType.trim() : service.serviceType.trim();
 
-            if (!selectedType) {
-              return null;
-            }
+          if (!selectedType) {
+            return collection;
+          }
 
-            return {
-              serviceType: selectedType,
-              serviceLocation: service.serviceLocation.trim() || undefined,
-              serviceRadiusKm: service.serviceRadiusKm ? Number(service.serviceRadiusKm) : undefined,
-              yearsExperience: service.yearsExperience.trim() || undefined,
-              hourlyRate: service.hourlyRate ? Number(service.hourlyRate) : undefined,
-              dailyRate: service.dailyRate ? Number(service.dailyRate) : undefined,
-              workImages: service.workImages.map(buildUploadedAsset),
-            };
-          })
-          .filter((service): service is ProviderServiceCreateInput => Boolean(service))
+          collection.push({
+            serviceType: selectedType,
+            serviceLocation: service.serviceLocation.trim() || undefined,
+            serviceRadiusKm: service.serviceRadiusKm ? Number(service.serviceRadiusKm) : undefined,
+            yearsExperience: service.yearsExperience.trim() || undefined,
+            hourlyRate: service.hourlyRate ? Number(service.hourlyRate) : undefined,
+            dailyRate: service.dailyRate ? Number(service.dailyRate) : undefined,
+            workImages: service.workImages.map(buildUploadedAsset),
+          });
+
+          return collection;
+        }, [])
       : [];
 
     const documents: ProviderDocumentUploadInput[] = isProvider
