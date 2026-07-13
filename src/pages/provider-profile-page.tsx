@@ -705,18 +705,26 @@ export function ProviderProfilePage() {
         label: "IC Front",
         status: safeDetail.documents.find((item) => item.label === "Identity Verification")?.status ?? "Pending",
         fileName: safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileName,
+        fileUrl: safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileUrl,
+        note: safeDetail.documents.find((item) => item.label === "Identity Verification")?.note,
       },
       {
         id: "verify-ic-back",
         label: "IC Back",
         status: safeDetail.documents.find((item) => item.label === "Back of Document")?.status ?? "Pending",
         fileName: safeDetail.documents.find((item) => item.label === "Back of Document")?.fileName,
+        fileUrl: safeDetail.documents.find((item) => item.label === "Back of Document")?.fileUrl,
+        note: safeDetail.documents.find((item) => item.label === "Back of Document")?.note,
       },
       {
         id: "verify-license",
         label: "Driving License",
-        status: safeDetail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending",
-        fileName: undefined,
+        status:
+          safeDetail.documents.find((item) => item.label === "Driving License")?.status ??
+          (safeDetail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending"),
+        fileName: safeDetail.documents.find((item) => item.label === "Driving License")?.fileName,
+        fileUrl: safeDetail.documents.find((item) => item.label === "Driving License")?.fileUrl,
+        note: safeDetail.documents.find((item) => item.label === "Driving License")?.note,
       },
       {
         id: "verify-resume",
@@ -891,6 +899,33 @@ export function ProviderProfilePage() {
     );
     await refreshProvider();
     flash("Verification request sent. Admin panel marked this provider for document review.");
+  }
+
+  async function handleRejectVerification() {
+    if (saving) {
+      return;
+    }
+
+    const requestedDocuments = selectedDocumentRequests.length
+      ? selectedDocumentRequests
+      : ["IC / Passport / Driving License"];
+
+    setSaving(true);
+    const result = await requestProviderVerificationDocuments(
+      detail.providerId,
+      requestedDocuments,
+      verificationNote,
+    );
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    setSelectedDocumentRequests(requestedDocuments);
+    await refreshProvider();
+    flash("Provider verification was sent back for document correction.");
   }
 
   async function handleApproveVerification() {
@@ -1135,7 +1170,11 @@ export function ProviderProfilePage() {
             title="Service Areas"
             className="w-full max-w-4xl px-5 py-5 sm:px-6"
             action={
-              <button className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+              <button
+                type="button"
+                onClick={() => setActiveTab("Service Areas")}
+                className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700"
+              >
                 Edit
               </button>
             }
@@ -1269,6 +1308,14 @@ export function ProviderProfilePage() {
                         </button>
                         <button
                           type="button"
+                          onClick={handleRejectVerification}
+                          disabled={saving}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                        >
+                          {saving ? "Saving..." : "Reject / Send Back"}
+                        </button>
+                        <button
+                          type="button"
                           onClick={handleApproveVerification}
                           disabled={saving}
                           className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
@@ -1311,7 +1358,13 @@ export function ProviderProfilePage() {
             <div className="mt-8">
               <div className="flex items-center justify-between gap-3">
                 <h4 className="text-base font-bold text-slate-950">Documents</h4>
-                <button className="text-xs font-semibold text-emerald-700">View all</button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("Documents & Verification")}
+                  className="text-xs font-semibold text-emerald-700"
+                >
+                  View all
+                </button>
               </div>
               <div className="mt-4 space-y-3">
                 {detail.documents.map((document) => (
@@ -2077,6 +2130,18 @@ export function ProviderProfilePage() {
                     <div>
                       <div>{document.label}</div>
                       {"fileName" in document && document.fileName ? <div className="text-xs text-slate-400">{document.fileName}</div> : null}
+                      {"note" in document && document.note ? <div className="text-xs text-slate-400">{document.note}</div> : null}
+                      {"fileUrl" in document && document.fileUrl ? (
+                        <a
+                          href={document.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-emerald-700"
+                        >
+                          <Eye className="size-4" />
+                          Open file
+                        </a>
+                      ) : null}
                     </div>
                   </div>
                   <MiniStatus status={document.status} />

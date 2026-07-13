@@ -40,6 +40,7 @@ import {
   approveProviderVerification,
   getProviderProfileWithFallback,
   getProviderTaskDetail,
+  requestProviderVerificationDocuments,
   type ProviderTaskDetail,
 } from "../lib/admin-providers";
 import {
@@ -623,12 +624,16 @@ export function UserProfilePage() {
         label: providerVerificationDetail.nationalId || "IC / Passport Front",
         status: identityFront?.status ?? "Pending",
         detail: identityFront?.fileName || "No front document uploaded",
+        fileUrl: identityFront?.fileUrl,
+        note: identityFront?.note,
       },
       {
         id: "provider-ic-back",
         label: "IC / Passport Back",
         status: identityBack?.status ?? "Pending",
         detail: identityBack?.fileName || "No back document uploaded",
+        fileUrl: identityBack?.fileUrl,
+        note: identityBack?.note,
       },
       {
         id: "provider-certificates",
@@ -782,6 +787,32 @@ export function UserProfilePage() {
 
     await refreshProviderVerification();
     flash(result.warning || "Provider IC / passport and verification documents approved.");
+  }
+
+  async function handleRequestProviderDocuments() {
+    if (!providerVerificationDetail || saving) {
+      return;
+    }
+
+    const requestedDocuments = providerVerificationDetail.requestedDocuments.length
+      ? providerVerificationDetail.requestedDocuments
+      : ["IC / Passport / Driving License"];
+
+    setSaving(true);
+    const result = await requestProviderVerificationDocuments(
+      providerVerificationDetail.providerId,
+      requestedDocuments,
+      providerVerificationNote,
+    );
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    await refreshProviderVerification();
+    flash("Requested provider documents updated.");
   }
 
   function renderOverview() {
@@ -938,10 +969,7 @@ export function UserProfilePage() {
               ) : null}
             </SurfaceCard>
 
-            <SurfaceCard
-              title="Saved Addresses"
-              action={<button className="text-xs font-semibold text-emerald-700">View all</button>}
-            >
+            <SurfaceCard title="Saved Addresses">
               <div className="space-y-4">
                 {detail.addresses.map((address) => (
                   <div key={address.id} className="flex items-start justify-between gap-3">
@@ -988,7 +1016,15 @@ export function UserProfilePage() {
 
           <SurfaceCard
             title="Activity Timeline"
-            action={<button className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">View all activity</button>}
+            action={
+              <button
+                type="button"
+                onClick={() => setActiveTab("Activity Log")}
+                className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700"
+              >
+                View all activity
+              </button>
+            }
             className="h-full"
           >
             <div className="space-y-5">
@@ -1070,7 +1106,18 @@ export function UserProfilePage() {
         </section>
 
         <section className="grid gap-4 xl:grid-cols-3">
-          <TableShell title="Recent Bookings" action={<button className="text-xs font-semibold text-emerald-700">View all bookings</button>}>
+          <TableShell
+            title="Recent Bookings"
+            action={
+              <button
+                type="button"
+                onClick={() => setActiveTab("Tasks")}
+                className="text-xs font-semibold text-emerald-700"
+              >
+                View all bookings
+              </button>
+            }
+          >
             <table className="min-w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400">
@@ -1097,7 +1144,18 @@ export function UserProfilePage() {
             </table>
           </TableShell>
 
-          <TableShell title="Recent Payments" action={<button className="text-xs font-semibold text-emerald-700">View all payments</button>}>
+          <TableShell
+            title="Recent Payments"
+            action={
+              <button
+                type="button"
+                onClick={() => setActiveTab("Payments")}
+                className="text-xs font-semibold text-emerald-700"
+              >
+                View all payments
+              </button>
+            }
+          >
             <table className="min-w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400">
@@ -1122,7 +1180,18 @@ export function UserProfilePage() {
             </table>
           </TableShell>
 
-          <TableShell title="Recent Reviews" action={<button className="text-xs font-semibold text-emerald-700">View all reviews</button>}>
+          <TableShell
+            title="Recent Reviews"
+            action={
+              <button
+                type="button"
+                onClick={() => setActiveTab("Reviews")}
+                className="text-xs font-semibold text-emerald-700"
+              >
+                View all reviews
+              </button>
+            }
+          >
             <table className="min-w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400">
@@ -1699,6 +1768,18 @@ export function UserProfilePage() {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{document.label}</p>
                         <p className="mt-1 text-[13px] text-slate-500">{document.detail}</p>
+                        {document.note ? <p className="mt-1 text-[12px] text-slate-400">{document.note}</p> : null}
+                        {document.fileUrl ? (
+                          <a
+                            href={document.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-emerald-700"
+                          >
+                            <Eye className="size-4" />
+                            Open file
+                          </a>
+                        ) : null}
                       </div>
                       <MiniStatus status={document.status} />
                     </div>
@@ -1783,11 +1864,27 @@ export function UserProfilePage() {
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     type="button"
+                    onClick={() => void handleRequestProviderDocuments()}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Request Documents
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void handleApproveProviderDocuments()}
                     disabled={saving}
                     className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Approve IC / Passport
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRequestProviderDocuments()}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Reject / Send Back
                   </button>
                 </div>
               </div>

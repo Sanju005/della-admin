@@ -252,6 +252,8 @@ export type ProviderDocumentItem = {
   status: string;
   updated?: string;
   fileName?: string;
+  fileUrl?: string;
+  note?: string;
 };
 
 export type ProviderTaskRow = {

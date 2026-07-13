@@ -175,6 +175,17 @@ type ProviderAdminMetadataRow = {
   current_longitude?: number | null;
 };
 
+type ProviderUploadedDocumentRow = {
+  id: string;
+  provider_id: string;
+  document_type?: string | null;
+  label?: string | null;
+  file_url?: string | null;
+  notes?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
 type ProviderAccountRow = {
   id: string;
   full_name: string | null;
@@ -567,6 +578,66 @@ function formatDocumentStatus(verified: boolean, requested: boolean) {
   }
 
   return "Pending";
+}
+
+function formatDocumentReviewStatus(value: string | null | undefined, fallback: string) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (["verified", "approved"].includes(normalized)) {
+    return "Verified";
+  }
+
+  if (["rejected", "needs_resubmission", "needs_review"].includes(normalized)) {
+    return "Rejected";
+  }
+
+  if (["pending", "uploaded", "submitted", "in_review"].includes(normalized)) {
+    return "Pending";
+  }
+
+  return toTitleCase(normalized);
+}
+
+async function tryFetchProviderUploadedDocuments(providerId: string) {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("provider_documents")
+    .select("id, provider_id, document_type, label, file_url, notes, status, created_at")
+    .eq("provider_id", providerId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as ProviderUploadedDocumentRow[];
+}
+
+function findUploadedDocument(
+  rows: ProviderUploadedDocumentRow[],
+  matchers: string[],
+) {
+  const normalizedMatchers = matchers.map((value) => value.trim().toLowerCase());
+
+  return rows.find((row) => {
+    const type = row.document_type?.trim().toLowerCase() ?? "";
+    const label = row.label?.trim().toLowerCase() ?? "";
+    return normalizedMatchers.some((matcher) => type === matcher || label.includes(matcher));
+  }) ?? null;
+}
+
+function collectUploadedDocuments(
+  rows: ProviderUploadedDocumentRow[],
+  matcher: (row: ProviderUploadedDocumentRow) => boolean,
+) {
+  return rows.filter(matcher);
 }
 
 function buildProofAsset(
@@ -1358,6 +1429,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const livePayments = await tryFetchProviderPayments(providerId);
   const liveReviews = await tryFetchProviderReviews(providerId);
   const liveLastLogin = await tryFetchProviderLastLogin(providerId);
+  const uploadedDocuments = await tryFetchProviderUploadedDocuments(providerId);
   const customerNames = await fetchProfileNameMap([
     ...(liveTasks?.map((row) => row.customer_id) ?? []),
     ...(liveReviews?.map((row) => row.customer_id) ?? []),
@@ -1375,6 +1447,19 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   );
 
   const status = formatStatus(liveAccount?.status ?? (liveProfile.is_visible === false ? "paused" : "active"));
+  const identityFrontDocument = findUploadedDocument(uploadedDocuments, ["ic_front", "identity_front"]);
+  const identityBackDocument = findUploadedDocument(uploadedDocuments, ["ic_back", "identity_back"]);
+  const drivingLicenseDocument = findUploadedDocument(uploadedDocuments, ["driving_license"]);
+  const certificateDocuments = collectUploadedDocuments(
+    uploadedDocuments,
+    (row) => {
+      const type = row.document_type?.trim().toLowerCase() ?? "";
+      return type === "certificate" || type.startsWith("service_certificate_");
+    },
+  );
+  const liveCertificateFiles = certificateDocuments
+    .map((row) => row.file_url?.trim())
+    .filter((value): value is string => Boolean(value));
 
   const detail: ProviderDetailRecord = {
     ...baseDetail,
@@ -1472,7 +1557,9 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     certificateImageFiles:
       serviceKey && metadata?.certificate_image_files?.[serviceKey]?.length
         ? metadata.certificate_image_files[serviceKey]?.filter(Boolean) ?? []
-        : baseDetail.certificateImageFiles ?? [],
+        : liveCertificateFiles.length
+          ? liveCertificateFiles
+          : baseDetail.certificateImageFiles ?? [],
     documents: [
       {
         id: "live-doc-1",
@@ -1489,22 +1576,68 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
       {
         id: "live-doc-3",
         label: "Identity Verification",
-        status: formatDocumentStatus(
-          Boolean(verification?.identity_verified),
-          Boolean(verification?.requested_documents?.length),
-        ),
-        fileName: verification?.front_image_name?.trim() || undefined,
-        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
+        status:
+          formatDocumentReviewStatus(
+            identityFrontDocument?.status,
+            formatDocumentStatus(
+              Boolean(verification?.identity_verified),
+              Boolean(verification?.requested_documents?.length),
+            ),
+          ),
+        fileName:
+          identityFrontDocument?.label?.trim() ||
+          verification?.front_image_name?.trim() ||
+          undefined,
+        fileUrl: identityFrontDocument?.file_url?.trim() || undefined,
+        note: identityFrontDocument?.notes?.trim() || undefined,
+        updated: identityFrontDocument?.created_at
+          ? formatDate(identityFrontDocument.created_at)
+          : verification?.last_reviewed_at
+            ? formatDate(verification.last_reviewed_at)
+            : undefined,
       },
       {
         id: "live-doc-4",
         label: "Back of Document",
-        status: verification?.back_image_name?.trim()
-          ? formatDocumentStatus(Boolean(verification?.identity_verified), false)
-          : "Pending",
-        fileName: verification?.back_image_name?.trim() || undefined,
-        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
+        status:
+          formatDocumentReviewStatus(
+            identityBackDocument?.status,
+            verification?.back_image_name?.trim() || identityBackDocument?.file_url?.trim()
+              ? formatDocumentStatus(Boolean(verification?.identity_verified), false)
+              : "Pending",
+          ),
+        fileName:
+          identityBackDocument?.label?.trim() ||
+          verification?.back_image_name?.trim() ||
+          undefined,
+        fileUrl: identityBackDocument?.file_url?.trim() || undefined,
+        note: identityBackDocument?.notes?.trim() || undefined,
+        updated: identityBackDocument?.created_at
+          ? formatDate(identityBackDocument.created_at)
+          : verification?.last_reviewed_at
+            ? formatDate(verification.last_reviewed_at)
+            : undefined,
       },
+      ...(drivingLicenseDocument
+        ? [{
+            id: "live-doc-5",
+            label: "Driving License",
+            status: formatDocumentReviewStatus(drivingLicenseDocument.status, "Pending"),
+            fileName: drivingLicenseDocument.label?.trim() || "Driving License",
+            fileUrl: drivingLicenseDocument.file_url?.trim() || undefined,
+            note: drivingLicenseDocument.notes?.trim() || undefined,
+            updated: drivingLicenseDocument.created_at ? formatDate(drivingLicenseDocument.created_at) : undefined,
+          }]
+        : []),
+      ...certificateDocuments.map((document, index) => ({
+        id: `live-doc-certificate-${index + 1}`,
+        label: document.label?.trim() || `Certificate ${index + 1}`,
+        status: formatDocumentReviewStatus(document.status, "Uploaded"),
+        fileName: document.label?.trim() || `Certificate ${index + 1}`,
+        fileUrl: document.file_url?.trim() || undefined,
+        note: document.notes?.trim() || undefined,
+        updated: document.created_at ? formatDate(document.created_at) : undefined,
+      })),
     ] satisfies ProviderDocumentItem[],
     completedTaskRows: taskRows?.completedTaskRows.length ? taskRows.completedTaskRows : baseDetail.completedTaskRows,
     upcomingTaskRows: taskRows?.upcomingTaskRows.length ? taskRows.upcomingTaskRows : baseDetail.upcomingTaskRows,
