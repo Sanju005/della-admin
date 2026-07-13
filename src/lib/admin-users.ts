@@ -1217,31 +1217,21 @@ export function buildInternalUserStats(rows: UserRow[]) {
 }
 
 export async function getUserProfileWithFallback(userId: string): Promise<UserProfilePayload> {
-  const mockDetail = findMockDetailByUser({ id: userId, email: null, full_name: null }) ?? userDetailRecords[userId] ?? null;
-
   const liveProfile = await fetchProfileById(userId);
 
   if (!liveProfile) {
-    if (!mockDetail) {
-      return {
-        detail: null,
-        relatedBookings: [],
-        relatedPayments: [],
-      };
-    }
-
     return {
-      detail: mockDetail,
-      relatedBookings: getMockBookings(mockDetail.name, mockDetail.role),
-      relatedPayments: getMockPayments(mockDetail.name, mockDetail.role),
+      detail: null,
+      relatedBookings: [],
+      relatedPayments: [],
     };
   }
 
   const name = extractName(liveProfile);
-  const email = liveProfile.email?.trim() || mockDetail?.email || "No email";
-  const role = liveProfile.role?.trim() || mockDetail?.role || "customer";
+  const email = liveProfile.email?.trim() || "No email";
+  const role = liveProfile.role?.trim() || "customer";
   const status = formatStatus(liveProfile.status, role);
-  const city = extractCity(liveProfile) || mockDetail?.city || "Malaysia";
+  const city = extractCity(liveProfile) || "Malaysia";
   const profileNames = await fetchRelatedProfileNamesForUser(userId, role);
   const liveBookings = await tryFetchLiveBookings(userId, role, profileNames);
   const livePayments = await tryFetchLivePayments(userId, role, profileNames);
@@ -1254,16 +1244,8 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
     [];
   const generatedDetail = buildGeneratedUserDetail(liveProfile, role, city, roleTemplate);
   const baseDetail = generatedDetail;
-  const relatedBookings = liveBookings?.length
-    ? liveBookings
-    : mockDetail
-      ? getMockBookings(name, role)
-      : [];
-  const relatedPayments = livePayments?.length
-    ? livePayments
-    : mockDetail
-      ? getMockPayments(name, role)
-      : [];
+  const relatedBookings = liveBookings?.length ? liveBookings : [];
+  const relatedPayments = livePayments?.length ? livePayments : [];
   const metrics = buildMetrics(role, relatedBookings, relatedPayments, baseDetail.metrics);
   const providerProfile = relationNode(liveProfile.provider_profiles);
   const verification = relationItem(providerProfile?.provider_verifications);
@@ -1328,7 +1310,7 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
               submitted: formatDate(report.created_at),
             }))
           : generatedDetail.reports,
-      recentReviews: liveReviews?.length ? liveReviews : mockDetail?.recentReviews ?? generatedDetail.recentReviews,
+      recentReviews: liveReviews?.length ? liveReviews : generatedDetail.recentReviews,
       metrics: metrics.map((metric) =>
         metric.label === "Reports Submitted" && liveReports?.length && !isProviderRole(role)
           ? { ...metric, value: String(liveReports.length), note: "Live reports submitted" }

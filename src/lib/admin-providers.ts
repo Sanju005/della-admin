@@ -1342,8 +1342,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const liveProfile = await fetchProviderProfileById(providerId);
 
   if (!liveProfile) {
-    const fallback = providerDetailRecords[providerId] ?? null;
-    return { detail: fallback };
+    return { detail: null };
   }
 
   const liveAccount = await fetchProviderAccountById(providerId);
@@ -1351,11 +1350,6 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const verification = relationItem(liveProfile.provider_verifications);
   const metadata = liveProfile.provider_admin_metadata ?? null;
   const serviceKey = firstService?.service_type?.trim().toLowerCase() || "";
-  const fallback = findMockProviderDetail(
-    providerId,
-    liveProfile.marketing_name ?? liveAccount?.full_name,
-    liveAccount?.email
-  );
   const generatedDetail = buildGeneratedProviderDetail(providerId, liveProfile, liveAccount, firstService);
   const baseDetail = generatedDetail;
   const serviceAreas = [{ id: "live-sa-1", label: liveProfile.service_location?.trim() || "Malaysia", tag: "Primary" }];
@@ -1370,11 +1364,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   ]);
   const taskRows = liveTasks?.length ? buildTaskRows(liveTasks, customerNames) : null;
   const payoutRows = livePayments?.length ? buildPayoutRows(livePayments) : baseDetail.payoutRows;
-  const reviewRows = liveReviews?.length
-    ? buildReviewRows(liveReviews, customerNames)
-    : fallback && getMockProviderReviews(fallback.name).length
-      ? getMockProviderReviews(fallback.name)
-      : [];
+  const reviewRows = liveReviews?.length ? buildReviewRows(liveReviews, customerNames) : [];
   const metrics = buildMetrics(
     baseDetail.metrics,
     liveTasks,

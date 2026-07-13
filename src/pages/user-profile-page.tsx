@@ -36,7 +36,6 @@ import {
   TimelineItem,
   VerificationDot,
 } from "../components/user-detail-ui";
-import { userDetailRecords } from "../data/user-detail-mocks";
 import {
   approveProviderVerification,
   getProviderProfileWithFallback,
@@ -81,6 +80,47 @@ const metricAccents: Record<string, string> = {
   sky: "bg-sky-50 text-sky-600",
   slate: "bg-slate-100 text-slate-600",
   green: "bg-green-50 text-green-600",
+};
+
+const EMPTY_USER_DETAIL: UserDetailRecord = {
+  userId: "",
+  name: "",
+  email: "",
+  role: "customer",
+  status: "Active",
+  phone: "",
+  dob: "Not provided",
+  gender: "Not provided",
+  city: "Malaysia",
+  region: "Not provided",
+  country: "Malaysia",
+  joined: "",
+  lastLogin: "",
+  registeredAt: "",
+  device: "",
+  ipAddress: "",
+  referrer: "",
+  accountType: "",
+  loginCount: "",
+  failedLogins: "",
+  twoFactorAuth: "",
+  walletBalance: "RM0.00",
+  totalSpent: "RM0.00",
+  reviewsGiven: "0",
+  reportsSubmitted: "0",
+  completionRate: "0%",
+  cancellationRate: "0%",
+  averageRating: "0.0",
+  emailVerifiedAt: "Pending",
+  phoneVerifiedAt: "Pending",
+  kycVerifiedAt: "Pending",
+  addresses: [],
+  timeline: [],
+  recentActions: [],
+  documents: [],
+  reports: [],
+  recentReviews: [],
+  metrics: [],
 };
 
 function isVerifiedLabel(value: string) {
@@ -305,11 +345,11 @@ export function UserProfilePage() {
   const { userId = "" } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>("Overview");
-  const [record, setRecord] = useState<UserDetailRecord | null>(userDetailRecords[userId] ?? null);
+  const [record, setRecord] = useState<UserDetailRecord | null>(null);
   const [relatedBookings, setRelatedBookings] = useState<DashboardBooking[]>([]);
   const [relatedPayments, setRelatedPayments] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState(record?.status ?? "Active");
+  const [status, setStatus] = useState("Active");
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [providerVerificationDetail, setProviderVerificationDetail] = useState<ProviderDetailRecord | null>(null);
@@ -330,14 +370,14 @@ export function UserProfilePage() {
   const [reportDateFilter, setReportDateFilter] = useState<DateFilterKey>("all");
   const [reportSort, setReportSort] = useState<SortKey>("recent");
   const [form, setForm] = useState({
-    name: record?.name ?? "",
-    email: record?.email ?? "",
-    phone: record?.phone ?? "",
-    dob: normalizeEditableDate(record?.dob ?? ""),
-    gender: record?.gender === "Not provided" ? "" : (record?.gender ?? ""),
-    city: record?.city === "Malaysia" ? "" : (record?.city ?? ""),
-    region: record?.region === "Not provided" ? "" : (record?.region ?? ""),
-    country: record?.country === "Malaysia" ? "" : (record?.country ?? "Malaysia"),
+    name: "",
+    email: "",
+    phone: "",
+    dob: "",
+    gender: "",
+    city: "",
+    region: "",
+    country: "Malaysia",
   });
 
   useEffect(() => {
@@ -346,15 +386,14 @@ export function UserProfilePage() {
     setActiveTab("Overview");
     setMessage(null);
     setLoading(true);
+    setRecord(null);
+    setRelatedBookings([]);
+    setRelatedPayments([]);
+    setProviderVerificationDetail(null);
+    setProviderVerificationNote("");
+    setStatus("Active");
 
     async function loadUser() {
-      const fallbackRecord = userDetailRecords[userId] ?? null;
-
-      if (active) {
-        setRecord(fallbackRecord);
-        setStatus(fallbackRecord?.status ?? "Active");
-      }
-
       const payload = await getUserProfileWithFallback(userId);
       const normalizedRole = payload.detail?.role?.trim().toLowerCase();
       const providerPayload =
@@ -419,9 +458,7 @@ export function UserProfilePage() {
     }
   }
 
-  const defaultUserDetail = Object.values(userDetailRecords)[0]!;
-  const safeDetail =
-    record ?? userDetailRecords[userId] ?? defaultUserDetail;
+  const safeDetail = record ?? EMPTY_USER_DETAIL;
   const isProviderAccount = isProviderRoleValue(record?.role ?? safeDetail.role);
   const recentReviews = safeDetail.recentReviews;
   const taskRows = useMemo(

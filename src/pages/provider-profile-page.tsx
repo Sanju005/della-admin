@@ -25,7 +25,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { TaskDetailPanel } from "../components/task-detail-panel";
 import { TaskDetailModal } from "../components/task-detail-modal";
 import { InfoRow, MetricTile, MiniStatus, PillBadge, SurfaceCard, TableShell } from "../components/user-detail-ui";
-import { providerDetailRecords } from "../data/provider-detail-mocks";
 import {
   approveProviderVerification,
   getProviderReportsWithFallback,
@@ -72,6 +71,80 @@ const metricAccents: Record<string, string> = {
   sky: "bg-sky-50 text-sky-600",
   slate: "bg-slate-100 text-slate-600",
   green: "bg-green-50 text-green-600",
+};
+
+const EMPTY_PROVIDER_DETAIL: ProviderDetailRecord = {
+  providerId: "",
+  name: "",
+  email: "",
+  profilePhotoUrl: undefined,
+  status: "Active",
+  visibilityStatus: "Visible",
+  roleBadge: "Provider",
+  joinedAt: "",
+  lastLogin: "",
+  serviceType: "",
+  serviceArea: "",
+  serviceRadiusKm: "Not set",
+  yearsExperience: "Not set",
+  hourlyRate: "Not set",
+  dailyRate: "Not set",
+  currentCoordinates: "Not captured",
+  rating: "0.0",
+  ratingNote: "(0 reviews)",
+  phone: "",
+  dob: "Not provided",
+  gender: "Not provided",
+  language: "Not provided",
+  nationalId: "Document pending",
+  emergencyContact: "Not provided",
+  address: "Not provided",
+  about: "",
+  approvalStatus: "Pending",
+  backgroundCheck: "Pending",
+  kycStatus: "Pending",
+  verificationNote: "",
+  requestedDocuments: [],
+  phoneVerified: false,
+  emailVerified: false,
+  identityVerified: false,
+  backgroundCheckVerified: false,
+  memberSince: "",
+  device: "",
+  completedJobs: "0",
+  cancellationRate: "0.0%",
+  responseRate: "Pending",
+  averageRating: "0.0",
+  totalReviews: "0",
+  onTimeRate: "Pending",
+  repeatCustomers: "Pending",
+  workingDays: "Not set",
+  workingHours: "Not set",
+  availabilityPreset: "Not set",
+  totalTasks: "0",
+  completedTasks: "0",
+  upcomingTasks: "0",
+  activeTime: "0h 0m",
+  areaCount: "0",
+  totalEarnings: "RM0.00",
+  withdrawn: "RM0.00",
+  reviewsCount: "0",
+  metrics: [],
+  serviceAreas: [],
+  skills: [],
+  specialties: [],
+  serviceImageCaptions: [],
+  serviceImageFiles: [],
+  certificateImageCaptions: [],
+  certificateImageFiles: [],
+  documents: [],
+  completedTaskRows: [],
+  upcomingTaskRows: [],
+  cancelledTaskRows: [],
+  payoutRows: [],
+  recentReviews: [],
+  recentActions: [],
+  activityLog: [],
 };
 
 function avatarGradient(name: string) {
@@ -374,9 +447,7 @@ export function ProviderProfilePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabKey>("Overview");
   const [message, setMessage] = useState<string | null>(null);
-  const [provider, setProvider] = useState<ProviderDetailRecord | null>(
-    providerDetailRecords[providerId] ?? providerDetailRecords["PRV-2034"] ?? null
-  );
+  const [provider, setProvider] = useState<ProviderDetailRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -399,15 +470,15 @@ export function ProviderProfilePage() {
   const [reportSort, setReportSort] = useState<SortKey>("recent");
   const taskDetailRef = useRef<HTMLDivElement | null>(null);
   const [form, setForm] = useState({
-    name: provider?.name ?? "",
-    email: provider?.email ?? "",
-    phone: provider?.phone ?? "",
-    profilePhotoUrl: provider?.profilePhotoUrl ?? "",
-    dob: normalizeEditableDate(provider?.dob ?? ""),
-    gender: provider?.gender === "Not provided" ? "" : (provider?.gender ?? ""),
-    serviceArea: provider?.serviceArea ?? "",
-    address: provider?.address === "Not provided" ? "" : (provider?.address ?? ""),
-    about: provider?.about ?? "",
+    name: "",
+    email: "",
+    phone: "",
+    profilePhotoUrl: "",
+    dob: "",
+    gender: "",
+    serviceArea: "",
+    address: "",
+    about: "",
   });
 
   useEffect(() => {
@@ -417,14 +488,11 @@ export function ProviderProfilePage() {
     setMessage(null);
     setLoading(true);
     setProviderReports([]);
+    setProvider(null);
+    setVerificationNote("");
+    setSelectedDocumentRequests([]);
 
     async function loadProvider() {
-      const fallback = providerDetailRecords[providerId] ?? providerDetailRecords["PRV-2034"] ?? null;
-
-      if (active) {
-        setProvider(fallback);
-      }
-
       const [payload, reports] = await Promise.all([
         getProviderProfileWithFallback(providerId),
         getProviderReportsWithFallback(providerId),
@@ -483,9 +551,7 @@ export function ProviderProfilePage() {
     );
   }
 
-  const defaultProviderDetail = Object.values(providerDetailRecords)[0]!;
-  const safeDetail =
-    provider ?? providerDetailRecords[providerId] ?? defaultProviderDetail;
+  const safeDetail = provider ?? EMPTY_PROVIDER_DETAIL;
   const providerHeroImage =
     (isRenderableImageUrl(safeDetail.profilePhotoUrl) ? safeDetail.profilePhotoUrl!.trim() : null) ??
     [...(safeDetail.serviceImageFiles ?? []), ...(safeDetail.certificateImageFiles ?? [])].find((value) =>
