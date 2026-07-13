@@ -1372,17 +1372,11 @@ export async function listProvidersWithFallback() {
   const liveProfiles = await fetchProviderProfiles();
 
   if (!liveProfiles?.length) {
-    return mockProviders;
+    return [];
   }
 
   const liveAccounts = await Promise.all(liveProfiles.map((profile) => fetchProviderAccountById(profile.id)));
-  const liveRows = liveProfiles.map((profile, index) => mapProviderRow(profile, liveAccounts[index] ?? null));
-  const seen = new Set(liveRows.flatMap((row) => [row.id.trim().toLowerCase(), row.provider.trim().toLowerCase()]));
-  const mockRemainder = mockProviders.filter(
-    (row) => !seen.has(row.id.trim().toLowerCase()) && !seen.has(row.provider.trim().toLowerCase())
-  );
-
-  return [...liveRows, ...mockRemainder];
+  return liveProfiles.map((profile, index) => mapProviderRow(profile, liveAccounts[index] ?? null));
 }
 
 export function buildProviderStats(rows: ProviderRow[]) {
