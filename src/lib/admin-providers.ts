@@ -765,15 +765,22 @@ async function fetchProviderProfiles() {
   const { data: accountRows, error: accountError } = await supabase
     .from("profiles")
     .select("id, full_name, email, role, status, phone, created_at")
-    .in("role", ["provider", "service_provider"])
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(500);
 
   if (accountError || !accountRows?.length) {
     return null;
   }
 
-  const accounts = accountRows as ProviderAccountRow[];
+  const accounts = (accountRows as ProviderAccountRow[]).filter((account) => {
+    const normalizedRole = account.role?.trim().toLowerCase() ?? "";
+    return normalizedRole === "provider" || normalizedRole === "service_provider";
+  });
+
+  if (!accounts.length) {
+    return null;
+  }
+
   const ids = accounts.map((account) => account.id);
 
   const [{ data: providerProfileRows }, { data: serviceRows }, { data: verificationRows }, { data: metadataRows }] = await Promise.all([
@@ -850,19 +857,19 @@ async function fetchProviderProfileById(providerId: string) {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from("provider_profiles")
-    .select("id, marketing_name, profile_photo_url, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
-    .eq("id", providerId)
-    .maybeSingle();
+  const account = await fetchProviderAccountById(providerId);
+  const normalizedRole = account?.role?.trim().toLowerCase() ?? "";
 
-  if (error || !data) {
+  if (!account || (normalizedRole !== "provider" && normalizedRole !== "service_provider")) {
     return null;
   }
 
-  const profile = data as ProviderProfileRow;
-
-  const [{ data: serviceRows }, { data: verificationRow }, { data: metadataRow }] = await Promise.all([
+  const [{ data: providerProfile }, { data: serviceRows }, { data: verificationRow }, { data: metadataRow }] = await Promise.all([
+    supabase
+      .from("provider_profiles")
+      .select("id, marketing_name, profile_photo_url, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
+      .eq("id", providerId)
+      .maybeSingle(),
     supabase
       .from("provider_services")
       .select(`
@@ -889,7 +896,19 @@ async function fetchProviderProfileById(providerId: string) {
   ]);
 
   return {
-    ...profile,
+    id: providerId,
+    marketing_name: (providerProfile as ProviderProfileRow | null | undefined)?.marketing_name ?? account.full_name ?? null,
+    profile_photo_url: (providerProfile as ProviderProfileRow | null | undefined)?.profile_photo_url ?? null,
+    service_location: (providerProfile as ProviderProfileRow | null | undefined)?.service_location ?? null,
+    service_radius_km: (providerProfile as ProviderProfileRow | null | undefined)?.service_radius_km ?? null,
+    date_of_birth: (providerProfile as ProviderProfileRow | null | undefined)?.date_of_birth ?? null,
+    sex: (providerProfile as ProviderProfileRow | null | undefined)?.sex ?? null,
+    residential_address: (providerProfile as ProviderProfileRow | null | undefined)?.residential_address ?? null,
+    bio: (providerProfile as ProviderProfileRow | null | undefined)?.bio ?? null,
+    average_rating: (providerProfile as ProviderProfileRow | null | undefined)?.average_rating ?? null,
+    total_reviews: (providerProfile as ProviderProfileRow | null | undefined)?.total_reviews ?? null,
+    approval_status: (providerProfile as ProviderProfileRow | null | undefined)?.approval_status ?? account.status ?? null,
+    is_visible: (providerProfile as ProviderProfileRow | null | undefined)?.is_visible ?? null,
     provider_services: (serviceRows as ProviderServiceRow[] | null | undefined) ?? null,
     provider_verifications: verificationRow ?? null,
     provider_admin_metadata: (metadataRow as ProviderAdminMetadataRow | null | undefined) ?? null,

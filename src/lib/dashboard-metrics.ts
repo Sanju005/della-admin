@@ -73,16 +73,19 @@ async function countProviderAccounts() {
     return null;
   }
 
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .in("role", ["provider", "service_provider"]);
+    .select("role")
+    .limit(5000);
 
   if (error) {
     return null;
   }
 
-  return count ?? 0;
+  return (data ?? []).filter((row) => {
+    const normalizedRole = row.role?.trim().toLowerCase() ?? "";
+    return normalizedRole === "provider" || normalizedRole === "service_provider";
+  }).length;
 }
 
 async function sumPaymentAmounts() {
