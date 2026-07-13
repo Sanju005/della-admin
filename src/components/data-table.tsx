@@ -8,6 +8,7 @@ type DataTableProps<T extends Record<string, unknown>> = {
   rows: T[];
   title: string;
   description: string;
+  action?: React.ReactNode;
   searchPlaceholder?: string;
   statusKey?: keyof T;
   selectedRowId?: string | null;
@@ -20,6 +21,7 @@ export function DataTable<T extends Record<string, unknown>>({
   rows,
   title,
   description,
+  action,
   searchPlaceholder = "Search records...",
   statusKey,
   selectedRowId,
@@ -72,6 +74,7 @@ export function DataTable<T extends Record<string, unknown>>({
           <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
         <div className="flex flex-col gap-3 lg:min-w-[360px]">
+          {action ? <div className="flex justify-end">{action}</div> : null}
           <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
             <Search className="size-4" />
             <input

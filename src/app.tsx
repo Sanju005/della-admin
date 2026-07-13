@@ -64,6 +64,16 @@ const UsersPage = lazy(async () => {
   return { default: module.UsersPage };
 });
 
+const UserCreatePage = lazy(async () => {
+  const module = await import("./pages/user-create-page");
+  return { default: module.UserCreatePage };
+});
+
+const ProviderCreatePage = lazy(async () => {
+  const module = await import("./pages/provider-create-page");
+  return { default: module.ProviderCreatePage };
+});
+
 const BookingsPage = lazy(async () => {
   const module = await import("./pages/bookings-page");
   return { default: module.BookingsPage };
@@ -175,6 +185,10 @@ const router = createBrowserRouter([
         element: withSuspense(<UsersPage />),
       },
       {
+        path: "users/create",
+        element: withSuspense(<UserCreatePage />),
+      },
+      {
         path: "admins",
         element: withSuspense(<AdminsPage />),
       },
@@ -185,6 +199,10 @@ const router = createBrowserRouter([
       {
         path: "service-providers",
         element: withSuspense(<ProvidersPage />),
+      },
+      {
+        path: "service-providers/create",
+        element: withSuspense(<ProviderCreatePage />),
       },
       {
         path: "service-providers/:providerId",

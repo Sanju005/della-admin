@@ -1,10 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ResourcePage } from "./resource-page";
 import { buildUserStats, listUsersWithFallback } from "../lib/admin-users";
 import type { UserRow } from "../types";
 
 export function UsersPage() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,6 +64,15 @@ export function UsersPage() {
         { key: "city", label: "City" },
         { key: "joined", label: "Joined" },
       ]}
+      action={
+        <button
+          type="button"
+          onClick={() => navigate("/users/create")}
+          className="inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+        >
+          Create User
+        </button>
+      }
       statusKey="status"
       searchPlaceholder="Search users by name, email, or role..."
       stats={buildUserStats(rows)}

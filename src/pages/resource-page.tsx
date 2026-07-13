@@ -6,6 +6,7 @@ type ResourcePageProps<T extends Record<string, unknown>> = {
   description: string;
   rows: T[];
   columns: TableColumn<T>[];
+  action?: React.ReactNode;
   statusKey?: keyof T;
   searchPlaceholder: string;
   stats: Array<{
@@ -20,6 +21,7 @@ export function ResourcePage<T extends Record<string, unknown>>({
   description,
   rows,
   columns,
+  action,
   statusKey,
   searchPlaceholder,
   stats,
@@ -46,6 +48,7 @@ export function ResourcePage<T extends Record<string, unknown>>({
       <DataTable
         title={title}
         description={description}
+        action={action}
         rows={rows}
         columns={columns}
         statusKey={statusKey}

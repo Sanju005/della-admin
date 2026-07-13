@@ -81,6 +81,34 @@ function buildAdminSupabaseClient(env) {
         },
     });
 }
+function splitPhoneNumber(value) {
+    var _a, _b;
+    var trimmed = value.trim();
+    if (!trimmed) {
+        return {
+            countryCode: null,
+            phoneNumber: null,
+        };
+    }
+    if (!trimmed.startsWith("+")) {
+        return {
+            countryCode: null,
+            phoneNumber: trimmed,
+        };
+    }
+    var match = trimmed.match(/^(\+\d+)\s*(.*)$/);
+    return {
+        countryCode: (_a = match === null || match === void 0 ? void 0 : match[1]) !== null && _a !== void 0 ? _a : null,
+        phoneNumber: ((_b = match === null || match === void 0 ? void 0 : match[2]) === null || _b === void 0 ? void 0 : _b.trim()) || null,
+    };
+}
+function splitFullName(fullName) {
+    var _a = fullName.trim().split(/\s+/).filter(Boolean), _b = _a[0], firstName = _b === void 0 ? "" : _b, rest = _a.slice(1);
+    return {
+        firstName: firstName,
+        lastName: rest.join(" "),
+    };
+}
 function verifyAdminRequest(request, env) {
     return __awaiter(this, void 0, void 0, function () {
         var adminClient, origin, authorization, token, _a, user, userError, _b, profile, profileError, adminProfile;
@@ -382,6 +410,181 @@ function handlePaymentSettlement(request, env) {
         });
     });
 }
+function handleAccountCreate(request, env) {
+    return __awaiter(this, void 0, void 0, function () {
+        var origin, verified, payload, accountType, fullName, email, password, phone, adminClient, _a, createdUser, authError, userId, normalizedStatus, normalizedCountry, _b, countryCode, phoneNumber, _c, firstName, lastName, profileError, customerError, providerVisible, approvalStatus, providerProfileError, serviceError, verificationError, metadataError;
+        var _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8;
+        return __generator(this, function (_9) {
+            switch (_9.label) {
+                case 0:
+                    origin = request.headers.get("origin");
+                    if (request.method === "OPTIONS") {
+                        return [2 /*return*/, new Response(null, {
+                                status: 204,
+                                headers: corsHeaders(origin),
+                            })];
+                    }
+                    if (request.method !== "POST") {
+                        return [2 /*return*/, json({ error: "Method not allowed." }, { status: 405 }, origin)];
+                    }
+                    return [4 /*yield*/, verifyAdminRequest(request, env)];
+                case 1:
+                    verified = _9.sent();
+                    if ("error" in verified) {
+                        return [2 /*return*/, verified.error];
+                    }
+                    return [4 /*yield*/, request.json().catch(function () { return ({}); })];
+                case 2:
+                    payload = (_9.sent());
+                    accountType = payload.accountType === "provider" ? "provider" : payload.accountType === "customer" ? "customer" : "";
+                    fullName = (_e = (_d = payload.fullName) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
+                    email = (_g = (_f = payload.email) === null || _f === void 0 ? void 0 : _f.trim().toLowerCase()) !== null && _g !== void 0 ? _g : "";
+                    password = (_j = (_h = payload.password) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
+                    phone = (_l = (_k = payload.phone) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
+                    if (!accountType || !fullName || !email || !password) {
+                        return [2 /*return*/, json({ error: "accountType, fullName, email, and password are required." }, { status: 400 }, origin)];
+                    }
+                    adminClient = verified.adminClient;
+                    return [4 /*yield*/, adminClient.auth.admin.createUser({
+                            email: email,
+                            password: password,
+                            email_confirm: true,
+                            user_metadata: {
+                                full_name: fullName,
+                                role: accountType === "provider" ? "service_provider" : "customer",
+                            },
+                        })];
+                case 3:
+                    _a = _9.sent(), createdUser = _a.data, authError = _a.error;
+                    if (authError || !createdUser.user) {
+                        return [2 /*return*/, json({ error: (authError === null || authError === void 0 ? void 0 : authError.message) || "Unable to create auth account." }, { status: 400 }, origin)];
+                    }
+                    userId = createdUser.user.id;
+                    normalizedStatus = ((_m = payload.status) === null || _m === void 0 ? void 0 : _m.trim()) || (accountType === "provider" ? "pending" : "active");
+                    normalizedCountry = ((_o = payload.country) === null || _o === void 0 ? void 0 : _o.trim()) || "Malaysia";
+                    _b = splitPhoneNumber(phone), countryCode = _b.countryCode, phoneNumber = _b.phoneNumber;
+                    _c = splitFullName(fullName), firstName = _c.firstName, lastName = _c.lastName;
+                    return [4 /*yield*/, adminClient.from("profiles").upsert({
+                            id: userId,
+                            full_name: fullName,
+                            email: email,
+                            phone: phone || null,
+                            role: accountType === "provider" ? "service_provider" : "customer",
+                            status: normalizedStatus,
+                        })];
+                case 4:
+                    profileError = (_9.sent()).error;
+                    if (!profileError) return [3 /*break*/, 6];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 5:
+                    _9.sent();
+                    return [2 /*return*/, json({ error: profileError.message || "Unable to create profile record." }, { status: 500 }, origin)];
+                case 6:
+                    if (!(accountType === "customer")) return [3 /*break*/, 10];
+                    return [4 /*yield*/, adminClient.from("customer_profiles").upsert({
+                            id: userId,
+                            first_name: firstName || null,
+                            last_name: lastName || null,
+                            date_of_birth: ((_p = payload.dob) === null || _p === void 0 ? void 0 : _p.trim()) || null,
+                            phone_number: phoneNumber,
+                            country_code: countryCode,
+                            city: ((_q = payload.city) === null || _q === void 0 ? void 0 : _q.trim()) || null,
+                            region: ((_r = payload.region) === null || _r === void 0 ? void 0 : _r.trim()) || null,
+                            country: normalizedCountry,
+                            verified: normalizedStatus.toLowerCase() === "active",
+                        })];
+                case 7:
+                    customerError = (_9.sent()).error;
+                    if (!customerError) return [3 /*break*/, 9];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 8:
+                    _9.sent();
+                    return [2 /*return*/, json({ error: customerError.message || "Unable to create customer profile." }, { status: 500 }, origin)];
+                case 9: return [3 /*break*/, 22];
+                case 10:
+                    providerVisible = Boolean(payload.visible);
+                    approvalStatus = ((_s = payload.approvalStatus) === null || _s === void 0 ? void 0 : _s.trim()) || "pending";
+                    return [4 /*yield*/, adminClient.from("provider_profiles").upsert({
+                            id: userId,
+                            marketing_name: ((_t = payload.marketingName) === null || _t === void 0 ? void 0 : _t.trim()) || fullName,
+                            profile_photo_url: ((_u = payload.profilePhotoUrl) === null || _u === void 0 ? void 0 : _u.trim()) || null,
+                            service_location: ((_v = payload.serviceLocation) === null || _v === void 0 ? void 0 : _v.trim()) || ((_w = payload.city) === null || _w === void 0 ? void 0 : _w.trim()) || null,
+                            service_radius_km: typeof payload.serviceRadiusKm === "number" && Number.isFinite(payload.serviceRadiusKm)
+                                ? payload.serviceRadiusKm
+                                : null,
+                            date_of_birth: ((_x = payload.dob) === null || _x === void 0 ? void 0 : _x.trim()) || null,
+                            sex: ((_y = payload.gender) === null || _y === void 0 ? void 0 : _y.trim()) || null,
+                            residential_address: ((_z = payload.address) === null || _z === void 0 ? void 0 : _z.trim()) || null,
+                            bio: ((_0 = payload.bio) === null || _0 === void 0 ? void 0 : _0.trim()) || null,
+                            approval_status: approvalStatus,
+                            is_visible: providerVisible,
+                        })];
+                case 11:
+                    providerProfileError = (_9.sent()).error;
+                    if (!providerProfileError) return [3 /*break*/, 13];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 12:
+                    _9.sent();
+                    return [2 /*return*/, json({ error: providerProfileError.message || "Unable to create provider profile." }, { status: 500 }, origin)];
+                case 13:
+                    if (!(((_1 = payload.serviceType) === null || _1 === void 0 ? void 0 : _1.trim()) ||
+                        ((_2 = payload.yearsExperience) === null || _2 === void 0 ? void 0 : _2.trim()) ||
+                        typeof payload.hourlyRate === "number" ||
+                        typeof payload.dailyRate === "number")) return [3 /*break*/, 16];
+                    return [4 /*yield*/, adminClient.from("provider_services").upsert({
+                            provider_id: userId,
+                            service_type: ((_3 = payload.serviceType) === null || _3 === void 0 ? void 0 : _3.trim()) || null,
+                            years_experience: ((_4 = payload.yearsExperience) === null || _4 === void 0 ? void 0 : _4.trim()) || null,
+                            hourly_rate: typeof payload.hourlyRate === "number" && Number.isFinite(payload.hourlyRate)
+                                ? payload.hourlyRate
+                                : null,
+                            daily_rate: typeof payload.dailyRate === "number" && Number.isFinite(payload.dailyRate)
+                                ? payload.dailyRate
+                                : null,
+                        })];
+                case 14:
+                    serviceError = (_9.sent()).error;
+                    if (!serviceError) return [3 /*break*/, 16];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 15:
+                    _9.sent();
+                    return [2 /*return*/, json({ error: serviceError.message || "Unable to create provider service." }, { status: 500 }, origin)];
+                case 16: return [4 /*yield*/, adminClient.from("provider_verifications").upsert({
+                        provider_id: userId,
+                        phone_verified: Boolean(payload.phoneVerified),
+                        email_verified: Boolean(payload.emailVerified),
+                        identity_verified: Boolean(payload.identityVerified),
+                        kyc_verified: Boolean(payload.kycVerified),
+                        background_check_verified: Boolean(payload.backgroundCheckVerified),
+                        requested_documents: [],
+                        admin_note: "",
+                    })];
+                case 17:
+                    verificationError = (_9.sent()).error;
+                    if (!verificationError) return [3 /*break*/, 19];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 18:
+                    _9.sent();
+                    return [2 /*return*/, json({ error: verificationError.message || "Unable to create provider verification." }, { status: 500 }, origin)];
+                case 19: return [4 /*yield*/, adminClient.from("provider_admin_metadata").upsert({
+                        provider_id: userId,
+                        availability_days: ((_5 = payload.availabilityDays) !== null && _5 !== void 0 ? _5 : []).map(function (value) { return value.trim(); }).filter(Boolean),
+                        availability_time_preset: ((_6 = payload.availabilityPreset) === null || _6 === void 0 ? void 0 : _6.trim()) || null,
+                        availability_start_time: ((_7 = payload.availabilityStartTime) === null || _7 === void 0 ? void 0 : _7.trim()) || null,
+                        availability_end_time: ((_8 = payload.availabilityEndTime) === null || _8 === void 0 ? void 0 : _8.trim()) || null,
+                    })];
+                case 20:
+                    metadataError = (_9.sent()).error;
+                    if (!metadataError) return [3 /*break*/, 22];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 21:
+                    _9.sent();
+                    return [2 /*return*/, json({ error: metadataError.message || "Unable to create provider availability." }, { status: 500 }, origin)];
+                case 22: return [2 /*return*/, json({ success: true, userId: userId }, { status: 201 }, origin)];
+            }
+        });
+    });
+}
 export default {
     fetch: function (request, env) {
         return __awaiter(this, void 0, void 0, function () {
@@ -396,6 +599,9 @@ export default {
                         }
                         if (url.pathname === "/api/admin/payments/settlement") {
                             return [2 /*return*/, handlePaymentSettlement(request, env)];
+                        }
+                        if (url.pathname === "/api/admin/accounts/create") {
+                            return [2 /*return*/, handleAccountCreate(request, env)];
                         }
                         return [4 /*yield*/, env.ASSETS.fetch(request)];
                     case 1:

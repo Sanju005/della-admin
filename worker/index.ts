@@ -37,6 +37,41 @@ type PaymentSettlementAction = {
   paymentId?: string;
 };
 
+type AccountCreatePayload = {
+  accountType?: "customer" | "provider";
+  fullName?: string;
+  email?: string;
+  password?: string;
+  phone?: string;
+  status?: string;
+  dob?: string;
+  gender?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  marketingName?: string;
+  profilePhotoUrl?: string;
+  serviceType?: string;
+  serviceLocation?: string;
+  address?: string;
+  bio?: string;
+  serviceRadiusKm?: number;
+  yearsExperience?: string;
+  hourlyRate?: number;
+  dailyRate?: number;
+  availabilityDays?: string[];
+  availabilityPreset?: string;
+  availabilityStartTime?: string;
+  availabilityEndTime?: string;
+  approvalStatus?: string;
+  visible?: boolean;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  identityVerified?: boolean;
+  kycVerified?: boolean;
+  backgroundCheckVerified?: boolean;
+};
+
 type AdminProfileRow = {
   id: string;
   role: string | null;
@@ -105,6 +140,40 @@ function buildAdminSupabaseClient(env: Env) {
       persistSession: false,
     },
   });
+}
+
+function splitPhoneNumber(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      countryCode: null,
+      phoneNumber: null,
+    };
+  }
+
+  if (!trimmed.startsWith("+")) {
+    return {
+      countryCode: null,
+      phoneNumber: trimmed,
+    };
+  }
+
+  const match = trimmed.match(/^(\+\d+)\s*(.*)$/);
+
+  return {
+    countryCode: match?.[1] ?? null,
+    phoneNumber: match?.[2]?.trim() || null,
+  };
+}
+
+function splitFullName(fullName: string) {
+  const [firstName = "", ...rest] = fullName.trim().split(/\s+/).filter(Boolean);
+
+  return {
+    firstName,
+    lastName: rest.join(" "),
+  };
 }
 
 async function verifyAdminRequest(request: Request, env: Env): Promise<VerifiedAdminRequest> {
@@ -423,6 +492,174 @@ async function handlePaymentSettlement(request: Request, env: Env): Promise<Resp
   }, undefined, origin);
 }
 
+async function handleAccountCreate(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get("origin");
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(origin),
+    });
+  }
+
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed." }, { status: 405 }, origin);
+  }
+
+  const verified = await verifyAdminRequest(request, env);
+  if ("error" in verified) {
+    return verified.error;
+  }
+
+  const payload = (await request.json().catch(() => ({}))) as AccountCreatePayload;
+  const accountType = payload.accountType === "provider" ? "provider" : payload.accountType === "customer" ? "customer" : "";
+  const fullName = payload.fullName?.trim() ?? "";
+  const email = payload.email?.trim().toLowerCase() ?? "";
+  const password = payload.password?.trim() ?? "";
+  const phone = payload.phone?.trim() ?? "";
+
+  if (!accountType || !fullName || !email || !password) {
+    return json({ error: "accountType, fullName, email, and password are required." }, { status: 400 }, origin);
+  }
+
+  const { adminClient } = verified;
+  const { data: createdUser, error: authError } = await adminClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      role: accountType === "provider" ? "service_provider" : "customer",
+    },
+  });
+
+  if (authError || !createdUser.user) {
+    return json({ error: authError?.message || "Unable to create auth account." }, { status: 400 }, origin);
+  }
+
+  const userId = createdUser.user.id;
+  const normalizedStatus = payload.status?.trim() || (accountType === "provider" ? "pending" : "active");
+  const normalizedCountry = payload.country?.trim() || "Malaysia";
+  const { countryCode, phoneNumber } = splitPhoneNumber(phone);
+  const { firstName, lastName } = splitFullName(fullName);
+
+  const { error: profileError } = await adminClient.from("profiles").upsert({
+    id: userId,
+    full_name: fullName,
+    email,
+    phone: phone || null,
+    role: accountType === "provider" ? "service_provider" : "customer",
+    status: normalizedStatus,
+  });
+
+  if (profileError) {
+    await adminClient.auth.admin.deleteUser(userId);
+    return json({ error: profileError.message || "Unable to create profile record." }, { status: 500 }, origin);
+  }
+
+  if (accountType === "customer") {
+    const { error: customerError } = await adminClient.from("customer_profiles").upsert({
+      id: userId,
+      first_name: firstName || null,
+      last_name: lastName || null,
+      date_of_birth: payload.dob?.trim() || null,
+      phone_number: phoneNumber,
+      country_code: countryCode,
+      city: payload.city?.trim() || null,
+      region: payload.region?.trim() || null,
+      country: normalizedCountry,
+      verified: normalizedStatus.toLowerCase() === "active",
+    });
+
+    if (customerError) {
+      await adminClient.auth.admin.deleteUser(userId);
+      return json({ error: customerError.message || "Unable to create customer profile." }, { status: 500 }, origin);
+    }
+  } else {
+    const providerVisible = Boolean(payload.visible);
+    const approvalStatus = payload.approvalStatus?.trim() || "pending";
+
+    const { error: providerProfileError } = await adminClient.from("provider_profiles").upsert({
+      id: userId,
+      marketing_name: payload.marketingName?.trim() || fullName,
+      profile_photo_url: payload.profilePhotoUrl?.trim() || null,
+      service_location: payload.serviceLocation?.trim() || payload.city?.trim() || null,
+      service_radius_km:
+        typeof payload.serviceRadiusKm === "number" && Number.isFinite(payload.serviceRadiusKm)
+          ? payload.serviceRadiusKm
+          : null,
+      date_of_birth: payload.dob?.trim() || null,
+      sex: payload.gender?.trim() || null,
+      residential_address: payload.address?.trim() || null,
+      bio: payload.bio?.trim() || null,
+      approval_status: approvalStatus,
+      is_visible: providerVisible,
+    });
+
+    if (providerProfileError) {
+      await adminClient.auth.admin.deleteUser(userId);
+      return json({ error: providerProfileError.message || "Unable to create provider profile." }, { status: 500 }, origin);
+    }
+
+    if (
+      payload.serviceType?.trim() ||
+      payload.yearsExperience?.trim() ||
+      typeof payload.hourlyRate === "number" ||
+      typeof payload.dailyRate === "number"
+    ) {
+      const { error: serviceError } = await adminClient.from("provider_services").upsert({
+        provider_id: userId,
+        service_type: payload.serviceType?.trim() || null,
+        years_experience: payload.yearsExperience?.trim() || null,
+        hourly_rate:
+          typeof payload.hourlyRate === "number" && Number.isFinite(payload.hourlyRate)
+            ? payload.hourlyRate
+            : null,
+        daily_rate:
+          typeof payload.dailyRate === "number" && Number.isFinite(payload.dailyRate)
+            ? payload.dailyRate
+            : null,
+      });
+
+      if (serviceError) {
+        await adminClient.auth.admin.deleteUser(userId);
+        return json({ error: serviceError.message || "Unable to create provider service." }, { status: 500 }, origin);
+      }
+    }
+
+    const { error: verificationError } = await adminClient.from("provider_verifications").upsert({
+      provider_id: userId,
+      phone_verified: Boolean(payload.phoneVerified),
+      email_verified: Boolean(payload.emailVerified),
+      identity_verified: Boolean(payload.identityVerified),
+      kyc_verified: Boolean(payload.kycVerified),
+      background_check_verified: Boolean(payload.backgroundCheckVerified),
+      requested_documents: [],
+      admin_note: "",
+    });
+
+    if (verificationError) {
+      await adminClient.auth.admin.deleteUser(userId);
+      return json({ error: verificationError.message || "Unable to create provider verification." }, { status: 500 }, origin);
+    }
+
+    const { error: metadataError } = await adminClient.from("provider_admin_metadata").upsert({
+      provider_id: userId,
+      availability_days: (payload.availabilityDays ?? []).map((value) => value.trim()).filter(Boolean),
+      availability_time_preset: payload.availabilityPreset?.trim() || null,
+      availability_start_time: payload.availabilityStartTime?.trim() || null,
+      availability_end_time: payload.availabilityEndTime?.trim() || null,
+    });
+
+    if (metadataError) {
+      await adminClient.auth.admin.deleteUser(userId);
+      return json({ error: metadataError.message || "Unable to create provider availability." }, { status: 500 }, origin);
+    }
+  }
+
+  return json({ success: true, userId }, { status: 201 }, origin);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -433,6 +670,10 @@ export default {
 
     if (url.pathname === "/api/admin/payments/settlement") {
       return handlePaymentSettlement(request, env);
+    }
+
+    if (url.pathname === "/api/admin/accounts/create") {
+      return handleAccountCreate(request, env);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);

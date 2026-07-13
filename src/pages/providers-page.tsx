@@ -1,10 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ResourcePage } from "./resource-page";
 import { buildProviderStats, listProvidersWithFallback } from "../lib/admin-providers";
 import type { ProviderRow } from "../types";
 
 export function ProvidersPage() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,6 +64,15 @@ export function ProvidersPage() {
         { key: "zone", label: "Zone" },
         { key: "verification", label: "Verification" },
       ]}
+      action={
+        <button
+          type="button"
+          onClick={() => navigate("/service-providers/create")}
+          className="inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+        >
+          Create Provider
+        </button>
+      }
       statusKey="status"
       searchPlaceholder="Search providers, zones, or service types..."
       stats={buildProviderStats(rows)}
