@@ -474,6 +474,14 @@ function formatRate(value: number | null | undefined, suffix: string) {
   return `${formatCurrency(value)}${suffix}`;
 }
 
+function formatRadius(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
+    return "Not set";
+  }
+
+  return `${value.toFixed(0)} km`;
+}
+
 function formatAvailabilityDays(days: string[] | null | undefined) {
   const cleanDays = (days ?? []).map((value) => value.trim()).filter(Boolean);
 
@@ -1273,7 +1281,7 @@ function buildGeneratedProviderDetail(
     lastLogin: "Recently active",
     serviceType: humanizeService(firstService?.service_type),
     serviceArea: liveProfile.service_location?.trim() || "Malaysia",
-    serviceRadiusKm: `${Number(liveProfile.service_radius_km ?? 0).toFixed(0)} km`,
+    serviceRadiusKm: formatRadius(liveProfile.service_radius_km),
     yearsExperience: firstService?.years_experience?.trim() || "Not set",
     hourlyRate: formatRate(firstService?.hourly_rate, " / hr"),
     dailyRate: formatRate(firstService?.daily_rate, " / day"),
@@ -1510,7 +1518,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     lastLogin: liveLastLogin?.created_at ? formatDateTime(liveLastLogin.created_at) : baseDetail.lastLogin,
     serviceType: humanizeService(firstService?.service_type),
     serviceArea: liveProfile.service_location?.trim() || baseDetail.serviceArea,
-    serviceRadiusKm: `${Number(liveProfile.service_radius_km ?? 0).toFixed(0)} km`,
+    serviceRadiusKm: formatRadius(liveProfile.service_radius_km),
     yearsExperience: firstService?.years_experience?.trim() || baseDetail.yearsExperience,
     hourlyRate: formatRate(firstService?.hourly_rate, " / hr"),
     dailyRate: formatRate(firstService?.daily_rate, " / day"),
