@@ -50,15 +50,13 @@ type AccountCreatePayload = {
   region?: string;
   country?: string;
   marketingName?: string;
-  profilePhotoUrl?: string;
-  serviceType?: string;
-  serviceLocation?: string;
+  profilePhoto?: {
+    fileName?: string;
+    dataUrl?: string;
+    caption?: string;
+  };
   address?: string;
   bio?: string;
-  serviceRadiusKm?: number;
-  yearsExperience?: string;
-  hourlyRate?: number;
-  dailyRate?: number;
   availabilityDays?: string[];
   availabilityPreset?: string;
   availabilityStartTime?: string;
@@ -70,6 +68,30 @@ type AccountCreatePayload = {
   identityVerified?: boolean;
   kycVerified?: boolean;
   backgroundCheckVerified?: boolean;
+  identityDocumentType?: string;
+  services?: Array<{
+    serviceType?: string;
+    serviceLocation?: string;
+    serviceRadiusKm?: number;
+    yearsExperience?: string;
+    hourlyRate?: number;
+    dailyRate?: number;
+    workImages?: Array<{
+      fileName?: string;
+      dataUrl?: string;
+      caption?: string;
+    }>;
+  }>;
+  documents?: Array<{
+    documentType?: string;
+    label?: string;
+    status?: string;
+    file?: {
+      fileName?: string;
+      dataUrl?: string;
+      caption?: string;
+    };
+  }>;
 };
 
 type AdminProfileRow = {
@@ -174,6 +196,10 @@ function splitFullName(fullName: string) {
     firstName,
     lastName: rest.join(" "),
   };
+}
+
+function normalizeServiceKey(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 
 async function verifyAdminRequest(request: Request, env: Env): Promise<VerifiedAdminRequest> {
@@ -578,16 +604,36 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
   } else {
     const providerVisible = Boolean(payload.visible);
     const approvalStatus = payload.approvalStatus?.trim() || "pending";
+    const normalizedServices = (payload.services ?? [])
+      .map((service) => ({
+        serviceType: service.serviceType?.trim() || "",
+        serviceLocation: service.serviceLocation?.trim() || "",
+        serviceRadiusKm:
+          typeof service.serviceRadiusKm === "number" && Number.isFinite(service.serviceRadiusKm)
+            ? service.serviceRadiusKm
+            : null,
+        yearsExperience: service.yearsExperience?.trim() || "",
+        hourlyRate:
+          typeof service.hourlyRate === "number" && Number.isFinite(service.hourlyRate)
+            ? service.hourlyRate
+            : null,
+        dailyRate:
+          typeof service.dailyRate === "number" && Number.isFinite(service.dailyRate)
+            ? service.dailyRate
+            : null,
+        workImages: (service.workImages ?? []).filter((item) => item.dataUrl?.trim()),
+      }))
+      .filter((service) => service.serviceType);
+    const primaryService = normalizedServices[0] ?? null;
+    const serviceLocation = primaryService?.serviceLocation || payload.city?.trim() || null;
+    const serviceRadiusKm = primaryService?.serviceRadiusKm ?? null;
 
     const { error: providerProfileError } = await adminClient.from("provider_profiles").upsert({
       id: userId,
       marketing_name: payload.marketingName?.trim() || fullName,
-      profile_photo_url: payload.profilePhotoUrl?.trim() || null,
-      service_location: payload.serviceLocation?.trim() || payload.city?.trim() || null,
-      service_radius_km:
-        typeof payload.serviceRadiusKm === "number" && Number.isFinite(payload.serviceRadiusKm)
-          ? payload.serviceRadiusKm
-          : null,
+      profile_photo_url: payload.profilePhoto?.dataUrl?.trim() || null,
+      service_location: serviceLocation,
+      service_radius_km: serviceRadiusKm,
       date_of_birth: payload.dob?.trim() || null,
       sex: payload.gender?.trim() || null,
       residential_address: payload.address?.trim() || null,
@@ -601,25 +647,16 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
       return json({ error: providerProfileError.message || "Unable to create provider profile." }, { status: 500 }, origin);
     }
 
-    if (
-      payload.serviceType?.trim() ||
-      payload.yearsExperience?.trim() ||
-      typeof payload.hourlyRate === "number" ||
-      typeof payload.dailyRate === "number"
-    ) {
-      const { error: serviceError } = await adminClient.from("provider_services").upsert({
-        provider_id: userId,
-        service_type: payload.serviceType?.trim() || null,
-        years_experience: payload.yearsExperience?.trim() || null,
-        hourly_rate:
-          typeof payload.hourlyRate === "number" && Number.isFinite(payload.hourlyRate)
-            ? payload.hourlyRate
-            : null,
-        daily_rate:
-          typeof payload.dailyRate === "number" && Number.isFinite(payload.dailyRate)
-            ? payload.dailyRate
-            : null,
-      });
+    if (normalizedServices.length) {
+      const { error: serviceError } = await adminClient.from("provider_services").insert(
+        normalizedServices.map((service) => ({
+          provider_id: userId,
+          service_type: service.serviceType,
+          years_experience: service.yearsExperience || null,
+          hourly_rate: service.hourlyRate,
+          daily_rate: service.dailyRate,
+        })),
+      );
 
       if (serviceError) {
         await adminClient.auth.admin.deleteUser(userId);
@@ -634,6 +671,9 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
       identity_verified: Boolean(payload.identityVerified),
       kyc_verified: Boolean(payload.kycVerified),
       background_check_verified: Boolean(payload.backgroundCheckVerified),
+      document_type: payload.identityDocumentType?.trim() || null,
+      front_image_name: payload.documents?.[0]?.file?.fileName?.trim() || null,
+      back_image_name: payload.documents?.[1]?.file?.fileName?.trim() || null,
       requested_documents: [],
       admin_note: "",
     });
@@ -643,17 +683,52 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
       return json({ error: verificationError.message || "Unable to create provider verification." }, { status: 500 }, origin);
     }
 
+    const serviceImageFiles = Object.fromEntries(
+      normalizedServices.map((service) => [
+        normalizeServiceKey(service.serviceType),
+        service.workImages.map((item) => item.dataUrl?.trim() || "").filter(Boolean),
+      ]),
+    );
+    const serviceImageCaptions = Object.fromEntries(
+      normalizedServices.map((service) => [
+        normalizeServiceKey(service.serviceType),
+        service.workImages.map((item) => item.caption?.trim() || item.fileName?.trim() || "Work image").filter(Boolean),
+      ]),
+    );
+
     const { error: metadataError } = await adminClient.from("provider_admin_metadata").upsert({
       provider_id: userId,
       availability_days: (payload.availabilityDays ?? []).map((value) => value.trim()).filter(Boolean),
       availability_time_preset: payload.availabilityPreset?.trim() || null,
       availability_start_time: payload.availabilityStartTime?.trim() || null,
       availability_end_time: payload.availabilityEndTime?.trim() || null,
+      service_image_files: Object.keys(serviceImageFiles).length ? serviceImageFiles : null,
+      service_image_captions: Object.keys(serviceImageCaptions).length ? serviceImageCaptions : null,
     });
 
     if (metadataError) {
       await adminClient.auth.admin.deleteUser(userId);
       return json({ error: metadataError.message || "Unable to create provider availability." }, { status: 500 }, origin);
+    }
+
+    const normalizedDocuments = (payload.documents ?? [])
+      .filter((document) => document.documentType?.trim() && document.file?.dataUrl?.trim())
+      .map((document) => ({
+        provider_id: userId,
+        document_type: document.documentType?.trim() || "identity_document",
+        label: document.label?.trim() || "Identity Document",
+        file_url: document.file?.dataUrl?.trim() || null,
+        notes: document.file?.caption?.trim() || null,
+        status: document.status?.trim() || "Pending",
+      }));
+
+    if (normalizedDocuments.length) {
+      const { error: documentError } = await adminClient.from("provider_documents").insert(normalizedDocuments);
+
+      if (documentError) {
+        await adminClient.auth.admin.deleteUser(userId);
+        return json({ error: documentError.message || "Unable to create provider documents." }, { status: 500 }, origin);
+      }
     }
   }
 

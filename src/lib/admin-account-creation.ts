@@ -14,6 +14,29 @@ export type CreateCustomerInput = {
   country?: string;
 };
 
+export type UploadedAssetInput = {
+  fileName: string;
+  dataUrl: string;
+  caption?: string;
+};
+
+export type ProviderServiceCreateInput = {
+  serviceType: string;
+  serviceLocation?: string;
+  serviceRadiusKm?: number;
+  yearsExperience?: string;
+  hourlyRate?: number;
+  dailyRate?: number;
+  workImages?: UploadedAssetInput[];
+};
+
+export type ProviderDocumentUploadInput = {
+  documentType: string;
+  label: string;
+  status?: string;
+  file: UploadedAssetInput;
+};
+
 export type CreateProviderInput = {
   accountType: "provider";
   fullName: string;
@@ -27,15 +50,9 @@ export type CreateProviderInput = {
   region?: string;
   country?: string;
   marketingName?: string;
-  profilePhotoUrl?: string;
-  serviceType?: string;
-  serviceLocation?: string;
+  profilePhoto?: UploadedAssetInput;
   address?: string;
   bio?: string;
-  serviceRadiusKm?: number;
-  yearsExperience?: string;
-  hourlyRate?: number;
-  dailyRate?: number;
   availabilityDays?: string[];
   availabilityPreset?: string;
   availabilityStartTime?: string;
@@ -47,6 +64,9 @@ export type CreateProviderInput = {
   identityVerified?: boolean;
   kycVerified?: boolean;
   backgroundCheckVerified?: boolean;
+  identityDocumentType?: string;
+  services?: ProviderServiceCreateInput[];
+  documents?: ProviderDocumentUploadInput[];
 };
 
 export type CreateAccountInput = CreateCustomerInput | CreateProviderInput;
