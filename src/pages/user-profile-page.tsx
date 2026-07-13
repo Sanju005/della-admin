@@ -22,7 +22,7 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TaskDetailModal } from "../components/task-detail-modal";
 import {
@@ -49,6 +49,11 @@ import {
   setUserSuspended,
   updateUserProfile,
 } from "../lib/admin-users";
+import {
+  listAdminUserDocuments,
+  uploadAdminUserDocument,
+  type AdminUserDocumentRecord,
+} from "../lib/admin-user-documents";
 import type { DashboardBooking, PaymentRow, ProviderDetailRecord, UserDetailRecord } from "../types";
 
 const tabs = [
@@ -370,6 +375,8 @@ export function UserProfilePage() {
   const [reviewSort, setReviewSort] = useState<SortKey>("recent");
   const [reportDateFilter, setReportDateFilter] = useState<DateFilterKey>("all");
   const [reportSort, setReportSort] = useState<SortKey>("recent");
+  const [adminDocuments, setAdminDocuments] = useState<AdminUserDocumentRecord[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -380,6 +387,7 @@ export function UserProfilePage() {
     region: "",
     country: "Malaysia",
   });
+  const documentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
     let active = true;
@@ -432,6 +440,28 @@ export function UserProfilePage() {
     };
   }, [userId]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadAdminDocuments() {
+      setDocumentsLoading(true);
+      const result = await listAdminUserDocuments(userId);
+
+      if (!active) {
+        return;
+      }
+
+      setAdminDocuments(result.documents);
+      setDocumentsLoading(false);
+    }
+
+    void loadAdminDocuments();
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
   async function handleTaskClick(rawId?: string) {
     const normalizedRawId = rawId?.trim();
 
@@ -457,6 +487,46 @@ export function UserProfilePage() {
     } finally {
       setTaskDetailLoading(false);
     }
+  }
+
+  async function handleAdminDocumentUpload(
+    documentType: string,
+    label: string,
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const fileDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Unable to read file."));
+      reader.readAsDataURL(file);
+    });
+
+    setSaving(true);
+    const result = await uploadAdminUserDocument({
+      userId,
+      documentType,
+      label,
+      fileName: file.name,
+      fileDataUrl,
+      status: "Pending",
+    });
+    setSaving(false);
+
+    if (result.error) {
+      setMessage(result.error);
+      return;
+    }
+
+    const refreshResult = await listAdminUserDocuments(userId);
+    setAdminDocuments(refreshResult.documents);
+    setMessage(`${label} uploaded.`);
   }
 
   const safeDetail = record ?? EMPTY_USER_DETAIL;
@@ -597,6 +667,55 @@ export function UserProfilePage() {
       },
     ],
     [safeDetail]
+  );
+  const adminDocumentRows = useMemo(
+    () =>
+      [
+        {
+          id: "user-doc-ic-front",
+          label: "IC Front",
+          documentType: "ic_front",
+          matchers: ["ic_front", "passport_front", "identity_front"],
+        },
+        {
+          id: "user-doc-ic-back",
+          label: "IC Back",
+          documentType: "ic_back",
+          matchers: ["ic_back", "identity_back"],
+        },
+        {
+          id: "user-doc-license",
+          label: "Driving License",
+          documentType: "driving_license",
+          matchers: ["driving_license", "driving_license_front", "license_front"],
+        },
+        {
+          id: "user-doc-resume",
+          label: "Resume",
+          documentType: "resume",
+          matchers: ["resume", "cv"],
+        },
+        {
+          id: "user-doc-certificates",
+          label: "Certificates",
+          documentType: "certificate",
+          matchers: ["certificate", "certificates"],
+        },
+      ].map((document) => {
+        const uploaded = adminDocuments.find((item) =>
+          document.matchers.some((matcher) => {
+            const type = item.documentType.trim().toLowerCase();
+            const label = item.label.trim().toLowerCase();
+            return type === matcher || label.includes(matcher.replaceAll("_", " "));
+          }),
+        );
+
+        return {
+          ...document,
+          uploaded,
+        };
+      }),
+    [adminDocuments],
   );
   const providerDocumentRows = useMemo(() => {
     if (!providerVerificationDetail) {
@@ -1891,7 +2010,7 @@ export function UserProfilePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {verificationDocuments.map((document) => (
+              {verificationDocuments.slice(0, 2).map((document) => (
                 <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{document.label}</p>
@@ -1900,6 +2019,56 @@ export function UserProfilePage() {
                   <MiniStatus status={document.status} />
                 </div>
               ))}
+
+              {adminDocumentRows.map((document) => (
+                <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{document.label}</p>
+                    <p className="mt-1 text-[13px] text-slate-500">
+                      {document.uploaded?.updated ? `Updated ${document.uploaded.updated}` : "Not uploaded"}
+                    </p>
+                    {document.uploaded?.fileUrl ? (
+                      <a
+                        href={document.uploaded.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-emerald-700"
+                      >
+                        <Eye className="size-4" />
+                        Open file
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <MiniStatus status={document.uploaded?.status ?? "Pending"} />
+                    <button
+                      type="button"
+                      onClick={() => documentInputRefs.current[document.id]?.click()}
+                      disabled={saving}
+                      className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {document.uploaded?.fileUrl ? "Replace" : "Upload"}
+                    </button>
+                    <input
+                      ref={(node) => {
+                        documentInputRefs.current[document.id] = node;
+                      }}
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      onChange={(event) =>
+                        void handleAdminDocumentUpload(document.documentType, document.label, event)
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {documentsLoading ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                  Loading document files...
+                </div>
+              ) : null}
             </div>
           )}
         </SurfaceCard>

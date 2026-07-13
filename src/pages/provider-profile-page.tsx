@@ -37,6 +37,11 @@ import {
   setProviderVisibility,
   updateProviderProfile,
 } from "../lib/admin-providers";
+import {
+  listAdminUserDocuments,
+  uploadAdminUserDocument,
+  type AdminUserDocumentRecord,
+} from "../lib/admin-user-documents";
 import type { ProviderDetailRecord } from "../types";
 
 const tabs = [
@@ -391,6 +396,20 @@ function isCashMethod(value: string) {
   return normalized === "cash";
 }
 
+function normalizeIdentityDocumentLabel(value: string | undefined) {
+  const normalized = value?.trim() ?? "";
+
+  if (!normalized || normalized.toLowerCase() === "document pending") {
+    return "IC";
+  }
+
+  if (normalized.toLowerCase() === "identity verification") {
+    return "IC";
+  }
+
+  return normalized;
+}
+
 function ProofLinkCard({
   title,
   fileName,
@@ -468,7 +487,10 @@ export function ProviderProfilePage() {
   const [reviewSort, setReviewSort] = useState<SortKey>("recent");
   const [reportDateFilter, setReportDateFilter] = useState<DateFilterKey>("all");
   const [reportSort, setReportSort] = useState<SortKey>("recent");
+  const [adminDocuments, setAdminDocuments] = useState<AdminUserDocumentRecord[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   const taskDetailRef = useRef<HTMLDivElement | null>(null);
+  const documentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -528,6 +550,28 @@ export function ProviderProfilePage() {
   }, [providerId]);
 
   useEffect(() => {
+    let active = true;
+
+    async function loadAdminDocuments() {
+      setDocumentsLoading(true);
+      const result = await listAdminUserDocuments(providerId);
+
+      if (!active) {
+        return;
+      }
+
+      setAdminDocuments(result.documents);
+      setDocumentsLoading(false);
+    }
+
+    void loadAdminDocuments();
+
+    return () => {
+      active = false;
+    };
+  }, [providerId]);
+
+  useEffect(() => {
     if (!taskDetailLoading && !selectedTaskDetail) {
       return;
     }
@@ -549,6 +593,46 @@ export function ProviderProfilePage() {
         ? current.filter((item) => item !== document)
         : [...current, document]
     );
+  }
+
+  async function handleAdminDocumentUpload(
+    documentType: string,
+    label: string,
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const fileDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Unable to read file."));
+      reader.readAsDataURL(file);
+    });
+
+    setSaving(true);
+    const result = await uploadAdminUserDocument({
+      userId: providerId,
+      documentType,
+      label,
+      fileName: file.name,
+      fileDataUrl,
+      status: "Pending",
+    });
+    setSaving(false);
+
+    if (result.error) {
+      flash(result.error);
+      return;
+    }
+
+    const refreshResult = await listAdminUserDocuments(providerId);
+    setAdminDocuments(refreshResult.documents);
+    flash(`${label} uploaded.`);
   }
 
   const safeDetail = provider ?? EMPTY_PROVIDER_DETAIL;
@@ -696,50 +780,123 @@ export function ProviderProfilePage() {
     return sortByRecentOrAz(rows, reportSort);
   }, [providerReports, reportDateFilter, reportSort]);
 
+  const adminDocumentMatches = useMemo(
+    () => ({
+      identityFront:
+        adminDocuments.find((item) =>
+          ["ic_front", "passport_front", "identity_front"].includes(item.documentType.trim().toLowerCase()),
+        ) ?? null,
+      identityBack:
+        adminDocuments.find((item) =>
+          ["ic_back", "identity_back", "passport_back"].includes(item.documentType.trim().toLowerCase()),
+        ) ?? null,
+      drivingLicense:
+        adminDocuments.find((item) =>
+          ["driving_license", "driving_license_front", "license_front"].includes(item.documentType.trim().toLowerCase()),
+        ) ?? null,
+      resume:
+        adminDocuments.find((item) =>
+          ["resume", "cv"].includes(item.documentType.trim().toLowerCase()),
+        ) ?? null,
+      certificate:
+        adminDocuments.find((item) =>
+          ["certificate", "certificates"].includes(item.documentType.trim().toLowerCase()),
+        ) ?? null,
+    }),
+    [adminDocuments],
+  );
+  const identityDocumentLabel = useMemo(
+    () =>
+      normalizeIdentityDocumentLabel(
+        adminDocumentMatches.identityFront?.label ||
+          adminDocumentMatches.identityBack?.label ||
+          safeDetail.nationalId,
+      ),
+    [adminDocumentMatches.identityBack?.label, adminDocumentMatches.identityFront?.label, safeDetail.nationalId],
+  );
+
   const verificationDocuments = useMemo(
     () => [
       { id: "verify-email", label: "Email Verification", status: safeDetail.emailVerified ? "Verified" : "Pending", fileName: undefined },
       { id: "verify-phone", label: "Phone Verification", status: safeDetail.phoneVerified ? "Verified" : "Pending", fileName: undefined },
       {
         id: "verify-ic-front",
-        label: "IC Front",
-        status: safeDetail.documents.find((item) => item.label === "Identity Verification")?.status ?? "Pending",
-        fileName: safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileName,
-        fileUrl: safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileUrl,
-        note: safeDetail.documents.find((item) => item.label === "Identity Verification")?.note,
+        label: `${identityDocumentLabel} Front`,
+        documentType: "ic_front",
+        status:
+          adminDocumentMatches.identityFront?.status ??
+          safeDetail.documents.find((item) => item.label === "Identity Verification")?.status ??
+          "Pending",
+        fileName:
+          adminDocumentMatches.identityFront?.fileName ??
+          safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileName,
+        fileUrl:
+          adminDocumentMatches.identityFront?.fileUrl ??
+          safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileUrl,
+        note:
+          adminDocumentMatches.identityFront?.note ??
+          safeDetail.documents.find((item) => item.label === "Identity Verification")?.note,
       },
       {
         id: "verify-ic-back",
-        label: "IC Back",
-        status: safeDetail.documents.find((item) => item.label === "Back of Document")?.status ?? "Pending",
-        fileName: safeDetail.documents.find((item) => item.label === "Back of Document")?.fileName,
-        fileUrl: safeDetail.documents.find((item) => item.label === "Back of Document")?.fileUrl,
-        note: safeDetail.documents.find((item) => item.label === "Back of Document")?.note,
+        label: `${identityDocumentLabel} Back`,
+        documentType: "ic_back",
+        status:
+          adminDocumentMatches.identityBack?.status ??
+          safeDetail.documents.find((item) => item.label === "Back of Document")?.status ??
+          "Pending",
+        fileName:
+          adminDocumentMatches.identityBack?.fileName ??
+          safeDetail.documents.find((item) => item.label === "Back of Document")?.fileName,
+        fileUrl:
+          adminDocumentMatches.identityBack?.fileUrl ??
+          safeDetail.documents.find((item) => item.label === "Back of Document")?.fileUrl,
+        note:
+          adminDocumentMatches.identityBack?.note ??
+          safeDetail.documents.find((item) => item.label === "Back of Document")?.note,
       },
       {
         id: "verify-license",
         label: "Driving License",
+        documentType: "driving_license",
         status:
+          adminDocumentMatches.drivingLicense?.status ??
           safeDetail.documents.find((item) => item.label === "Driving License")?.status ??
           (safeDetail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending"),
-        fileName: safeDetail.documents.find((item) => item.label === "Driving License")?.fileName,
-        fileUrl: safeDetail.documents.find((item) => item.label === "Driving License")?.fileUrl,
-        note: safeDetail.documents.find((item) => item.label === "Driving License")?.note,
+        fileName:
+          adminDocumentMatches.drivingLicense?.fileName ??
+          safeDetail.documents.find((item) => item.label === "Driving License")?.fileName,
+        fileUrl:
+          adminDocumentMatches.drivingLicense?.fileUrl ??
+          safeDetail.documents.find((item) => item.label === "Driving License")?.fileUrl,
+        note:
+          adminDocumentMatches.drivingLicense?.note ??
+          safeDetail.documents.find((item) => item.label === "Driving License")?.note,
       },
       {
         id: "verify-resume",
         label: "Resume",
-        status: "Pending",
-        fileName: undefined,
+        documentType: "resume",
+        status: adminDocumentMatches.resume?.status ?? "Pending",
+        fileName: adminDocumentMatches.resume?.fileName,
+        fileUrl: adminDocumentMatches.resume?.fileUrl,
+        note: adminDocumentMatches.resume?.note,
       },
       {
         id: "verify-certificates",
         label: "Certificates",
-        status: (safeDetail.certificateImageFiles ?? []).length ? "Uploaded" : "Pending",
-        fileName: (safeDetail.certificateImageFiles ?? []).join(", ") || undefined,
+        documentType: "certificate",
+        status:
+          adminDocumentMatches.certificate?.status ??
+          ((safeDetail.certificateImageFiles ?? []).length ? "Uploaded" : "Pending"),
+        fileName:
+          adminDocumentMatches.certificate?.fileName ??
+          ((safeDetail.certificateImageFiles ?? []).join(", ") || undefined),
+        fileUrl: adminDocumentMatches.certificate?.fileUrl,
+        note: adminDocumentMatches.certificate?.note,
       },
     ],
-    [safeDetail]
+    [adminDocumentMatches, identityDocumentLabel, safeDetail]
   );
 
   if (loading && !provider) {
@@ -2144,9 +2301,39 @@ export function ProviderProfilePage() {
                       ) : null}
                     </div>
                   </div>
-                  <MiniStatus status={document.status} />
+                  <div className="flex items-center gap-3">
+                    <MiniStatus status={document.status} />
+                    {"documentType" in document && document.documentType ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => documentInputRefs.current[document.id]?.click()}
+                          disabled={saving}
+                          className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {document.fileUrl ? "Replace" : "Upload"}
+                        </button>
+                        <input
+                          ref={(node) => {
+                            documentInputRefs.current[document.id] = node;
+                          }}
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(event) =>
+                            void handleAdminDocumentUpload(document.documentType, document.label, event)
+                          }
+                        />
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               ))}
+              {documentsLoading ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                  Loading document files...
+                </div>
+              ) : null}
               <div className="rounded-2xl bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold text-slate-900">Service Image Captions</p>
                 <p className="mt-2 text-[13px] text-slate-600">

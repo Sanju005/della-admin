@@ -59,7 +59,7 @@ function corsHeaders(origin) {
         : "https://admin.dellaapp.com";
     return {
         "Access-Control-Allow-Origin": allowedOrigin,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
 }
@@ -639,10 +639,113 @@ function handleAccountCreate(request, env) {
         });
     });
 }
+function handleAdminUserDocuments(request, env, userId) {
+    return __awaiter(this, void 0, void 0, function () {
+        var origin, verified, normalizedUserId, adminClient, _a, data, error, documents, payload, documentType, label, fileName, fileDataUrl, status, _b, existing, existingError, savePayload, writeResult, _c;
+        var _d, _e, _f, _g, _h, _j;
+        return __generator(this, function (_k) {
+            switch (_k.label) {
+                case 0:
+                    origin = request.headers.get("origin");
+                    if (request.method === "OPTIONS") {
+                        return [2 /*return*/, new Response(null, {
+                                status: 204,
+                                headers: corsHeaders(origin),
+                            })];
+                    }
+                    return [4 /*yield*/, verifyAdminRequest(request, env)];
+                case 1:
+                    verified = _k.sent();
+                    if ("error" in verified) {
+                        return [2 /*return*/, verified.error];
+                    }
+                    normalizedUserId = userId.trim();
+                    if (!normalizedUserId) {
+                        return [2 /*return*/, json({ error: "userId is required." }, { status: 400 }, origin)];
+                    }
+                    adminClient = verified.adminClient;
+                    if (!(request.method === "GET")) return [3 /*break*/, 3];
+                    return [4 /*yield*/, adminClient
+                            .from("provider_documents")
+                            .select("id, provider_id, document_type, label, file_url, status, notes, created_at")
+                            .eq("provider_id", normalizedUserId)
+                            .order("created_at", { ascending: false })];
+                case 2:
+                    _a = _k.sent(), data = _a.data, error = _a.error;
+                    if (error) {
+                        return [2 /*return*/, json({ error: error.message || "Unable to load user documents." }, { status: 500 }, origin)];
+                    }
+                    documents = ((_d = data) !== null && _d !== void 0 ? _d : []).map(function (row) {
+                        var _a, _b, _c, _d, _e, _f;
+                        return ({
+                            id: row.id,
+                            documentType: ((_a = row.document_type) === null || _a === void 0 ? void 0 : _a.trim()) || "",
+                            label: ((_b = row.label) === null || _b === void 0 ? void 0 : _b.trim()) || "Document",
+                            status: ((_c = row.status) === null || _c === void 0 ? void 0 : _c.trim()) || "Pending",
+                            fileUrl: ((_d = row.file_url) === null || _d === void 0 ? void 0 : _d.trim()) || undefined,
+                            fileName: ((_e = row.notes) === null || _e === void 0 ? void 0 : _e.trim()) || undefined,
+                            updated: row.created_at || undefined,
+                            note: ((_f = row.notes) === null || _f === void 0 ? void 0 : _f.trim()) || undefined,
+                        });
+                    });
+                    return [2 /*return*/, json({ documents: documents }, undefined, origin)];
+                case 3:
+                    if (request.method !== "POST") {
+                        return [2 /*return*/, json({ error: "Method not allowed." }, { status: 405 }, origin)];
+                    }
+                    return [4 /*yield*/, request.json().catch(function () { return ({}); })];
+                case 4:
+                    payload = (_k.sent());
+                    documentType = ((_e = payload.documentType) === null || _e === void 0 ? void 0 : _e.trim()) || "";
+                    label = ((_f = payload.label) === null || _f === void 0 ? void 0 : _f.trim()) || "";
+                    fileName = ((_g = payload.fileName) === null || _g === void 0 ? void 0 : _g.trim()) || "";
+                    fileDataUrl = ((_h = payload.fileDataUrl) === null || _h === void 0 ? void 0 : _h.trim()) || "";
+                    status = ((_j = payload.status) === null || _j === void 0 ? void 0 : _j.trim()) || "Pending";
+                    if (!documentType || !label || !fileDataUrl) {
+                        return [2 /*return*/, json({ error: "documentType, label, and fileDataUrl are required." }, { status: 400 }, origin)];
+                    }
+                    return [4 /*yield*/, adminClient
+                            .from("provider_documents")
+                            .select("id")
+                            .eq("provider_id", normalizedUserId)
+                            .eq("document_type", documentType)
+                            .maybeSingle()];
+                case 5:
+                    _b = _k.sent(), existing = _b.data, existingError = _b.error;
+                    if (existingError) {
+                        return [2 /*return*/, json({ error: existingError.message || "Unable to prepare document upload." }, { status: 500 }, origin)];
+                    }
+                    savePayload = {
+                        provider_id: normalizedUserId,
+                        document_type: documentType,
+                        label: label,
+                        file_url: fileDataUrl,
+                        notes: fileName || null,
+                        status: status,
+                    };
+                    if (!(existing === null || existing === void 0 ? void 0 : existing.id)) return [3 /*break*/, 7];
+                    return [4 /*yield*/, adminClient.from("provider_documents").update(savePayload).eq("id", existing.id)];
+                case 6:
+                    _c = _k.sent();
+                    return [3 /*break*/, 9];
+                case 7: return [4 /*yield*/, adminClient.from("provider_documents").insert(savePayload)];
+                case 8:
+                    _c = _k.sent();
+                    _k.label = 9;
+                case 9:
+                    writeResult = _c;
+                    if (writeResult.error) {
+                        return [2 /*return*/, json({ error: writeResult.error.message || "Unable to upload user document." }, { status: 500 }, origin)];
+                    }
+                    return [2 /*return*/, json({ success: true }, { status: 201 }, origin)];
+            }
+        });
+    });
+}
 export default {
     fetch: function (request, env) {
         return __awaiter(this, void 0, void 0, function () {
-            var url, assetResponse, acceptsHtml, isAssetRequest, indexRequest;
+            var url, userId, assetResponse, acceptsHtml, isAssetRequest, indexRequest;
             var _a, _b;
             return __generator(this, function (_c) {
                 switch (_c.label) {
@@ -656,6 +759,10 @@ export default {
                         }
                         if (url.pathname === "/api/admin/accounts/create") {
                             return [2 /*return*/, handleAccountCreate(request, env)];
+                        }
+                        if (url.pathname.startsWith("/api/admin/user-documents/")) {
+                            userId = decodeURIComponent(url.pathname.slice("/api/admin/user-documents/".length));
+                            return [2 /*return*/, handleAdminUserDocuments(request, env, userId)];
                         }
                         return [4 /*yield*/, env.ASSETS.fetch(request)];
                     case 1:

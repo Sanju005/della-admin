@@ -117,6 +117,17 @@ type PaymentSettlementRow = {
   customer_payment_proof_data_url: string | null;
 };
 
+type AdminUserDocumentRow = {
+  id: string;
+  provider_id: string;
+  document_type: string | null;
+  label: string | null;
+  file_url: string | null;
+  status: string | null;
+  notes: string | null;
+  created_at: string | null;
+};
+
 const allowedAdminRoles = new Set(["super_admin", "admin", "manager", "customer_care"]);
 const approvalRequestOptions = [
   "IC / Passport / Driving License",
@@ -133,7 +144,7 @@ function corsHeaders(origin?: string | null) {
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 }
@@ -735,6 +746,107 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
   return json({ success: true, userId }, { status: 201 }, origin);
 }
 
+async function handleAdminUserDocuments(request: Request, env: Env, userId: string): Promise<Response> {
+  const origin = request.headers.get("origin");
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(origin),
+    });
+  }
+
+  const verified = await verifyAdminRequest(request, env);
+  if ("error" in verified) {
+    return verified.error;
+  }
+
+  const normalizedUserId = userId.trim();
+
+  if (!normalizedUserId) {
+    return json({ error: "userId is required." }, { status: 400 }, origin);
+  }
+
+  const { adminClient } = verified;
+
+  if (request.method === "GET") {
+    const { data, error } = await adminClient
+      .from("provider_documents")
+      .select("id, provider_id, document_type, label, file_url, status, notes, created_at")
+      .eq("provider_id", normalizedUserId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return json({ error: error.message || "Unable to load user documents." }, { status: 500 }, origin);
+    }
+
+    const documents = ((data as AdminUserDocumentRow[] | null) ?? []).map((row) => ({
+      id: row.id,
+      documentType: row.document_type?.trim() || "",
+      label: row.label?.trim() || "Document",
+      status: row.status?.trim() || "Pending",
+      fileUrl: row.file_url?.trim() || undefined,
+      fileName: row.notes?.trim() || undefined,
+      updated: row.created_at || undefined,
+      note: row.notes?.trim() || undefined,
+    }));
+
+    return json({ documents }, undefined, origin);
+  }
+
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed." }, { status: 405 }, origin);
+  }
+
+  const payload = (await request.json().catch(() => ({}))) as {
+    documentType?: string;
+    label?: string;
+    fileName?: string;
+    fileDataUrl?: string;
+    status?: string;
+  };
+
+  const documentType = payload.documentType?.trim() || "";
+  const label = payload.label?.trim() || "";
+  const fileName = payload.fileName?.trim() || "";
+  const fileDataUrl = payload.fileDataUrl?.trim() || "";
+  const status = payload.status?.trim() || "Pending";
+
+  if (!documentType || !label || !fileDataUrl) {
+    return json({ error: "documentType, label, and fileDataUrl are required." }, { status: 400 }, origin);
+  }
+
+  const { data: existing, error: existingError } = await adminClient
+    .from("provider_documents")
+    .select("id")
+    .eq("provider_id", normalizedUserId)
+    .eq("document_type", documentType)
+    .maybeSingle();
+
+  if (existingError) {
+    return json({ error: existingError.message || "Unable to prepare document upload." }, { status: 500 }, origin);
+  }
+
+  const savePayload = {
+    provider_id: normalizedUserId,
+    document_type: documentType,
+    label,
+    file_url: fileDataUrl,
+    notes: fileName || null,
+    status,
+  };
+
+  const writeResult = existing?.id
+    ? await adminClient.from("provider_documents").update(savePayload).eq("id", existing.id)
+    : await adminClient.from("provider_documents").insert(savePayload);
+
+  if (writeResult.error) {
+    return json({ error: writeResult.error.message || "Unable to upload user document." }, { status: 500 }, origin);
+  }
+
+  return json({ success: true }, { status: 201 }, origin);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -749,6 +861,11 @@ export default {
 
     if (url.pathname === "/api/admin/accounts/create") {
       return handleAccountCreate(request, env);
+    }
+
+    if (url.pathname.startsWith("/api/admin/user-documents/")) {
+      const userId = decodeURIComponent(url.pathname.slice("/api/admin/user-documents/".length));
+      return handleAdminUserDocuments(request, env, userId);
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
