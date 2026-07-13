@@ -109,6 +109,9 @@ function splitFullName(fullName) {
         lastName: rest.join(" "),
     };
 }
+function normalizeServiceKey(value) {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+}
 function verifyAdminRequest(request, env) {
     return __awaiter(this, void 0, void 0, function () {
         var adminClient, origin, authorization, token, _a, user, userError, _b, profile, profileError, adminProfile;
@@ -412,10 +415,10 @@ function handlePaymentSettlement(request, env) {
 }
 function handleAccountCreate(request, env) {
     return __awaiter(this, void 0, void 0, function () {
-        var origin, verified, payload, accountType, fullName, email, password, phone, adminClient, _a, createdUser, authError, userId, normalizedStatus, normalizedCountry, _b, countryCode, phoneNumber, _c, firstName, lastName, profileError, customerError, providerVisible, approvalStatus, providerProfileError, serviceError, verificationError, metadataError;
-        var _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8;
-        return __generator(this, function (_9) {
-            switch (_9.label) {
+        var origin, verified, payload, accountType, fullName, email, password, phone, adminClient, _a, createdUser, authError, userId, normalizedStatus, normalizedCountry, _b, countryCode, phoneNumber, _c, firstName, lastName, profileError, customerError, providerVisible, approvalStatus, normalizedServices, primaryService, serviceLocation, serviceRadiusKm, providerProfileError, serviceError, verificationError, serviceImageFiles, serviceImageCaptions, metadataError, normalizedDocuments, documentError;
+        var _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17;
+        return __generator(this, function (_18) {
+            switch (_18.label) {
                 case 0:
                     origin = request.headers.get("origin");
                     if (request.method === "OPTIONS") {
@@ -429,13 +432,13 @@ function handleAccountCreate(request, env) {
                     }
                     return [4 /*yield*/, verifyAdminRequest(request, env)];
                 case 1:
-                    verified = _9.sent();
+                    verified = _18.sent();
                     if ("error" in verified) {
                         return [2 /*return*/, verified.error];
                     }
                     return [4 /*yield*/, request.json().catch(function () { return ({}); })];
                 case 2:
-                    payload = (_9.sent());
+                    payload = (_18.sent());
                     accountType = payload.accountType === "provider" ? "provider" : payload.accountType === "customer" ? "customer" : "";
                     fullName = (_e = (_d = payload.fullName) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
                     email = (_g = (_f = payload.email) === null || _f === void 0 ? void 0 : _f.trim().toLowerCase()) !== null && _g !== void 0 ? _g : "";
@@ -455,7 +458,7 @@ function handleAccountCreate(request, env) {
                             },
                         })];
                 case 3:
-                    _a = _9.sent(), createdUser = _a.data, authError = _a.error;
+                    _a = _18.sent(), createdUser = _a.data, authError = _a.error;
                     if (authError || !createdUser.user) {
                         return [2 /*return*/, json({ error: (authError === null || authError === void 0 ? void 0 : authError.message) || "Unable to create auth account." }, { status: 400 }, origin)];
                     }
@@ -473,11 +476,11 @@ function handleAccountCreate(request, env) {
                             status: normalizedStatus,
                         })];
                 case 4:
-                    profileError = (_9.sent()).error;
+                    profileError = (_18.sent()).error;
                     if (!profileError) return [3 /*break*/, 6];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 5:
-                    _9.sent();
+                    _18.sent();
                     return [2 /*return*/, json({ error: profileError.message || "Unable to create profile record." }, { status: 500 }, origin)];
                 case 6:
                     if (!(accountType === "customer")) return [3 /*break*/, 10];
@@ -494,60 +497,74 @@ function handleAccountCreate(request, env) {
                             verified: normalizedStatus.toLowerCase() === "active",
                         })];
                 case 7:
-                    customerError = (_9.sent()).error;
+                    customerError = (_18.sent()).error;
                     if (!customerError) return [3 /*break*/, 9];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 8:
-                    _9.sent();
+                    _18.sent();
                     return [2 /*return*/, json({ error: customerError.message || "Unable to create customer profile." }, { status: 500 }, origin)];
-                case 9: return [3 /*break*/, 22];
+                case 9: return [3 /*break*/, 25];
                 case 10:
                     providerVisible = Boolean(payload.visible);
                     approvalStatus = ((_s = payload.approvalStatus) === null || _s === void 0 ? void 0 : _s.trim()) || "pending";
+                    normalizedServices = ((_t = payload.services) !== null && _t !== void 0 ? _t : [])
+                        .map(function (service) {
+                        var _a, _b, _c, _d;
+                        return ({
+                            serviceType: ((_a = service.serviceType) === null || _a === void 0 ? void 0 : _a.trim()) || "",
+                            serviceLocation: ((_b = service.serviceLocation) === null || _b === void 0 ? void 0 : _b.trim()) || "",
+                            serviceRadiusKm: typeof service.serviceRadiusKm === "number" && Number.isFinite(service.serviceRadiusKm)
+                                ? service.serviceRadiusKm
+                                : null,
+                            yearsExperience: ((_c = service.yearsExperience) === null || _c === void 0 ? void 0 : _c.trim()) || "",
+                            hourlyRate: typeof service.hourlyRate === "number" && Number.isFinite(service.hourlyRate)
+                                ? service.hourlyRate
+                                : null,
+                            dailyRate: typeof service.dailyRate === "number" && Number.isFinite(service.dailyRate)
+                                ? service.dailyRate
+                                : null,
+                            workImages: ((_d = service.workImages) !== null && _d !== void 0 ? _d : []).filter(function (item) { var _a; return (_a = item.dataUrl) === null || _a === void 0 ? void 0 : _a.trim(); }),
+                        });
+                    })
+                        .filter(function (service) { return service.serviceType; });
+                    primaryService = (_u = normalizedServices[0]) !== null && _u !== void 0 ? _u : null;
+                    serviceLocation = (primaryService === null || primaryService === void 0 ? void 0 : primaryService.serviceLocation) || ((_v = payload.city) === null || _v === void 0 ? void 0 : _v.trim()) || null;
+                    serviceRadiusKm = (_w = primaryService === null || primaryService === void 0 ? void 0 : primaryService.serviceRadiusKm) !== null && _w !== void 0 ? _w : null;
                     return [4 /*yield*/, adminClient.from("provider_profiles").upsert({
                             id: userId,
-                            marketing_name: ((_t = payload.marketingName) === null || _t === void 0 ? void 0 : _t.trim()) || fullName,
-                            profile_photo_url: ((_u = payload.profilePhotoUrl) === null || _u === void 0 ? void 0 : _u.trim()) || null,
-                            service_location: ((_v = payload.serviceLocation) === null || _v === void 0 ? void 0 : _v.trim()) || ((_w = payload.city) === null || _w === void 0 ? void 0 : _w.trim()) || null,
-                            service_radius_km: typeof payload.serviceRadiusKm === "number" && Number.isFinite(payload.serviceRadiusKm)
-                                ? payload.serviceRadiusKm
-                                : null,
-                            date_of_birth: ((_x = payload.dob) === null || _x === void 0 ? void 0 : _x.trim()) || null,
-                            sex: ((_y = payload.gender) === null || _y === void 0 ? void 0 : _y.trim()) || null,
-                            residential_address: ((_z = payload.address) === null || _z === void 0 ? void 0 : _z.trim()) || null,
-                            bio: ((_0 = payload.bio) === null || _0 === void 0 ? void 0 : _0.trim()) || null,
+                            marketing_name: ((_x = payload.marketingName) === null || _x === void 0 ? void 0 : _x.trim()) || fullName,
+                            profile_photo_url: ((_z = (_y = payload.profilePhoto) === null || _y === void 0 ? void 0 : _y.dataUrl) === null || _z === void 0 ? void 0 : _z.trim()) || null,
+                            service_location: serviceLocation,
+                            service_radius_km: serviceRadiusKm,
+                            date_of_birth: ((_0 = payload.dob) === null || _0 === void 0 ? void 0 : _0.trim()) || null,
+                            sex: ((_1 = payload.gender) === null || _1 === void 0 ? void 0 : _1.trim()) || null,
+                            residential_address: ((_2 = payload.address) === null || _2 === void 0 ? void 0 : _2.trim()) || null,
+                            bio: ((_3 = payload.bio) === null || _3 === void 0 ? void 0 : _3.trim()) || null,
                             approval_status: approvalStatus,
                             is_visible: providerVisible,
                         })];
                 case 11:
-                    providerProfileError = (_9.sent()).error;
+                    providerProfileError = (_18.sent()).error;
                     if (!providerProfileError) return [3 /*break*/, 13];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 12:
-                    _9.sent();
+                    _18.sent();
                     return [2 /*return*/, json({ error: providerProfileError.message || "Unable to create provider profile." }, { status: 500 }, origin)];
                 case 13:
-                    if (!(((_1 = payload.serviceType) === null || _1 === void 0 ? void 0 : _1.trim()) ||
-                        ((_2 = payload.yearsExperience) === null || _2 === void 0 ? void 0 : _2.trim()) ||
-                        typeof payload.hourlyRate === "number" ||
-                        typeof payload.dailyRate === "number")) return [3 /*break*/, 16];
-                    return [4 /*yield*/, adminClient.from("provider_services").upsert({
+                    if (!normalizedServices.length) return [3 /*break*/, 16];
+                    return [4 /*yield*/, adminClient.from("provider_services").insert(normalizedServices.map(function (service) { return ({
                             provider_id: userId,
-                            service_type: ((_3 = payload.serviceType) === null || _3 === void 0 ? void 0 : _3.trim()) || null,
-                            years_experience: ((_4 = payload.yearsExperience) === null || _4 === void 0 ? void 0 : _4.trim()) || null,
-                            hourly_rate: typeof payload.hourlyRate === "number" && Number.isFinite(payload.hourlyRate)
-                                ? payload.hourlyRate
-                                : null,
-                            daily_rate: typeof payload.dailyRate === "number" && Number.isFinite(payload.dailyRate)
-                                ? payload.dailyRate
-                                : null,
-                        })];
+                            service_type: service.serviceType,
+                            years_experience: service.yearsExperience || null,
+                            hourly_rate: service.hourlyRate,
+                            daily_rate: service.dailyRate,
+                        }); }))];
                 case 14:
-                    serviceError = (_9.sent()).error;
+                    serviceError = (_18.sent()).error;
                     if (!serviceError) return [3 /*break*/, 16];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 15:
-                    _9.sent();
+                    _18.sent();
                     return [2 /*return*/, json({ error: serviceError.message || "Unable to create provider service." }, { status: 500 }, origin)];
                 case 16: return [4 /*yield*/, adminClient.from("provider_verifications").upsert({
                         provider_id: userId,
@@ -556,31 +573,68 @@ function handleAccountCreate(request, env) {
                         identity_verified: Boolean(payload.identityVerified),
                         kyc_verified: Boolean(payload.kycVerified),
                         background_check_verified: Boolean(payload.backgroundCheckVerified),
+                        document_type: ((_4 = payload.identityDocumentType) === null || _4 === void 0 ? void 0 : _4.trim()) || null,
+                        front_image_name: ((_8 = (_7 = (_6 = (_5 = payload.documents) === null || _5 === void 0 ? void 0 : _5[0]) === null || _6 === void 0 ? void 0 : _6.file) === null || _7 === void 0 ? void 0 : _7.fileName) === null || _8 === void 0 ? void 0 : _8.trim()) || null,
+                        back_image_name: ((_12 = (_11 = (_10 = (_9 = payload.documents) === null || _9 === void 0 ? void 0 : _9[1]) === null || _10 === void 0 ? void 0 : _10.file) === null || _11 === void 0 ? void 0 : _11.fileName) === null || _12 === void 0 ? void 0 : _12.trim()) || null,
                         requested_documents: [],
                         admin_note: "",
                     })];
                 case 17:
-                    verificationError = (_9.sent()).error;
+                    verificationError = (_18.sent()).error;
                     if (!verificationError) return [3 /*break*/, 19];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 18:
-                    _9.sent();
+                    _18.sent();
                     return [2 /*return*/, json({ error: verificationError.message || "Unable to create provider verification." }, { status: 500 }, origin)];
-                case 19: return [4 /*yield*/, adminClient.from("provider_admin_metadata").upsert({
-                        provider_id: userId,
-                        availability_days: ((_5 = payload.availabilityDays) !== null && _5 !== void 0 ? _5 : []).map(function (value) { return value.trim(); }).filter(Boolean),
-                        availability_time_preset: ((_6 = payload.availabilityPreset) === null || _6 === void 0 ? void 0 : _6.trim()) || null,
-                        availability_start_time: ((_7 = payload.availabilityStartTime) === null || _7 === void 0 ? void 0 : _7.trim()) || null,
-                        availability_end_time: ((_8 = payload.availabilityEndTime) === null || _8 === void 0 ? void 0 : _8.trim()) || null,
-                    })];
+                case 19:
+                    serviceImageFiles = Object.fromEntries(normalizedServices.map(function (service) { return [
+                        normalizeServiceKey(service.serviceType),
+                        service.workImages.map(function (item) { var _a; return ((_a = item.dataUrl) === null || _a === void 0 ? void 0 : _a.trim()) || ""; }).filter(Boolean),
+                    ]; }));
+                    serviceImageCaptions = Object.fromEntries(normalizedServices.map(function (service) { return [
+                        normalizeServiceKey(service.serviceType),
+                        service.workImages.map(function (item) { var _a, _b; return ((_a = item.caption) === null || _a === void 0 ? void 0 : _a.trim()) || ((_b = item.fileName) === null || _b === void 0 ? void 0 : _b.trim()) || "Work image"; }).filter(Boolean),
+                    ]; }));
+                    return [4 /*yield*/, adminClient.from("provider_admin_metadata").upsert({
+                            provider_id: userId,
+                            availability_days: ((_13 = payload.availabilityDays) !== null && _13 !== void 0 ? _13 : []).map(function (value) { return value.trim(); }).filter(Boolean),
+                            availability_time_preset: ((_14 = payload.availabilityPreset) === null || _14 === void 0 ? void 0 : _14.trim()) || null,
+                            availability_start_time: ((_15 = payload.availabilityStartTime) === null || _15 === void 0 ? void 0 : _15.trim()) || null,
+                            availability_end_time: ((_16 = payload.availabilityEndTime) === null || _16 === void 0 ? void 0 : _16.trim()) || null,
+                            service_image_files: Object.keys(serviceImageFiles).length ? serviceImageFiles : null,
+                            service_image_captions: Object.keys(serviceImageCaptions).length ? serviceImageCaptions : null,
+                        })];
                 case 20:
-                    metadataError = (_9.sent()).error;
+                    metadataError = (_18.sent()).error;
                     if (!metadataError) return [3 /*break*/, 22];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 21:
-                    _9.sent();
+                    _18.sent();
                     return [2 /*return*/, json({ error: metadataError.message || "Unable to create provider availability." }, { status: 500 }, origin)];
-                case 22: return [2 /*return*/, json({ success: true, userId: userId }, { status: 201 }, origin)];
+                case 22:
+                    normalizedDocuments = ((_17 = payload.documents) !== null && _17 !== void 0 ? _17 : [])
+                        .filter(function (document) { var _a, _b, _c; return ((_a = document.documentType) === null || _a === void 0 ? void 0 : _a.trim()) && ((_c = (_b = document.file) === null || _b === void 0 ? void 0 : _b.dataUrl) === null || _c === void 0 ? void 0 : _c.trim()); })
+                        .map(function (document) {
+                        var _a, _b, _c, _d, _e, _f, _g;
+                        return ({
+                            provider_id: userId,
+                            document_type: ((_a = document.documentType) === null || _a === void 0 ? void 0 : _a.trim()) || "identity_document",
+                            label: ((_b = document.label) === null || _b === void 0 ? void 0 : _b.trim()) || "Identity Document",
+                            file_url: ((_d = (_c = document.file) === null || _c === void 0 ? void 0 : _c.dataUrl) === null || _d === void 0 ? void 0 : _d.trim()) || null,
+                            notes: ((_f = (_e = document.file) === null || _e === void 0 ? void 0 : _e.caption) === null || _f === void 0 ? void 0 : _f.trim()) || null,
+                            status: ((_g = document.status) === null || _g === void 0 ? void 0 : _g.trim()) || "Pending",
+                        });
+                    });
+                    if (!normalizedDocuments.length) return [3 /*break*/, 25];
+                    return [4 /*yield*/, adminClient.from("provider_documents").insert(normalizedDocuments)];
+                case 23:
+                    documentError = (_18.sent()).error;
+                    if (!documentError) return [3 /*break*/, 25];
+                    return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
+                case 24:
+                    _18.sent();
+                    return [2 /*return*/, json({ error: documentError.message || "Unable to create provider documents." }, { status: 500 }, origin)];
+                case 25: return [2 /*return*/, json({ success: true, userId: userId }, { status: 201 }, origin)];
             }
         });
     });
