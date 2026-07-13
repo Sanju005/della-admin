@@ -68,6 +68,23 @@ async function countRows(table: string, filters?: Array<[string, string | boolea
   return count ?? 0;
 }
 
+async function countProviderAccounts() {
+  if (!supabase) {
+    return null;
+  }
+
+  const { count, error } = await supabase
+    .from("profiles")
+    .select("*", { count: "exact", head: true })
+    .in("role", ["provider", "service_provider"]);
+
+  if (error) {
+    return null;
+  }
+
+  return count ?? 0;
+}
+
 async function sumPaymentAmounts() {
   if (!supabase) {
     return null;
@@ -223,7 +240,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     liveComplaintsOpen,
   ] = await Promise.all([
     countRows("profiles"),
-    countRows("profiles", [["role", "provider"]]),
+    countProviderAccounts(),
     countRows("bookings", [["booking_status", "pending"]]),
     sumPaymentAmounts(),
     getCollectionsBreakdown(),

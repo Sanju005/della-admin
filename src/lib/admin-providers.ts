@@ -762,20 +762,25 @@ async function fetchProviderProfiles() {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from("provider_profiles")
-    .select("id, marketing_name, profile_photo_url, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
-    .order("average_rating", { ascending: false })
+  const { data: accountRows, error: accountError } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, role, status, phone, created_at")
+    .in("role", ["provider", "service_provider"])
+    .order("created_at", { ascending: false })
     .limit(200);
 
-  if (error || !data?.length) {
+  if (accountError || !accountRows?.length) {
     return null;
   }
 
-  const profiles = data as ProviderProfileRow[];
-  const ids = profiles.map((profile) => profile.id);
+  const accounts = accountRows as ProviderAccountRow[];
+  const ids = accounts.map((account) => account.id);
 
-  const [{ data: serviceRows }, { data: verificationRows }, { data: metadataRows }] = await Promise.all([
+  const [{ data: providerProfileRows }, { data: serviceRows }, { data: verificationRows }, { data: metadataRows }] = await Promise.all([
+    supabase
+      .from("provider_profiles")
+      .select("id, marketing_name, profile_photo_url, service_location, service_radius_km, date_of_birth, sex, residential_address, bio, average_rating, total_reviews, approval_status, is_visible")
+      .in("id", ids),
     supabase
       .from("provider_services")
       .select(`
@@ -812,13 +817,32 @@ async function fetchProviderProfiles() {
   const metadataByProvider = new Map(
     ((metadataRows as ProviderAdminMetadataRow[] | null | undefined) ?? []).map((row) => [row.provider_id, row])
   );
+  const providerProfileById = new Map(
+    ((providerProfileRows as ProviderProfileRow[] | null | undefined) ?? []).map((row) => [row.id, row])
+  );
 
-  return profiles.map((profile) => ({
-    ...profile,
-    provider_services: servicesByProvider.get(profile.id) ?? null,
-    provider_verifications: verificationByProvider.get(profile.id) ?? null,
-    provider_admin_metadata: metadataByProvider.get(profile.id) ?? null,
-  }));
+  return accounts.map((account) => {
+    const profile = providerProfileById.get(account.id);
+
+    return {
+      id: account.id,
+      marketing_name: profile?.marketing_name ?? account.full_name ?? null,
+      profile_photo_url: profile?.profile_photo_url ?? null,
+      service_location: profile?.service_location ?? null,
+      service_radius_km: profile?.service_radius_km ?? null,
+      date_of_birth: profile?.date_of_birth ?? null,
+      sex: profile?.sex ?? null,
+      residential_address: profile?.residential_address ?? null,
+      bio: profile?.bio ?? null,
+      average_rating: profile?.average_rating ?? null,
+      total_reviews: profile?.total_reviews ?? null,
+      approval_status: profile?.approval_status ?? account.status ?? null,
+      is_visible: profile?.is_visible ?? null,
+      provider_services: servicesByProvider.get(account.id) ?? null,
+      provider_verifications: verificationByProvider.get(account.id) ?? null,
+      provider_admin_metadata: metadataByProvider.get(account.id) ?? null,
+    };
+  });
 }
 
 async function fetchProviderProfileById(providerId: string) {
