@@ -1,1 +1,0 @@
-import{j as r}from"./index-BB_KlgzU.js";import{A as o}from"./account-create-page-BxL1BOqh.js";import"./react-yaoKeYwM.js";import"./supabase-Bfd5Thr0.js";import"./ui-u2bKooJ4.js";function a(){return r.jsx(o,{accountType:"provider"})}export{a as ProviderCreatePage};

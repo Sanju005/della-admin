@@ -78,7 +78,7 @@ export function AdminShell() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(245,66,145,0.08),transparent_20%),linear-gradient(180deg,#fffafc_0%,#f7f6f8_100%)] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1720px] gap-4 p-3 lg:p-4">
         <aside
-          className={`fixed inset-y-3 left-3 z-40 flex w-[255px] flex-col rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,#052E25_0%,#06352A_38%,#0B2A24_100%)] px-3 py-4 shadow-[0_30px_90px_rgba(5,46,37,0.28)] transition duration-300 lg:static lg:translate-x-0 ${
+          className={`fixed inset-y-3 left-3 z-40 flex w-[255px] flex-col overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,#052E25_0%,#06352A_38%,#0B2A24_100%)] px-3 py-4 shadow-[0_30px_90px_rgba(5,46,37,0.28)] transition duration-300 lg:left-4 lg:translate-x-0 ${
             menuOpen ? "translate-x-0" : "-translate-x-[120%]"
           }`}
         >
@@ -164,7 +164,7 @@ export function AdminShell() {
           />
         ) : null}
 
-        <div className="flex min-h-[calc(100vh-1.5rem)] flex-1 flex-col rounded-[30px] bg-transparent p-1 lg:p-2">
+        <div className="flex min-h-[calc(100vh-1.5rem)] flex-1 flex-col rounded-[30px] bg-transparent p-1 lg:ml-[271px] lg:p-2">
           <header className="flex flex-col gap-4 rounded-[22px] border border-[#EEE5EC] bg-white px-5 py-3 shadow-[0_12px_30px_rgba(225,58,129,0.06)] lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <button
