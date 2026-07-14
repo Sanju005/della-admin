@@ -37,6 +37,7 @@ const breadcrumbTitles: Array<{ match: RegExp; items: string[] }> = [
   { match: /^\/$/, items: ["Dashboard"] },
   { match: /^\/users\/[^/]+$/, items: ["Users", "User Details"] },
   { match: /^\/users$/, items: ["Users"] },
+  { match: /^\/admins\/[^/]+$/, items: ["Admins", "Admin Details"] },
   { match: /^\/admins$/, items: ["Admins"] },
   { match: /^\/service-providers\/[^/]+$/, items: ["Providers", "Provider Details"] },
   { match: /^\/service-providers$/, items: ["Providers"] },

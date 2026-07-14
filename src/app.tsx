@@ -193,6 +193,10 @@ const router = createBrowserRouter([
         element: withSuspense(<AdminsPage />),
       },
       {
+        path: "admins/:userId",
+        element: withSuspense(<UserProfilePage />),
+      },
+      {
         path: "users/:userId",
         element: withSuspense(<UserProfilePage />),
       },

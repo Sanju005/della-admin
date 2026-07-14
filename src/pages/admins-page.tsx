@@ -49,7 +49,7 @@ export function AdminsPage() {
           label: "ID",
           render: (row) => (
             <Link
-              to={`/users/${row.id}`}
+              to={`/admins/${row.id}`}
               className="font-semibold text-emerald-700 hover:text-emerald-800"
             >
               {String(row.id)}
