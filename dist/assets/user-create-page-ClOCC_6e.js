@@ -1,1 +1,0 @@
-import{j as r}from"./index-yNZj4m2-.js";import{A as t}from"./account-create-page-47GIc-_q.js";import"./react-yaoKeYwM.js";import"./supabase-Bfd5Thr0.js";import"./ui-u2bKooJ4.js";function i(){return r.jsx(t,{accountType:"customer"})}export{i as UserCreatePage};

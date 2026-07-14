@@ -128,12 +128,29 @@ type AdminUserDocumentRow = {
   created_at: string | null;
 };
 
+type ServiceCommissionSettingRow = {
+  service_key: string;
+  service_label: string;
+  commission_percent: number | string | null;
+};
+
 const allowedAdminRoles = new Set(["super_admin", "admin", "manager", "customer_care"]);
 const approvalRequestOptions = [
   "IC / Passport / Driving License",
   "Proof of Address",
   "Professional Certificates",
   "Background Check",
+];
+const defaultCommissionServices = [
+  "Chef",
+  "Maid",
+  "Driver",
+  "Tutor",
+  "Babysitter",
+  "Home Cleaning",
+  "Plumbing",
+  "Electrician",
+  "Other",
 ];
 
 function corsHeaders(origin?: string | null) {
@@ -200,6 +217,18 @@ function splitPhoneNumber(value: string) {
   };
 }
 
+function normalizeServiceKey(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+}
+
+function titleizeServiceKey(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function splitFullName(fullName: string) {
   const [firstName = "", ...rest] = fullName.trim().split(/\s+/).filter(Boolean);
 
@@ -207,10 +236,6 @@ function splitFullName(fullName: string) {
     firstName,
     lastName: rest.join(" "),
   };
-}
-
-function normalizeServiceKey(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 
 async function verifyAdminRequest(request: Request, env: Env): Promise<VerifiedAdminRequest> {
@@ -847,6 +872,123 @@ async function handleAdminUserDocuments(request: Request, env: Env, userId: stri
   return json({ success: true }, { status: 201 }, origin);
 }
 
+async function handleServiceCommissionSettings(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get("origin");
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(origin),
+    });
+  }
+
+  const verified = await verifyAdminRequest(request, env);
+  if ("error" in verified) {
+    return verified.error;
+  }
+
+  const { adminClient } = verified;
+
+  if (request.method === "GET") {
+    const [settingsResult, serviceTypesResult] = await Promise.all([
+      adminClient
+        .from("service_commission_settings")
+        .select("service_key, service_label, commission_percent")
+        .order("service_label", { ascending: true }),
+      adminClient
+        .from("provider_services")
+        .select("service_type"),
+    ]);
+
+    const settingsRows =
+      settingsResult.error && /service_commission_settings/i.test(settingsResult.error.message || "")
+        ? []
+        : ((settingsResult.data as ServiceCommissionSettingRow[] | null) ?? []);
+    const serviceTypeRows = (serviceTypesResult.data as Array<{ service_type?: string | null }> | null) ?? [];
+
+    const merged = new Map<string, { serviceKey: string; serviceLabel: string; commissionPercent: number }>();
+
+    for (const serviceLabel of defaultCommissionServices) {
+      const serviceKey = normalizeServiceKey(serviceLabel);
+      merged.set(serviceKey, {
+        serviceKey,
+        serviceLabel,
+        commissionPercent: 5,
+      });
+    }
+
+    for (const row of serviceTypeRows) {
+      const rawValue = row.service_type?.trim() || "";
+      if (!rawValue) {
+        continue;
+      }
+
+      const serviceKey = normalizeServiceKey(rawValue);
+      const existing = merged.get(serviceKey);
+      merged.set(serviceKey, {
+        serviceKey,
+        serviceLabel: existing?.serviceLabel || titleizeServiceKey(rawValue),
+        commissionPercent: existing?.commissionPercent ?? 5,
+      });
+    }
+
+    for (const row of settingsRows) {
+      const serviceKey = row.service_key.trim();
+      const existing = merged.get(serviceKey);
+      merged.set(serviceKey, {
+        serviceKey,
+        serviceLabel: row.service_label?.trim() || existing?.serviceLabel || titleizeServiceKey(serviceKey),
+        commissionPercent: Number(row.commission_percent ?? existing?.commissionPercent ?? 5),
+      });
+    }
+
+    return json({
+      settings: Array.from(merged.values()).sort((a, b) => a.serviceLabel.localeCompare(b.serviceLabel)),
+    }, undefined, origin);
+  }
+
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed." }, { status: 405 }, origin);
+  }
+
+  const payload = (await request.json().catch(() => ({}))) as {
+    settings?: Array<{
+      serviceKey?: string;
+      serviceLabel?: string;
+      commissionPercent?: number;
+    }>;
+  };
+
+  const settings = (payload.settings ?? [])
+    .map((item) => ({
+      service_key: normalizeServiceKey(item.serviceKey?.trim() || item.serviceLabel?.trim() || ""),
+      service_label: item.serviceLabel?.trim() || titleizeServiceKey(item.serviceKey?.trim() || ""),
+      commission_percent:
+        typeof item.commissionPercent === "number" && Number.isFinite(item.commissionPercent)
+          ? Number(item.commissionPercent.toFixed(2))
+          : 5,
+    }))
+    .filter((item) => item.service_key && item.service_label);
+
+  if (!settings.length) {
+    return json({ error: "At least one service commission setting is required." }, { status: 400 }, origin);
+  }
+
+  const { error } = await adminClient
+    .from("service_commission_settings")
+    .upsert(settings, { onConflict: "service_key" });
+
+  if (error) {
+    const message =
+      /service_commission_settings/i.test(error.message || "")
+        ? "Service commission settings table is not created yet. Run the latest Supabase migration first."
+        : error.message || "Unable to save service commission settings.";
+    return json({ error: message }, { status: 500 }, origin);
+  }
+
+  return json({ success: true }, { status: 201 }, origin);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -861,6 +1003,10 @@ export default {
 
     if (url.pathname === "/api/admin/accounts/create") {
       return handleAccountCreate(request, env);
+    }
+
+    if (url.pathname === "/api/admin/service-commission-settings") {
+      return handleServiceCommissionSettings(request, env);
     }
 
     if (url.pathname.startsWith("/api/admin/user-documents/")) {

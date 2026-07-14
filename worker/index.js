@@ -53,6 +53,17 @@ var approvalRequestOptions = [
     "Professional Certificates",
     "Background Check",
 ];
+var defaultCommissionServices = [
+    "Chef",
+    "Maid",
+    "Driver",
+    "Tutor",
+    "Babysitter",
+    "Home Cleaning",
+    "Plumbing",
+    "Electrician",
+    "Other",
+];
 function corsHeaders(origin) {
     var allowedOrigin = origin && /^https:\/\/admin\.dellaapp\.com$/i.test(origin)
         ? origin
@@ -102,15 +113,22 @@ function splitPhoneNumber(value) {
         phoneNumber: ((_b = match === null || match === void 0 ? void 0 : match[2]) === null || _b === void 0 ? void 0 : _b.trim()) || null,
     };
 }
+function normalizeServiceKey(value) {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+}
+function titleizeServiceKey(value) {
+    return value
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1); })
+        .join(" ");
+}
 function splitFullName(fullName) {
     var _a = fullName.trim().split(/\s+/).filter(Boolean), _b = _a[0], firstName = _b === void 0 ? "" : _b, rest = _a.slice(1);
     return {
         firstName: firstName,
         lastName: rest.join(" "),
     };
-}
-function normalizeServiceKey(value) {
-    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 function verifyAdminRequest(request, env) {
     return __awaiter(this, void 0, void 0, function () {
@@ -742,6 +760,118 @@ function handleAdminUserDocuments(request, env, userId) {
         });
     });
 }
+function handleServiceCommissionSettings(request, env) {
+    return __awaiter(this, void 0, void 0, function () {
+        var origin, verified, adminClient, _a, settingsResult, serviceTypesResult, settingsRows, serviceTypeRows, merged, _i, defaultCommissionServices_1, serviceLabel, serviceKey, _b, serviceTypeRows_1, row, rawValue, serviceKey, existing, _c, settingsRows_1, row, serviceKey, existing, payload, settings, error, message;
+        var _d, _e, _f, _g, _h, _j, _k, _l;
+        return __generator(this, function (_m) {
+            switch (_m.label) {
+                case 0:
+                    origin = request.headers.get("origin");
+                    if (request.method === "OPTIONS") {
+                        return [2 /*return*/, new Response(null, {
+                                status: 204,
+                                headers: corsHeaders(origin),
+                            })];
+                    }
+                    return [4 /*yield*/, verifyAdminRequest(request, env)];
+                case 1:
+                    verified = _m.sent();
+                    if ("error" in verified) {
+                        return [2 /*return*/, verified.error];
+                    }
+                    adminClient = verified.adminClient;
+                    if (!(request.method === "GET")) return [3 /*break*/, 3];
+                    return [4 /*yield*/, Promise.all([
+                            adminClient
+                                .from("service_commission_settings")
+                                .select("service_key, service_label, commission_percent")
+                                .order("service_label", { ascending: true }),
+                            adminClient
+                                .from("provider_services")
+                                .select("service_type"),
+                        ])];
+                case 2:
+                    _a = _m.sent(), settingsResult = _a[0], serviceTypesResult = _a[1];
+                    settingsRows = settingsResult.error && /service_commission_settings/i.test(settingsResult.error.message || "")
+                        ? []
+                        : ((_d = settingsResult.data) !== null && _d !== void 0 ? _d : []);
+                    serviceTypeRows = (_e = serviceTypesResult.data) !== null && _e !== void 0 ? _e : [];
+                    merged = new Map();
+                    for (_i = 0, defaultCommissionServices_1 = defaultCommissionServices; _i < defaultCommissionServices_1.length; _i++) {
+                        serviceLabel = defaultCommissionServices_1[_i];
+                        serviceKey = normalizeServiceKey(serviceLabel);
+                        merged.set(serviceKey, {
+                            serviceKey: serviceKey,
+                            serviceLabel: serviceLabel,
+                            commissionPercent: 5,
+                        });
+                    }
+                    for (_b = 0, serviceTypeRows_1 = serviceTypeRows; _b < serviceTypeRows_1.length; _b++) {
+                        row = serviceTypeRows_1[_b];
+                        rawValue = ((_f = row.service_type) === null || _f === void 0 ? void 0 : _f.trim()) || "";
+                        if (!rawValue) {
+                            continue;
+                        }
+                        serviceKey = normalizeServiceKey(rawValue);
+                        existing = merged.get(serviceKey);
+                        merged.set(serviceKey, {
+                            serviceKey: serviceKey,
+                            serviceLabel: (existing === null || existing === void 0 ? void 0 : existing.serviceLabel) || titleizeServiceKey(rawValue),
+                            commissionPercent: (_g = existing === null || existing === void 0 ? void 0 : existing.commissionPercent) !== null && _g !== void 0 ? _g : 5,
+                        });
+                    }
+                    for (_c = 0, settingsRows_1 = settingsRows; _c < settingsRows_1.length; _c++) {
+                        row = settingsRows_1[_c];
+                        serviceKey = row.service_key.trim();
+                        existing = merged.get(serviceKey);
+                        merged.set(serviceKey, {
+                            serviceKey: serviceKey,
+                            serviceLabel: ((_h = row.service_label) === null || _h === void 0 ? void 0 : _h.trim()) || (existing === null || existing === void 0 ? void 0 : existing.serviceLabel) || titleizeServiceKey(serviceKey),
+                            commissionPercent: Number((_k = (_j = row.commission_percent) !== null && _j !== void 0 ? _j : existing === null || existing === void 0 ? void 0 : existing.commissionPercent) !== null && _k !== void 0 ? _k : 5),
+                        });
+                    }
+                    return [2 /*return*/, json({
+                            settings: Array.from(merged.values()).sort(function (a, b) { return a.serviceLabel.localeCompare(b.serviceLabel); }),
+                        }, undefined, origin)];
+                case 3:
+                    if (request.method !== "POST") {
+                        return [2 /*return*/, json({ error: "Method not allowed." }, { status: 405 }, origin)];
+                    }
+                    return [4 /*yield*/, request.json().catch(function () { return ({}); })];
+                case 4:
+                    payload = (_m.sent());
+                    settings = ((_l = payload.settings) !== null && _l !== void 0 ? _l : [])
+                        .map(function (item) {
+                        var _a, _b, _c, _d;
+                        return ({
+                            service_key: normalizeServiceKey(((_a = item.serviceKey) === null || _a === void 0 ? void 0 : _a.trim()) || ((_b = item.serviceLabel) === null || _b === void 0 ? void 0 : _b.trim()) || ""),
+                            service_label: ((_c = item.serviceLabel) === null || _c === void 0 ? void 0 : _c.trim()) || titleizeServiceKey(((_d = item.serviceKey) === null || _d === void 0 ? void 0 : _d.trim()) || ""),
+                            commission_percent: typeof item.commissionPercent === "number" && Number.isFinite(item.commissionPercent)
+                                ? Number(item.commissionPercent.toFixed(2))
+                                : 5,
+                        });
+                    })
+                        .filter(function (item) { return item.service_key && item.service_label; });
+                    if (!settings.length) {
+                        return [2 /*return*/, json({ error: "At least one service commission setting is required." }, { status: 400 }, origin)];
+                    }
+                    return [4 /*yield*/, adminClient
+                            .from("service_commission_settings")
+                            .upsert(settings, { onConflict: "service_key" })];
+                case 5:
+                    error = (_m.sent()).error;
+                    if (error) {
+                        message = /service_commission_settings/i.test(error.message || "")
+                            ? "Service commission settings table is not created yet. Run the latest Supabase migration first."
+                            : error.message || "Unable to save service commission settings.";
+                        return [2 /*return*/, json({ error: message }, { status: 500 }, origin)];
+                    }
+                    return [2 /*return*/, json({ success: true }, { status: 201 }, origin)];
+            }
+        });
+    });
+}
 export default {
     fetch: function (request, env) {
         return __awaiter(this, void 0, void 0, function () {
@@ -759,6 +889,9 @@ export default {
                         }
                         if (url.pathname === "/api/admin/accounts/create") {
                             return [2 /*return*/, handleAccountCreate(request, env)];
+                        }
+                        if (url.pathname === "/api/admin/service-commission-settings") {
+                            return [2 /*return*/, handleServiceCommissionSettings(request, env)];
                         }
                         if (url.pathname.startsWith("/api/admin/user-documents/")) {
                             userId = decodeURIComponent(url.pathname.slice("/api/admin/user-documents/".length));
