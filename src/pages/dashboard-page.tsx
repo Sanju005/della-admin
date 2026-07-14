@@ -88,31 +88,24 @@ function StatMiniCard({
   label,
   value,
   delta,
-  icon,
-  iconTone,
 }: {
   label: string;
   value: string;
   delta: string;
-  icon: React.ReactNode;
-  iconTone: string;
 }) {
   const positive = !delta.trim().startsWith("-");
   return (
-    <article className="min-h-[176px] rounded-[24px] border border-[#EEE6F7] bg-white px-6 py-5 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
-      <div className="flex items-start justify-between gap-3">
+    <article className="min-h-[128px] rounded-[24px] border border-[#EEE6F7] bg-white px-6 py-4 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
+      <div className="flex items-start gap-3">
         <div>
           <p className="text-[13px] font-medium text-slate-500">{label}</p>
-          <p className="mt-3 text-[1.9rem] font-extrabold tracking-tight text-slate-950">{value}</p>
-          <div className="mt-4 flex items-center gap-2 text-sm">
+          <p className="mt-2 text-[1.9rem] font-extrabold tracking-tight text-slate-950">{value}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className={positive ? "font-semibold text-emerald-600" : "font-semibold text-rose-600"}>
               {positive ? "↑" : "↓"} {delta.replace(/^[+-]/, "")}
             </span>
             <span className="text-slate-400">vs last 30 days</span>
           </div>
-        </div>
-        <div className={`grid size-[76px] shrink-0 place-items-center rounded-[24px] ${iconTone}`}>
-          {icon}
         </div>
       </div>
     </article>
@@ -247,15 +240,11 @@ export function DashboardPage() {
               label="New Users"
               value={formatPlainNumber(Math.max(1, Math.round(totals.totalUsers * 0.14)))}
               delta="+2.4%"
-              icon={<Users className="size-6 text-[#7C3AED]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(124,58,237,0.12),rgba(244,232,255,0.65))]"
             />
             <StatMiniCard
               label="Active Users"
               value={formatPlainNumber(totals.totalUsers)}
               delta="+4.8%"
-              icon={<SearchCheck className="size-6 text-[#E13A81]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(225,58,129,0.12),rgba(255,223,238,0.7))]"
             />
           </div>
         </DashboardBlock>
@@ -266,15 +255,11 @@ export function DashboardPage() {
               label="New Providers"
               value={formatPlainNumber(Math.max(1, Math.round(totals.totalProviders * 0.13)))}
               delta="+2.1%"
-              icon={<BriefcaseBusiness className="size-6 text-[#00A6B8]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(0,166,184,0.12),rgba(220,248,250,0.72))]"
             />
             <StatMiniCard
               label="Active Providers"
               value={formatPlainNumber(totals.activeProviders)}
               delta="+3.6%"
-              icon={<BadgeDollarSign className="size-6 text-[#06B6D4]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(6,182,212,0.12),rgba(225,250,255,0.72))]"
             />
           </div>
         </DashboardBlock>
@@ -285,22 +270,16 @@ export function DashboardPage() {
               label="Active Tasks"
               value={formatPlainNumber(totals.activeTasks)}
               delta="+4.6%"
-              icon={<ClipboardList className="size-6 text-[#F97316]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(249,115,22,0.12),rgba(255,239,227,0.72))]"
             />
             <StatMiniCard
               label="Completed Tasks"
               value={formatPlainNumber(totals.completedTasks)}
               delta="+2.3%"
-              icon={<CheckCheck className="size-6 text-[#22C55E]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(233,251,240,0.72))]"
             />
             <StatMiniCard
               label="Cancelled Tasks"
               value={formatPlainNumber(totals.cancelledTasks)}
               delta="-1.4%"
-              icon={<XCircle className="size-6 text-[#FF4D6D]" />}
-              iconTone="bg-[linear-gradient(135deg,rgba(255,77,109,0.12),rgba(255,231,236,0.8))]"
             />
           </div>
         </DashboardBlock>
@@ -313,22 +292,16 @@ export function DashboardPage() {
               label="Total Collections"
               value={formatMoney(overallCollectionsTotal)}
               delta="+8.6%"
-              icon={<ReceiptText className="size-9 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Company Earnings"
               value={formatMoney(Math.max(netEarnings, 0))}
               delta="+6.4%"
-              icon={<BarChart3 className="size-9 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Refunds"
               value={formatMoney(overallRefunds)}
               delta="-1.4%"
-              icon={<RotateCcw className="size-9 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
           </div>
 
@@ -341,29 +314,21 @@ export function DashboardPage() {
               label="Total Cash Collected"
               value={formatMoney(totals.collectionsBreakdown.cash.total)}
               delta="+8.6%"
-              icon={<Banknote className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Payable to Company"
               value={formatMoney(totals.collectionsBreakdown.cash.balancePayableToCompany)}
               delta="+11.1%"
-              icon={<Building2 className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Paid to Company"
               value={formatMoney(totals.collectionsBreakdown.cash.paidToCompany)}
               delta="+7.8%"
-              icon={<Send className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Cash Refunds"
               value={formatMoney(totals.collectionsBreakdown.cash.refunds)}
               delta="-1.4%"
-              icon={<RotateCcw className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
           </div>
 
@@ -376,36 +341,26 @@ export function DashboardPage() {
               label="Total Online Collected"
               value={formatMoney(totals.collectionsBreakdown.others.total)}
               delta="+8.6%"
-              icon={<Globe className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Commission"
               value={formatMoney(totals.collectionsBreakdown.others.commission)}
               delta="+4.2%"
-              icon={<BadgePercent className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Paid to Providers"
               value={formatMoney(totals.collectionsBreakdown.others.paidToProviders)}
               delta="+7.8%"
-              icon={<Send className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Payable to Providers"
               value={formatMoney(totals.collectionsBreakdown.others.payableToProviders)}
               delta="+11.1%"
-              icon={<Users className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
             <StatMiniCard
               label="Online Refunds"
               value={formatMoney(totals.collectionsBreakdown.others.refunds)}
               delta="-1.4%"
-              icon={<RotateCcw className="size-8 text-[#6D41DD]" strokeWidth={1.75} />}
-              iconTone="bg-[linear-gradient(135deg,rgba(109,65,221,0.08),rgba(241,236,255,0.95))]"
             />
           </div>
         </div>
