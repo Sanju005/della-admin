@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/auth-provider";
 import type { NavItem } from "../types";
@@ -50,8 +50,15 @@ const breadcrumbTitles: Array<{ match: RegExp; items: string[] }> = [
 
 export function AdminShell() {
   const location = useLocation();
-  const { profile, session, signOut } = useAuth();
+  const { profile, session, signOut, updateProfile } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const profilePanelRef = useRef<HTMLDivElement | null>(null);
   const displayName = profile?.full_name?.trim() || session?.user.email || "User";
   const displayRole = profile?.role?.replaceAll("_", " ") || "Signed in";
 
@@ -73,6 +80,48 @@ export function AdminShell() {
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("");
   }, [displayName]);
+
+  useEffect(() => {
+    setProfileName(profile?.full_name?.trim() || "");
+  }, [profile?.full_name]);
+
+  useEffect(() => {
+    if (!profileOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!profilePanelRef.current?.contains(event.target as Node)) {
+        setProfileOpen(false);
+        setProfileEditing(false);
+        setProfileMessage(null);
+        setProfileError(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [profileOpen]);
+
+  async function handleSaveProfile() {
+    setProfileSaving(true);
+    setProfileMessage(null);
+    setProfileError(null);
+
+    const error = await updateProfile({
+      full_name: profileName,
+    });
+
+    setProfileSaving(false);
+
+    if (error) {
+      setProfileError(error);
+      return;
+    }
+
+    setProfileEditing(false);
+    setProfileMessage("Profile updated.");
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(245,66,145,0.08),transparent_20%),linear-gradient(180deg,#fffafc_0%,#f7f6f8_100%)] text-slate-900">
@@ -202,19 +251,140 @@ export function AdminShell() {
                   2
                 </span>
               </button>
-              <button
-                type="button"
-                className="flex items-center gap-3 rounded-full border border-[#EEE5EC] bg-white px-3 py-2 text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
-              >
-                <div className="grid size-10 place-items-center rounded-full bg-[linear-gradient(135deg,#0E7A57,#0A563D)] text-sm font-bold text-white">
-                  {initials}
-                </div>
-                <div className="hidden text-left sm:block">
-                  <p className="max-w-[120px] truncate text-sm font-semibold text-slate-900">{displayName}</p>
-                  <p className="max-w-[120px] truncate text-xs capitalize text-slate-500">{displayRole}</p>
-                </div>
-                <ChevronDown className="size-4 text-slate-500" />
-              </button>
+              <div ref={profilePanelRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen((current) => !current);
+                    setProfileEditing(false);
+                    setProfileMessage(null);
+                    setProfileError(null);
+                    setProfileName(profile?.full_name?.trim() || "");
+                  }}
+                  className="flex items-center gap-3 rounded-full border border-[#EEE5EC] bg-white px-3 py-2 text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+                >
+                  <div className="grid size-10 place-items-center rounded-full bg-[linear-gradient(135deg,#0E7A57,#0A563D)] text-sm font-bold text-white">
+                    {initials}
+                  </div>
+                  <div className="hidden text-left sm:block">
+                    <p className="max-w-[120px] truncate text-sm font-semibold text-slate-900">{displayName}</p>
+                    <p className="max-w-[120px] truncate text-xs capitalize text-slate-500">{displayRole}</p>
+                  </div>
+                  <ChevronDown className="size-4 text-slate-500" />
+                </button>
+
+                {profileOpen ? (
+                  <div className="absolute right-0 top-[calc(100%+12px)] z-40 w-[340px] rounded-[24px] border border-[#EEE5EC] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-12 place-items-center rounded-full bg-[linear-gradient(135deg,#0E7A57,#0A563D)] text-base font-bold text-white">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-bold text-slate-950">{displayName}</p>
+                        <p className="truncate text-sm text-slate-500">{profile?.email ?? session?.user.email ?? "No email"}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 rounded-[20px] bg-slate-50 p-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Role</p>
+                        <p className="mt-1 text-sm font-semibold capitalize text-slate-700">{displayRole}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Status</p>
+                        <p className="mt-1 text-sm font-semibold capitalize text-slate-700">{profile?.status ?? "Active"}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-bold text-slate-950">User Profile</h3>
+                        {!profileEditing ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileEditing(true);
+                              setProfileMessage(null);
+                              setProfileError(null);
+                            }}
+                            className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700"
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <label className="mt-3 block text-sm font-medium text-slate-700">
+                        Full Name
+                        <input
+                          type="text"
+                          value={profileName}
+                          onChange={(event) => setProfileName(event.target.value)}
+                          disabled={!profileEditing || profileSaving}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-500"
+                        />
+                      </label>
+
+                      <label className="mt-3 block text-sm font-medium text-slate-700">
+                        Email
+                        <input
+                          type="text"
+                          value={profile?.email ?? session?.user.email ?? ""}
+                          disabled
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 outline-none"
+                        />
+                      </label>
+
+                      {profileMessage ? (
+                        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                          {profileMessage}
+                        </div>
+                      ) : null}
+
+                      {profileError ? (
+                        <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                          {profileError}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 flex flex-wrap justify-between gap-3">
+                        {profileEditing ? (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProfileEditing(false);
+                                setProfileName(profile?.full_name?.trim() || "");
+                                setProfileMessage(null);
+                                setProfileError(null);
+                              }}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveProfile()}
+                              disabled={profileSaving}
+                              className="rounded-xl bg-[linear-gradient(135deg,#0f8b3d,#16a34a)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                            >
+                              {profileSaving ? "Saving..." : "Save"}
+                            </button>
+                          </div>
+                        ) : <span />}
+
+                        <button
+                          type="button"
+                          onClick={() => void signOut()}
+                          className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700"
+                        >
+                          Log out
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </header>
 

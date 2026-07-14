@@ -17,6 +17,7 @@ type AuthContextValue = {
   session: Session | null;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  updateProfile: (updates: { full_name?: string }) => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -255,6 +256,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAccess("guest");
         writeCachedProfile(null);
         await supabase.auth.signOut();
+      },
+      async updateProfile(updates) {
+        if (!supabase || !session?.user.id) {
+          return "Admin session expired. Please sign in again.";
+        }
+
+        const fullName = updates.full_name?.trim() ?? "";
+
+        if (!fullName) {
+          return "Full name is required.";
+        }
+
+        const { error } = await supabase
+          .from("profiles")
+          .update({ full_name: fullName })
+          .eq("id", session.user.id);
+
+        if (error) {
+          return error.message || "Unable to update profile.";
+        }
+
+        await supabase.auth.updateUser({
+          data: {
+            full_name: fullName,
+          },
+        });
+
+        const nextProfile: AdminProfile = {
+          id: profile?.id ?? session.user.id,
+          full_name: fullName,
+          email: profile?.email ?? session.user.email ?? null,
+          role: profile?.role ?? null,
+          status: profile?.status ?? null,
+        };
+
+        setProfile(nextProfile);
+        writeCachedProfile(nextProfile);
+        return null;
       },
     }),
     [access, authError, initialized, profile, session]
