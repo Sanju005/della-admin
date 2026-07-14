@@ -95,11 +95,13 @@ function StatMiniCard({
 }) {
   const positive = !delta.trim().startsWith("-");
   return (
-    <article className="min-h-[128px] rounded-[24px] border border-[#EEE6F7] bg-white px-6 py-4 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
-      <div className="flex items-start gap-3">
-        <div>
-          <p className="text-[13px] font-medium text-slate-500">{label}</p>
-          <p className="mt-2 text-[1.9rem] font-extrabold tracking-tight text-slate-950">{value}</p>
+    <article className="min-h-[102px] rounded-[24px] border border-[#EEE6F7] bg-white px-5 py-4 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <p className="max-w-[11rem] text-[13px] font-medium text-slate-500">{label}</p>
+            <p className="text-right text-[1.7rem] font-extrabold tracking-tight text-slate-950">{value}</p>
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className={positive ? "font-semibold text-emerald-600" : "font-semibold text-rose-600"}>
               {positive ? "↑" : "↓"} {delta.replace(/^[+-]/, "")}
