@@ -171,8 +171,23 @@ type ProviderAdminMetadataRow = {
   certificate_image_captions?: Record<string, string[] | null> | null;
   service_image_files?: Record<string, string[] | null> | null;
   certificate_image_files?: Record<string, string[] | null> | null;
+  emergency_contact?: string | null;
+  profile_image_name?: string | null;
   current_latitude?: number | null;
   current_longitude?: number | null;
+};
+
+type ProviderRegistrationFallback = {
+  profilePhotoUrl?: string;
+  profilePhotoName?: string;
+  serviceLocation?: string;
+  serviceRadiusKm?: number;
+  dateOfBirth?: string;
+  sex?: string;
+  residentialAddress?: string;
+  emergencyContact?: string;
+  currentLatitude?: number;
+  currentLongitude?: number;
 };
 
 type ProviderUploadedDocumentRow = {
@@ -527,6 +542,128 @@ function formatCoordinates(metadata: ProviderAdminMetadataRow | null | undefined
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
 }
 
+function formatCoordinatesFromNumbers(latitude?: number | null, longitude?: number | null) {
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return "Not captured";
+  }
+
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function normalizeNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function getNestedValue(source: unknown, path: string[]) {
+  let current = source;
+
+  for (const segment of path) {
+    if (!current || typeof current !== "object" || !(segment in current)) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return current;
+}
+
+function pickNestedText(source: unknown, paths: string[][]) {
+  for (const path of paths) {
+    const value = normalizeText(getNestedValue(source, path));
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function pickNestedNumber(source: unknown, paths: string[][]) {
+  for (const path of paths) {
+    const value = normalizeNumber(getNestedValue(source, path));
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+async function fetchProviderRegistrationFallback(providerId: string): Promise<ProviderRegistrationFallback | null> {
+  try {
+    const response = await fetch(`/api/provider/register/${providerId}`);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { data?: unknown };
+    const data = payload?.data;
+
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    const profilePhotoUrl = pickNestedText(data, [
+      ["basicProfile", "profileImageUrl"],
+      ["basicProfile", "profilePhotoUrl"],
+      ["basicProfile", "profile_photo_url"],
+      ["basicProfile", "photoUrl"],
+    ]);
+    const profilePhotoName = pickNestedText(data, [
+      ["basicProfile", "profileImageName"],
+      ["basicProfile", "profilePhotoName"],
+      ["basicProfile", "profile_image_name"],
+      ["basicProfile", "photoName"],
+    ]);
+    const emergencyContact = pickNestedText(data, [
+      ["basicProfile", "emergencyContact"],
+      ["basicProfile", "emergency_contact"],
+      ["account", "emergencyContact"],
+      ["account", "emergency_contact"],
+      ["verification", "emergencyContact"],
+      ["verification", "emergency_contact"],
+    ]);
+
+    return {
+      profilePhotoUrl: profilePhotoUrl || undefined,
+      profilePhotoName: profilePhotoName || undefined,
+      serviceLocation:
+        pickNestedText(data, [
+          ["providerLocation", "areaLabel"],
+          ["basicProfile", "serviceLocation"],
+        ]) || undefined,
+      serviceRadiusKm:
+        pickNestedNumber(data, [
+          ["providerLocation", "radius"],
+          ["basicProfile", "serviceRadius"],
+        ]) ?? undefined,
+      dateOfBirth: pickNestedText(data, [["basicProfile", "dateOfBirth"]]) || undefined,
+      sex: pickNestedText(data, [["basicProfile", "sex"]]) || undefined,
+      residentialAddress: pickNestedText(data, [["basicProfile", "residentialAddress"]]) || undefined,
+      emergencyContact: emergencyContact || undefined,
+      currentLatitude: pickNestedNumber(data, [["providerLocation", "latitude"]]) ?? undefined,
+      currentLongitude: pickNestedNumber(data, [["providerLocation", "longitude"]]) ?? undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function formatSchedule(dateValue?: string | null, timeValue?: string | null) {
   if (!dateValue) {
     return "Upcoming task";
@@ -815,7 +952,7 @@ async function fetchProviderProfiles() {
       .in("provider_id", ids),
     supabase
       .from("provider_admin_metadata")
-      .select("provider_id, availability_days, availability_time_preset, availability_start_time, availability_end_time, service_image_captions, certificate_image_captions, service_image_files, certificate_image_files, current_latitude, current_longitude")
+      .select("provider_id, availability_days, availability_time_preset, availability_start_time, availability_end_time, service_image_captions, certificate_image_captions, service_image_files, certificate_image_files, emergency_contact, profile_image_name, current_latitude, current_longitude")
       .in("provider_id", ids),
   ]);
 
@@ -898,7 +1035,7 @@ async function fetchProviderProfileById(providerId: string) {
       .maybeSingle(),
     supabase
       .from("provider_admin_metadata")
-      .select("provider_id, availability_days, availability_time_preset, availability_start_time, availability_end_time, service_image_captions, certificate_image_captions, service_image_files, certificate_image_files, current_latitude, current_longitude")
+      .select("provider_id, availability_days, availability_time_preset, availability_start_time, availability_end_time, service_image_captions, certificate_image_captions, service_image_files, certificate_image_files, emergency_contact, profile_image_name, current_latitude, current_longitude")
       .eq("provider_id", providerId)
       .maybeSingle(),
   ]);
@@ -1253,6 +1390,7 @@ function buildGeneratedProviderDetail(
         provider_service_specialties?: Array<{ specialty?: string | null }> | null;
       }
     | null,
+  registrationFallback?: ProviderRegistrationFallback | null,
 ): ProviderDetailRecord {
   const approvalStatus = formatApprovalStatus(liveProfile.approval_status);
   const verification = relationItem(liveProfile.provider_verifications);
@@ -1273,28 +1411,32 @@ function buildGeneratedProviderDetail(
     providerId,
     name,
     email: liveAccount?.email?.trim() || "Not provided",
-    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || undefined,
+    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || registrationFallback?.profilePhotoUrl || undefined,
+    profilePhotoName: metadata?.profile_image_name?.trim() || registrationFallback?.profilePhotoName || undefined,
     status: formatStatus(liveAccount?.status ?? (liveProfile.is_visible === false ? "paused" : "active")),
     visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     roleBadge: "Provider",
     joinedAt,
     lastLogin: "Recently active",
     serviceType: humanizeService(firstService?.service_type),
-    serviceArea: liveProfile.service_location?.trim() || "Malaysia",
-    serviceRadiusKm: formatRadius(liveProfile.service_radius_km),
+    serviceArea: liveProfile.service_location?.trim() || registrationFallback?.serviceLocation || "Malaysia",
+    serviceRadiusKm: formatRadius(liveProfile.service_radius_km ?? registrationFallback?.serviceRadiusKm),
     yearsExperience: firstService?.years_experience?.trim() || "Not set",
     hourlyRate: formatRate(firstService?.hourly_rate, " / hr"),
     dailyRate: formatRate(firstService?.daily_rate, " / day"),
-    currentCoordinates: formatCoordinates(metadata),
+    currentCoordinates:
+      formatCoordinates(metadata) !== "Not captured"
+        ? formatCoordinates(metadata)
+        : formatCoordinatesFromNumbers(registrationFallback?.currentLatitude, registrationFallback?.currentLongitude),
     rating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : "0.0",
     ratingNote: `(${liveProfile.total_reviews ?? 0} reviews)`,
     phone: liveAccount?.phone?.trim() || "Not provided",
-    dob: formatDateOfBirth(liveProfile.date_of_birth),
-    gender: liveProfile.sex?.trim() || "Not provided",
+    dob: formatDateOfBirth(liveProfile.date_of_birth || registrationFallback?.dateOfBirth),
+    gender: liveProfile.sex?.trim() || registrationFallback?.sex || "Not provided",
     language: "Not provided",
     nationalId: verification?.document_type?.trim() || "Document pending",
-    emergencyContact: "Not provided",
-    address: liveProfile.residential_address?.trim() || "Not provided",
+    emergencyContact: metadata?.emergency_contact?.trim() || registrationFallback?.emergencyContact || "Not provided",
+    address: liveProfile.residential_address?.trim() || registrationFallback?.residentialAddress || "Not provided",
     about: liveProfile.bio?.trim() || "Provider profile is awaiting full verification.",
     approvalStatus,
     backgroundCheck: verification?.background_check_verified ? "Verified" : "Pending",
@@ -1462,13 +1604,24 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   }
 
   const liveAccount = await fetchProviderAccountById(providerId);
+  const registrationFallback = await fetchProviderRegistrationFallback(providerId);
   const firstService = relationItem(liveProfile.provider_services);
   const verification = relationItem(liveProfile.provider_verifications);
   const metadata = liveProfile.provider_admin_metadata ?? null;
   const serviceKey = firstService?.service_type?.trim().toLowerCase() || "";
-  const generatedDetail = buildGeneratedProviderDetail(providerId, liveProfile, liveAccount, firstService);
+  const generatedDetail = buildGeneratedProviderDetail(
+    providerId,
+    liveProfile,
+    liveAccount,
+    firstService,
+    registrationFallback,
+  );
   const baseDetail = generatedDetail;
-  const serviceAreas = [{ id: "live-sa-1", label: liveProfile.service_location?.trim() || "Malaysia", tag: "Primary" }];
+  const serviceAreas = [{
+    id: "live-sa-1",
+    label: liveProfile.service_location?.trim() || registrationFallback?.serviceLocation || "Malaysia",
+    tag: "Primary",
+  }];
 
   const liveTasks = await tryFetchProviderTasks(providerId);
   const livePayments = await tryFetchProviderPayments(providerId);
@@ -1511,24 +1664,29 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     providerId,
     name: liveProfile.marketing_name?.trim() || liveAccount?.full_name?.trim() || baseDetail.name,
     email: liveAccount?.email?.trim() || baseDetail.email,
-    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || baseDetail.profilePhotoUrl,
+    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || registrationFallback?.profilePhotoUrl || baseDetail.profilePhotoUrl,
+    profilePhotoName: metadata?.profile_image_name?.trim() || registrationFallback?.profilePhotoName || baseDetail.profilePhotoName,
     status,
     visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
     joinedAt: formatDateTime(liveAccount?.created_at) || baseDetail.joinedAt,
     lastLogin: liveLastLogin?.created_at ? formatDateTime(liveLastLogin.created_at) : baseDetail.lastLogin,
     serviceType: humanizeService(firstService?.service_type),
-    serviceArea: liveProfile.service_location?.trim() || baseDetail.serviceArea,
-    serviceRadiusKm: formatRadius(liveProfile.service_radius_km),
+    serviceArea: liveProfile.service_location?.trim() || registrationFallback?.serviceLocation || baseDetail.serviceArea,
+    serviceRadiusKm: formatRadius(liveProfile.service_radius_km ?? registrationFallback?.serviceRadiusKm),
     yearsExperience: firstService?.years_experience?.trim() || baseDetail.yearsExperience,
     hourlyRate: formatRate(firstService?.hourly_rate, " / hr"),
     dailyRate: formatRate(firstService?.daily_rate, " / day"),
-    currentCoordinates: formatCoordinates(metadata),
+    currentCoordinates:
+      formatCoordinates(metadata) !== "Not captured"
+        ? formatCoordinates(metadata)
+        : formatCoordinatesFromNumbers(registrationFallback?.currentLatitude, registrationFallback?.currentLongitude),
     rating: typeof liveProfile.average_rating === "number" ? liveProfile.average_rating.toFixed(1) : baseDetail.rating,
     ratingNote: `(${liveProfile.total_reviews ?? (Number(baseDetail.totalReviews) || 0)} reviews)`,
     phone: liveAccount?.phone?.trim() || baseDetail.phone,
-    dob: formatDateOfBirth(liveProfile.date_of_birth) || baseDetail.dob,
-    gender: liveProfile.sex?.trim() || baseDetail.gender,
-    address: liveProfile.residential_address?.trim() || baseDetail.address,
+    dob: formatDateOfBirth(liveProfile.date_of_birth || registrationFallback?.dateOfBirth) || baseDetail.dob,
+    gender: liveProfile.sex?.trim() || registrationFallback?.sex || baseDetail.gender,
+    emergencyContact: metadata?.emergency_contact?.trim() || registrationFallback?.emergencyContact || baseDetail.emergencyContact,
+    address: liveProfile.residential_address?.trim() || registrationFallback?.residentialAddress || baseDetail.address,
     nationalId: verification?.document_type?.trim() || baseDetail.nationalId,
     about: liveProfile.bio?.trim() || baseDetail.about,
     approvalStatus: formatApprovalStatus(liveProfile.approval_status),

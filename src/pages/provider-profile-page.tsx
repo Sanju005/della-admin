@@ -83,6 +83,7 @@ const EMPTY_PROVIDER_DETAIL: ProviderDetailRecord = {
   name: "",
   email: "",
   profilePhotoUrl: undefined,
+  profilePhotoName: undefined,
   status: "Active",
   visibilityStatus: "Visible",
   roleBadge: "Provider",
@@ -175,6 +176,10 @@ function isRenderableImageUrl(value: string | undefined) {
   }
 
   return /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
+}
+
+function isMeaningfulText(value: string | undefined) {
+  return Boolean(value?.trim());
 }
 
 function normalizeEditableDate(value: string) {
@@ -1214,7 +1219,7 @@ export function ProviderProfilePage() {
                 icon={<Phone className="size-4" />}
               />
               <InfoRow
-                label="Profile Image URL"
+                label="Profile Image"
                 value={
                   editing ? (
                     <input
@@ -1223,7 +1228,7 @@ export function ProviderProfilePage() {
                       placeholder="https://... or Supabase public URL"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
                     />
-                  ) : detail.profilePhotoUrl ? (
+                  ) : isRenderableImageUrl(detail.profilePhotoUrl) ? (
                     <a
                       href={detail.profilePhotoUrl}
                       target="_blank"
@@ -1233,6 +1238,10 @@ export function ProviderProfilePage() {
                       <Eye className="size-4" />
                       Open image
                     </a>
+                  ) : isMeaningfulText(detail.profilePhotoName) ? (
+                    detail.profilePhotoName
+                  ) : isMeaningfulText(detail.profilePhotoUrl) ? (
+                    detail.profilePhotoUrl
                   ) : (
                     "Not provided"
                   )

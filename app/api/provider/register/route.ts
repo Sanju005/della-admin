@@ -129,6 +129,45 @@ function normalizeDateOfBirth(value: string) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeOptionalText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function pickProfilePhotoUrl(payload: ProviderRegistrationData) {
+  const basicProfile = payload.basicProfile as Record<string, unknown>;
+
+  return normalizeOptionalText(basicProfile.profileImageUrl) ??
+    normalizeOptionalText(basicProfile.profilePhotoUrl) ??
+    normalizeOptionalText(basicProfile.profile_photo_url) ??
+    normalizeOptionalText(basicProfile.photoUrl);
+}
+
+function pickProfilePhotoName(payload: ProviderRegistrationData) {
+  const basicProfile = payload.basicProfile as Record<string, unknown>;
+
+  return normalizeOptionalText(basicProfile.profileImageName) ??
+    normalizeOptionalText(basicProfile.profilePhotoName) ??
+    normalizeOptionalText(basicProfile.profile_image_name) ??
+    normalizeOptionalText(basicProfile.photoName);
+}
+
+function pickEmergencyContact(payload: ProviderRegistrationData) {
+  const sections = [
+    payload.basicProfile as Record<string, unknown>,
+    payload.account as Record<string, unknown>,
+    payload.verification as Record<string, unknown>,
+  ];
+
+  for (const section of sections) {
+    const value = normalizeOptionalText(section.emergencyContact) ?? normalizeOptionalText(section.emergency_contact);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 async function upsertProviderVerification(
   adminClient: ReturnType<typeof getAdminSupabaseClient>,
   providerId: string,
@@ -182,6 +221,9 @@ export async function POST(request: Request) {
       : "";
     const dateOfBirth = normalizeDateOfBirth(payload.basicProfile.dateOfBirth);
     const residentialAddress = payload.basicProfile.residentialAddress.trim() || null;
+    const profilePhotoUrl = pickProfilePhotoUrl(payload);
+    const profileImageName = pickProfilePhotoName(payload);
+    const emergencyContact = pickEmergencyContact(payload);
 
     if (!payload.basicProfile.firstName || !payload.basicProfile.lastName || !sex || !payload.account.email) {
       return NextResponse.json(
@@ -300,6 +342,7 @@ export async function POST(request: Request) {
           date_of_birth: dateOfBirth,
           sex,
           residential_address: residentialAddress,
+          profile_photo_url: profilePhotoUrl,
           bio: buildProviderBio(payload),
           approval_status: "pending",
           is_visible: false,
@@ -327,6 +370,8 @@ export async function POST(request: Request) {
           certificate_image_captions: buildCaptionMap(payload, "certificateCaptions"),
           service_image_files: buildFileMap(payload, "imageFileNames"),
           certificate_image_files: buildFileMap(payload, "certificateFileNames"),
+          emergency_contact: emergencyContact,
+          profile_image_name: profileImageName,
           current_latitude: payload.providerLocation.latitude,
           current_longitude: payload.providerLocation.longitude,
         },
