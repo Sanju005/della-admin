@@ -105,6 +105,30 @@ function getProviderFullName(payload: ProviderRegistrationData) {
     .trim();
 }
 
+function normalizeDateOfBirth(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return trimmed;
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function upsertProviderVerification(
   adminClient: ReturnType<typeof getAdminSupabaseClient>,
   providerId: string,
@@ -156,6 +180,8 @@ export async function POST(request: Request) {
     const sex = payload.basicProfile.sex === "Male" || payload.basicProfile.sex === "Female"
       ? payload.basicProfile.sex
       : "";
+    const dateOfBirth = normalizeDateOfBirth(payload.basicProfile.dateOfBirth);
+    const residentialAddress = payload.basicProfile.residentialAddress.trim() || null;
 
     if (!payload.basicProfile.firstName || !payload.basicProfile.lastName || !sex || !payload.account.email) {
       return NextResponse.json(
@@ -270,7 +296,10 @@ export async function POST(request: Request) {
           service_location:
             payload.providerLocation.areaLabel.trim() ||
             payload.basicProfile.serviceLocation.trim(),
-          service_radius_km: payload.providerLocation.radius,
+          service_radius_km: payload.providerLocation.radius || payload.basicProfile.serviceRadius,
+          date_of_birth: dateOfBirth,
+          sex,
+          residential_address: residentialAddress,
           bio: buildProviderBio(payload),
           approval_status: "pending",
           is_visible: false,
