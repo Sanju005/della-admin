@@ -36,6 +36,24 @@ type CropDraft = {
   scale: number;
   offsetX: number;
   offsetY: number;
+  imageWidth: number;
+  imageHeight: number;
+  aspectRatio: number | null;
+  trimLeft: number;
+  trimRight: number;
+  trimTop: number;
+  trimBottom: number;
+  target:
+    | { kind: "profile" }
+    | { kind: "identityFront" }
+    | { kind: "identityBack" }
+    | { kind: "service"; serviceId: string };
+  remainingFiles: Array<{
+    fileName: string;
+    imageSrc: string;
+    imageWidth: number;
+    imageHeight: number;
+  }>;
 };
 
 const availabilityDayOptions = [
@@ -120,6 +138,18 @@ async function readFileAsDataUrl(file: File) {
   });
 }
 
+async function toCropSource(file: File) {
+  const imageSrc = await readFileAsDataUrl(file);
+  const image = await loadImageElement(imageSrc);
+
+  return {
+    fileName: file.name,
+    imageSrc,
+    imageWidth: image.width,
+    imageHeight: image.height,
+  };
+}
+
 async function loadImageElement(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -166,6 +196,143 @@ async function cropImageToSquare(
   );
 
   return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+async function cropImageToRect(
+  src: string,
+  originX: number,
+  originY: number,
+  cropWidth: number,
+  cropHeight: number,
+  outputWidth = 640,
+  outputHeight = 640,
+) {
+  const image = await loadImageElement(src);
+  const canvas = document.createElement("canvas");
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Canvas is not available.");
+  }
+
+  context.drawImage(
+    image,
+    originX,
+    originY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    outputWidth,
+    outputHeight,
+  );
+
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function getCropMetrics(draft: CropDraft) {
+  if (draft.aspectRatio) {
+    const baseCropHeight = Math.min(draft.imageWidth / draft.aspectRatio, draft.imageHeight);
+    const cropHeight = Math.max(80, baseCropHeight / Math.max(draft.scale, 1));
+    const cropWidth = cropHeight * draft.aspectRatio;
+    const maxX = Math.max(0, draft.imageWidth - cropWidth);
+    const maxY = Math.max(0, draft.imageHeight - cropHeight);
+    const centeredX = (draft.imageWidth - cropWidth) / 2;
+    const centeredY = (draft.imageHeight - cropHeight) / 2;
+
+    return {
+      cropWidth,
+      cropHeight,
+      maxX,
+      maxY,
+      centeredX,
+      centeredY,
+      originX: Math.min(maxX, Math.max(0, centeredX + draft.offsetX)),
+      originY: Math.min(maxY, Math.max(0, centeredY + draft.offsetY)),
+      aspectRatio: draft.aspectRatio,
+    };
+  }
+
+  const minSize = 80;
+  const trimLeft = Math.max(0, draft.trimLeft);
+  const trimRight = Math.max(0, Math.min(draft.trimRight, draft.imageWidth - minSize - trimLeft));
+  const left = Math.min(trimLeft, draft.imageWidth - minSize - trimRight);
+  const width = Math.max(minSize, draft.imageWidth - left - trimRight);
+
+  const trimTop = Math.max(0, draft.trimTop);
+  const trimBottom = Math.max(0, Math.min(draft.trimBottom, draft.imageHeight - minSize - trimTop));
+  const top = Math.min(trimTop, draft.imageHeight - minSize - trimBottom);
+  const height = Math.max(minSize, draft.imageHeight - top - trimBottom);
+
+  return {
+    cropWidth: width,
+    cropHeight: height,
+    maxX: draft.imageWidth - minSize,
+    maxY: draft.imageHeight - minSize,
+    centeredX: 0,
+    centeredY: 0,
+    originX: left,
+    originY: top,
+    aspectRatio: width / height,
+  };
+}
+
+function clampCropDraft(draft: CropDraft): CropDraft {
+  const metrics = getCropMetrics(draft);
+
+  if (draft.aspectRatio) {
+    const minOffsetX = -metrics.centeredX;
+    const maxOffsetX = metrics.maxX - metrics.centeredX;
+    const minOffsetY = -metrics.centeredY;
+    const maxOffsetY = metrics.maxY - metrics.centeredY;
+
+    return {
+      ...draft,
+      offsetX: Math.min(maxOffsetX, Math.max(minOffsetX, draft.offsetX)),
+      offsetY: Math.min(maxOffsetY, Math.max(minOffsetY, draft.offsetY)),
+      trimLeft: 0,
+      trimRight: 0,
+      trimTop: 0,
+      trimBottom: 0,
+    };
+  }
+
+  const minSize = 80;
+  const trimLeft = Math.max(0, Math.min(draft.trimLeft, draft.imageWidth - minSize));
+  const trimRight = Math.max(0, Math.min(draft.trimRight, draft.imageWidth - minSize - trimLeft));
+  const trimTop = Math.max(0, Math.min(draft.trimTop, draft.imageHeight - minSize));
+  const trimBottom = Math.max(0, Math.min(draft.trimBottom, draft.imageHeight - minSize - trimTop));
+
+  return {
+    ...draft,
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    trimLeft,
+    trimRight,
+    trimTop,
+    trimBottom,
+  };
+}
+
+function getCropPreviewStyle(draft: CropDraft, frameSize: number) {
+  const normalizedDraft = clampCropDraft(draft);
+  const metrics = getCropMetrics(normalizedDraft);
+  const previewScale = frameSize / metrics.cropWidth;
+  const originX = metrics.originX;
+  const originY = metrics.originY;
+
+  return {
+    previewScale,
+    style: {
+      width: `${normalizedDraft.imageWidth * previewScale}px`,
+      height: `${normalizedDraft.imageHeight * previewScale}px`,
+      transform: `translate(${-originX * previewScale}px, ${-originY * previewScale}px)`,
+      transformOrigin: "top left",
+    },
+  };
 }
 
 function UploadedAssetCard({
@@ -249,11 +416,34 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
   const identityFrontInputRef = useRef<HTMLInputElement | null>(null);
   const identityBackInputRef = useRef<HTMLInputElement | null>(null);
   const serviceFileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const cropPreviewRef = useRef<HTMLDivElement | null>(null);
+  const cropDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startOffsetX: number;
+    startOffsetY: number;
+  } | null>(null);
 
   const needsIdentityBack = useMemo(
     () => form.identityDocumentType !== "Passport",
     [form.identityDocumentType],
   );
+  const cropBounds = useMemo(() => {
+    if (!cropDraft) {
+      return null;
+    }
+
+    const normalizedDraft = clampCropDraft(cropDraft);
+    const metrics = getCropMetrics(normalizedDraft);
+
+    return {
+      minOffsetX: -metrics.centeredX,
+      maxOffsetX: metrics.maxX - metrics.centeredX,
+      minOffsetY: -metrics.centeredY,
+      maxOffsetY: metrics.maxY - metrics.centeredY,
+    };
+  }, [cropDraft]);
 
   function updateField(key: string, value: string | boolean) {
     setForm((current) => ({
@@ -285,6 +475,62 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
     setServices((current) => (current.length > 1 ? current.filter((service) => service.id !== serviceId) : current));
   }
 
+  function openCropDraft(
+    source: {
+      fileName: string;
+      imageSrc: string;
+      imageWidth: number;
+      imageHeight: number;
+    },
+    target: CropDraft["target"],
+    aspectRatio: number | null,
+    remainingFiles: CropDraft["remainingFiles"] = [],
+  ) {
+    setCropDraft(
+      clampCropDraft({
+        ...source,
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0,
+        aspectRatio,
+        trimLeft: 0,
+        trimRight: 0,
+        trimTop: 0,
+        trimBottom: 0,
+        target,
+        remainingFiles,
+      }),
+    );
+  }
+
+  function applyCroppedAsset(
+    target: CropDraft["target"],
+    asset: UploadedAsset,
+  ) {
+    if (target.kind === "profile") {
+      setProfilePhoto(asset);
+      return;
+    }
+
+    if (target.kind === "identityFront") {
+      setIdentityFront(asset);
+      return;
+    }
+
+    if (target.kind === "identityBack") {
+      setIdentityBack(asset);
+      return;
+    }
+
+    setServices((current) =>
+      current.map((service) =>
+        service.id === target.serviceId
+          ? { ...service, workImages: [...service.workImages, asset].slice(0, 6) }
+          : service,
+      ),
+    );
+  }
+
   async function handleProfileImageSelect(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -293,14 +539,8 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
       return;
     }
 
-    const imageSrc = await readFileAsDataUrl(file);
-    setCropDraft({
-      fileName: file.name,
-      imageSrc,
-      scale: 1,
-      offsetX: 0,
-      offsetY: 0,
-    });
+    const source = await toCropSource(file);
+    openCropDraft(source, { kind: "profile" }, 1);
   }
 
   async function applyProfileCrop() {
@@ -308,24 +548,94 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
       return;
     }
 
-    const dataUrl = await cropImageToSquare(
-      cropDraft.imageSrc,
-      cropDraft.scale,
-      cropDraft.offsetX,
-      cropDraft.offsetY,
+    const normalizedDraft = clampCropDraft(cropDraft);
+    const metrics = getCropMetrics(normalizedDraft);
+    const outputHeight = normalizedDraft.aspectRatio === 2 ? 640 : 640;
+    const outputWidth =
+      normalizedDraft.aspectRatio === null ? Math.round(640 * metrics.aspectRatio) : Math.round(outputHeight * metrics.aspectRatio);
+    const dataUrl = await cropImageToRect(
+      normalizedDraft.imageSrc,
+      metrics.originX,
+      metrics.originY,
+      metrics.cropWidth,
+      metrics.cropHeight,
+      outputWidth,
+      outputHeight,
     );
 
-    setProfilePhoto({
-      fileName: cropDraft.fileName,
+    applyCroppedAsset(normalizedDraft.target, {
+      fileName: normalizedDraft.fileName,
       dataUrl,
-      caption: "Profile image",
+      caption:
+        normalizedDraft.target.kind === "profile"
+          ? "Profile image"
+          : normalizedDraft.fileName.replace(/\.[^.]+$/, ""),
     });
+
+    const nextFile = normalizedDraft.remainingFiles[0];
+    if (nextFile) {
+      openCropDraft(
+        nextFile,
+        normalizedDraft.target,
+        normalizedDraft.aspectRatio,
+        normalizedDraft.remainingFiles.slice(1),
+      );
+      return;
+    }
+
     setCropDraft(null);
+  }
+
+  function updateCropDraft(patch: Partial<CropDraft>) {
+    setCropDraft((current) => (current ? clampCropDraft({ ...current, ...patch }) : current));
+  }
+
+  function handleCropPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!cropDraft) {
+      return;
+    }
+
+    cropDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffsetX: cropDraft.offsetX,
+      startOffsetY: cropDraft.offsetY,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleCropPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!cropDraft || !cropDragRef.current || cropDragRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const frameSize = cropPreviewRef.current?.getBoundingClientRect().width ?? 420;
+    const { previewScale } = getCropPreviewStyle(cropDraft, frameSize);
+    const deltaX = (event.clientX - cropDragRef.current.startX) / Math.max(previewScale, 0.0001);
+    const deltaY = (event.clientY - cropDragRef.current.startY) / Math.max(previewScale, 0.0001);
+
+    setCropDraft((current) =>
+      current
+        ? clampCropDraft({
+            ...current,
+            offsetX: cropDragRef.current!.startOffsetX - deltaX,
+            offsetY: cropDragRef.current!.startOffsetY - deltaY,
+          })
+        : current,
+    );
+  }
+
+  function handleCropPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (cropDragRef.current?.pointerId === event.pointerId) {
+      cropDragRef.current = null;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }
 
   async function handleSimpleImageUpload(
     event: React.ChangeEvent<HTMLInputElement>,
-    setter: (asset: UploadedAsset | null) => void,
+    target: CropDraft["target"],
   ) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -334,11 +644,8 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
       return;
     }
 
-    setter({
-      fileName: file.name,
-      dataUrl: await readFileAsDataUrl(file),
-      caption: file.name,
-    });
+    const source = await toCropSource(file);
+    openCropDraft(source, target, null);
   }
 
   async function handleServiceImagesUpload(
@@ -352,21 +659,11 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
       return;
     }
 
-    const nextAssets = await Promise.all(
-      fileList.map(async (file) => ({
-        fileName: file.name,
-        dataUrl: await readFileAsDataUrl(file),
-        caption: file.name.replace(/\.[^.]+$/, ""),
-      })),
-    );
-
-    setServices((current) =>
-      current.map((service) =>
-        service.id === serviceId
-          ? { ...service, workImages: [...service.workImages, ...nextAssets].slice(0, 6) }
-          : service,
-      ),
-    );
+    const [firstFile, ...remainingQueue] = await Promise.all(fileList.map(toCropSource));
+    if (!firstFile) {
+      return;
+    }
+    openCropDraft(firstFile, { kind: "service", serviceId }, 2, remainingQueue);
   }
 
   function buildUploadedAsset(asset: UploadedAsset): UploadedAssetInput {
@@ -874,7 +1171,7 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
                     <button type="button" onClick={() => identityFrontInputRef.current?.click()} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700">
                       Upload
                     </button>
-                    <input ref={identityFrontInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleSimpleImageUpload(event, setIdentityFront)} />
+                    <input ref={identityFrontInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleSimpleImageUpload(event, { kind: "identityFront" })} />
                   </div>
                   <div className="mt-3">
                     {identityFront ? (
@@ -894,7 +1191,7 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
                       <button type="button" onClick={() => identityBackInputRef.current?.click()} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700">
                         Upload
                       </button>
-                      <input ref={identityBackInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleSimpleImageUpload(event, setIdentityBack)} />
+                      <input ref={identityBackInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleSimpleImageUpload(event, { kind: "identityBack" })} />
                     </div>
                     <div className="mt-3">
                       {identityBack ? (
@@ -933,8 +1230,20 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
           <div className="w-full max-w-2xl rounded-[28px] border border-white/20 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.35)]">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-950">Crop Profile Image</h3>
-                <p className="mt-1 text-sm text-slate-500">Adjust the crop and save the square profile image.</p>
+                <h3 className="text-lg font-bold text-slate-950">
+                  {cropDraft.target.kind === "profile"
+                    ? "Crop Profile Image"
+                    : cropDraft.target.kind === "service"
+                      ? "Crop Work Image"
+                      : `Crop ${cropDraft.target.kind === "identityFront" ? `${form.identityDocumentType} Front` : `${form.identityDocumentType} Back`}`}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {cropDraft.aspectRatio === 1
+                    ? "Square crop is locked to 1:1 for profile photos."
+                    : cropDraft.aspectRatio === 2
+                      ? "Work image crop is locked to 2:1."
+                      : "Adjust each edge independently for document cropping."}
+                </p>
               </div>
               <button type="button" onClick={() => setCropDraft(null)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                 Close
@@ -942,56 +1251,124 @@ export function AccountCreatePage({ accountType }: AccountCreatePageProps) {
             </div>
 
             <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100 p-4">
-              <div className="mx-auto aspect-square max-w-[420px] overflow-hidden rounded-[28px] border border-dashed border-slate-300 bg-white">
+              <div
+                ref={cropPreviewRef}
+                className="mx-auto aspect-square max-w-[420px] cursor-grab touch-none overflow-hidden rounded-[28px] border border-dashed border-slate-300 bg-white active:cursor-grabbing"
+                style={{
+                  aspectRatio: String(cropDraft.aspectRatio ?? getCropMetrics(cropDraft).aspectRatio),
+                  maxHeight: "420px",
+                }}
+                onPointerDown={handleCropPointerDown}
+                onPointerMove={handleCropPointerMove}
+                onPointerUp={handleCropPointerUp}
+                onPointerCancel={handleCropPointerUp}
+              >
                 <img
                   src={cropDraft.imageSrc}
                   alt={cropDraft.fileName}
-                  className="h-full w-full object-cover"
-                  style={{
-                    transform: `scale(${cropDraft.scale}) translate(${cropDraft.offsetX}px, ${cropDraft.offsetY}px)`,
-                  }}
+                  className="pointer-events-none select-none"
+                  draggable={false}
+                  style={getCropPreviewStyle(cropDraft, cropPreviewRef.current?.getBoundingClientRect().width ?? 420).style}
                 />
               </div>
+              <p className="mt-3 text-center text-xs font-medium text-slate-500">
+                {cropDraft.aspectRatio
+                  ? "Drag the image to reposition inside the locked crop."
+                  : "Use the edge sliders below to trim the document exactly as needed."}
+              </p>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <FieldLabel>
-                <span>Zoom</span>
-                <input
-                  type="range"
-                  min="1"
-                  max="3"
-                  step="0.1"
-                  value={cropDraft.scale}
-                  onChange={(event) => setCropDraft((current) => current ? { ...current, scale: Number(event.target.value) } : current)}
-                  className="w-full"
-                />
-              </FieldLabel>
-              <FieldLabel>
-                <span>Left / Right</span>
-                <input
-                  type="range"
-                  min="-120"
-                  max="120"
-                  step="2"
-                  value={cropDraft.offsetX}
-                  onChange={(event) => setCropDraft((current) => current ? { ...current, offsetX: Number(event.target.value) } : current)}
-                  className="w-full"
-                />
-              </FieldLabel>
-              <FieldLabel>
-                <span>Up / Down</span>
-                <input
-                  type="range"
-                  min="-120"
-                  max="120"
-                  step="2"
-                  value={cropDraft.offsetY}
-                  onChange={(event) => setCropDraft((current) => current ? { ...current, offsetY: Number(event.target.value) } : current)}
-                  className="w-full"
-                />
-              </FieldLabel>
-            </div>
+            {cropDraft.aspectRatio ? (
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <FieldLabel>
+                  <span>Zoom</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="3"
+                    step="0.1"
+                    value={cropDraft.scale}
+                    onChange={(event) => updateCropDraft({ scale: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+                <FieldLabel>
+                  <span>Left / Right</span>
+                  <input
+                    type="range"
+                    min={cropBounds ? Math.floor(cropBounds.minOffsetX) : -120}
+                    max={cropBounds ? Math.ceil(cropBounds.maxOffsetX) : 120}
+                    step="1"
+                    value={cropDraft.offsetX}
+                    onChange={(event) => updateCropDraft({ offsetX: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+                <FieldLabel>
+                  <span>Up / Down</span>
+                  <input
+                    type="range"
+                    min={cropBounds ? Math.floor(cropBounds.minOffsetY) : -120}
+                    max={cropBounds ? Math.ceil(cropBounds.maxOffsetY) : 120}
+                    step="1"
+                    value={cropDraft.offsetY}
+                    onChange={(event) => updateCropDraft({ offsetY: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <FieldLabel>
+                  <span>Trim Left Edge</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(0, cropDraft.imageWidth - 80 - cropDraft.trimRight)}
+                    step="1"
+                    value={cropDraft.trimLeft}
+                    onChange={(event) => updateCropDraft({ trimLeft: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+                <FieldLabel>
+                  <span>Trim Right Edge</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(0, cropDraft.imageWidth - 80 - cropDraft.trimLeft)}
+                    step="1"
+                    value={cropDraft.trimRight}
+                    onChange={(event) => updateCropDraft({ trimRight: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+                <FieldLabel>
+                  <span>Trim Top Edge</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(0, cropDraft.imageHeight - 80 - cropDraft.trimBottom)}
+                    step="1"
+                    value={cropDraft.trimTop}
+                    onChange={(event) => updateCropDraft({ trimTop: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+                <FieldLabel>
+                  <span>Trim Bottom Edge</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(0, cropDraft.imageHeight - 80 - cropDraft.trimTop)}
+                    step="1"
+                    value={cropDraft.trimBottom}
+                    onChange={(event) => updateCropDraft({ trimBottom: Number(event.target.value) })}
+                    className="w-full"
+                  />
+                </FieldLabel>
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => setCropDraft(null)} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700">
