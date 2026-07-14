@@ -57,8 +57,8 @@ function DashboardBlock({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[28px] border border-[#F0E7EE] bg-white px-5 py-4 shadow-[0_12px_32px_rgba(225,58,129,0.08)] ${className}`}>
-      <div className="flex items-center justify-between gap-3">
+    <section className={`rounded-[28px] border border-[#F0E7EE] bg-white px-6 py-5 shadow-[0_12px_32px_rgba(225,58,129,0.08)] ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="grid size-11 place-items-center rounded-2xl bg-[linear-gradient(135deg,rgba(245,66,145,0.14),rgba(255,189,219,0.35))] text-[#E13A81]">
             {icon}
@@ -99,7 +99,7 @@ function StatMiniCard({
 }) {
   const positive = !delta.trim().startsWith("-");
   return (
-    <article className="min-h-[176px] rounded-[24px] border border-[#EEE6F7] bg-white px-5 py-5 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
+    <article className="min-h-[176px] rounded-[24px] border border-[#EEE6F7] bg-white px-6 py-5 shadow-[0_10px_28px_rgba(109,65,221,0.05)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[13px] font-medium text-slate-500">{label}</p>
@@ -240,9 +240,9 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-5 xl:grid-cols-3">
+      <section className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))] 2xl:[grid-template-columns:repeat(3,minmax(0,1fr))]">
         <DashboardBlock title="Users" icon={<Users className="size-5" />} action={<FilterChip label="This Month" />}>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
             <StatMiniCard
               label="New Users"
               value={formatPlainNumber(Math.max(1, Math.round(totals.totalUsers * 0.14)))}
@@ -261,7 +261,7 @@ export function DashboardPage() {
         </DashboardBlock>
 
         <DashboardBlock title="Providers" icon={<BriefcaseBusiness className="size-5" />} action={<FilterChip label="This Month" />}>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
             <StatMiniCard
               label="New Providers"
               value={formatPlainNumber(Math.max(1, Math.round(totals.totalProviders * 0.13)))}
@@ -280,7 +280,7 @@ export function DashboardPage() {
         </DashboardBlock>
 
         <DashboardBlock title="Tasks" icon={<ClipboardList className="size-5" />} action={<FilterChip label="This Month" />}>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))]">
             <StatMiniCard
               label="Active Tasks"
               value={formatPlainNumber(totals.activeTasks)}
