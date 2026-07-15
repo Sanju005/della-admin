@@ -835,6 +835,26 @@ export function ProviderProfilePage() {
       ),
     [adminDocumentMatches.identityBack?.label, adminDocumentMatches.identityFront?.label, safeDetail.nationalId],
   );
+  const detailIdentityFrontDocument = useMemo(
+    () =>
+      safeDetail.documents.find((item) => {
+        const label = item.label.trim().toLowerCase();
+        return label === "identity verification" ||
+          label === "identity document" ||
+          label === safeDetail.nationalId.trim().toLowerCase();
+      }) ?? null,
+    [safeDetail.documents, safeDetail.nationalId],
+  );
+  const detailIdentityBackDocument = useMemo(
+    () =>
+      safeDetail.documents.find((item) => item.label.trim().toLowerCase() === "back of document") ?? null,
+    [safeDetail.documents],
+  );
+  const detailDrivingLicenseDocument = useMemo(
+    () =>
+      safeDetail.documents.find((item) => item.label.trim().toLowerCase() === "driving license") ?? null,
+    [safeDetail.documents],
+  );
 
   const verificationDocuments = useMemo(
     () => [
@@ -846,17 +866,17 @@ export function ProviderProfilePage() {
         documentType: "ic_front",
         status:
           adminDocumentMatches.identityFront?.status ??
-          safeDetail.documents.find((item) => item.label === "Identity Verification")?.status ??
+          detailIdentityFrontDocument?.status ??
           "Pending",
         fileName:
           adminDocumentMatches.identityFront?.fileName ??
-          safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileName,
+          detailIdentityFrontDocument?.fileName,
         fileUrl:
           adminDocumentMatches.identityFront?.fileUrl ??
-          safeDetail.documents.find((item) => item.label === "Identity Verification")?.fileUrl,
+          detailIdentityFrontDocument?.fileUrl,
         note:
           adminDocumentMatches.identityFront?.note ??
-          safeDetail.documents.find((item) => item.label === "Identity Verification")?.note,
+          detailIdentityFrontDocument?.note,
       },
       {
         id: "verify-ic-back",
@@ -864,17 +884,17 @@ export function ProviderProfilePage() {
         documentType: "ic_back",
         status:
           adminDocumentMatches.identityBack?.status ??
-          safeDetail.documents.find((item) => item.label === "Back of Document")?.status ??
+          detailIdentityBackDocument?.status ??
           "Pending",
         fileName:
           adminDocumentMatches.identityBack?.fileName ??
-          safeDetail.documents.find((item) => item.label === "Back of Document")?.fileName,
+          detailIdentityBackDocument?.fileName,
         fileUrl:
           adminDocumentMatches.identityBack?.fileUrl ??
-          safeDetail.documents.find((item) => item.label === "Back of Document")?.fileUrl,
+          detailIdentityBackDocument?.fileUrl,
         note:
           adminDocumentMatches.identityBack?.note ??
-          safeDetail.documents.find((item) => item.label === "Back of Document")?.note,
+          detailIdentityBackDocument?.note,
       },
       {
         id: "verify-license",
@@ -882,17 +902,17 @@ export function ProviderProfilePage() {
         documentType: "driving_license",
         status:
           adminDocumentMatches.drivingLicense?.status ??
-          safeDetail.documents.find((item) => item.label === "Driving License")?.status ??
+          detailDrivingLicenseDocument?.status ??
           (safeDetail.requestedDocuments.includes("IC / Passport / Driving License") ? "Requested" : "Pending"),
         fileName:
           adminDocumentMatches.drivingLicense?.fileName ??
-          safeDetail.documents.find((item) => item.label === "Driving License")?.fileName,
+          detailDrivingLicenseDocument?.fileName,
         fileUrl:
           adminDocumentMatches.drivingLicense?.fileUrl ??
-          safeDetail.documents.find((item) => item.label === "Driving License")?.fileUrl,
+          detailDrivingLicenseDocument?.fileUrl,
         note:
           adminDocumentMatches.drivingLicense?.note ??
-          safeDetail.documents.find((item) => item.label === "Driving License")?.note,
+          detailDrivingLicenseDocument?.note,
       },
       {
         id: "verify-resume",
@@ -917,7 +937,7 @@ export function ProviderProfilePage() {
         note: adminDocumentMatches.certificate?.note,
       },
     ],
-    [adminDocumentMatches, identityDocumentLabel, safeDetail]
+    [adminDocumentMatches, detailDrivingLicenseDocument, detailIdentityBackDocument, detailIdentityFrontDocument, identityDocumentLabel, safeDetail]
   );
 
   if (loading && !provider) {

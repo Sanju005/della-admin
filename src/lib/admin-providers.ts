@@ -1985,6 +1985,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     emergencyContact:
       metadata?.emergency_contact?.trim() ||
       overviewFallback?.provider?.emergency_contact?.trim() ||
+      overviewFallback?.provider?.verification_phone?.trim() ||
       registrationFallback?.emergencyContact ||
       baseDetail.emergencyContact,
     address: liveProfile.residential_address?.trim() || registrationFallback?.residentialAddress || baseDetail.address,
