@@ -505,7 +505,10 @@ function buildGeneratedUserDetail(
       role === "provider"
         ? formatDateOfBirth(providerProfile?.date_of_birth)
         : formatDateOfBirth(customerProfile?.date_of_birth),
-    gender: role === "provider" ? providerProfile?.sex?.trim() || "Not provided" : "Not provided",
+    gender:
+      role === "provider"
+        ? providerProfile?.sex?.trim() || "Not provided"
+        : customerProfile?.sex?.trim() || "Not provided",
     city,
     region: role === "provider" ? "Not provided" : customerRegion,
     country: role === "provider" ? "Malaysia" : customerCountry,
@@ -1053,7 +1056,7 @@ async function fetchProfiles() {
   const [{ data: customerProfiles }, { data: providerProfiles }] = await Promise.all([
     supabase
       .from("customer_profiles")
-      .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, verified, completion")
+        .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, sex, verified, completion")
       .in("id", ids),
     supabase
       .from("provider_profiles")
@@ -1105,7 +1108,7 @@ async function fetchProfileById(userId: string) {
   const [{ data: customerProfile }, { data: providerProfile }] = await Promise.all([
     supabase
       .from("customer_profiles")
-      .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, verified, completion")
+        .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, sex, verified, completion")
       .eq("id", userId)
       .maybeSingle(),
     supabase
