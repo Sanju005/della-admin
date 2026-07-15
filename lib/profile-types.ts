@@ -8,6 +8,7 @@ export type CustomerProfile = {
   countryCode: string;
   city: string;
   region: string;
+  country: string;
   verified: boolean;
   completion: number;
 };

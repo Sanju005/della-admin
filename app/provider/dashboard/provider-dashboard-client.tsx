@@ -36,8 +36,16 @@ type ProviderDashboardData = {
   phone: string;
   accountStatus: string;
   marketingName: string;
+  profilePhotoUrl?: string;
   serviceLocation: string;
   serviceRadiusKm: number;
+  dateOfBirth?: string;
+  sex?: string;
+  residentialAddress?: string;
+  emergencyContact?: string;
+  availabilityDays?: string;
+  availabilityHours?: string;
+  currentCoordinates?: string;
   bio: string;
   approvalStatus: string;
   isVisible: boolean;
@@ -141,6 +149,9 @@ export function ProviderDashboardClient() {
     serviceLocation: "",
     serviceRadiusKm: "0",
     bio: "",
+    emergencyContact: "",
+    availabilityDays: "",
+    availabilityHours: "",
   });
 
   useEffect(() => {
@@ -210,6 +221,9 @@ export function ProviderDashboardClient() {
         serviceLocation: result.serviceLocation,
         serviceRadiusKm: String(result.serviceRadiusKm),
         bio: result.bio,
+        emergencyContact: result.emergencyContact ?? "",
+        availabilityDays: result.availabilityDays ?? "",
+        availabilityHours: result.availabilityHours ?? "",
       });
       if (bookingsResponse.ok && "bookings" in bookingsResult) {
         setBookings(bookingsResult.bookings);
@@ -371,6 +385,9 @@ export function ProviderDashboardClient() {
           serviceLocation: form.serviceLocation,
           serviceRadiusKm: Number(form.serviceRadiusKm),
           bio: form.bio,
+          emergencyContact: form.emergencyContact,
+          availabilityDays: form.availabilityDays,
+          availabilityHours: form.availabilityHours,
         }),
       });
 
@@ -812,6 +829,9 @@ export function ProviderDashboardClient() {
             <Field label="Marketing Name" value={form.marketingName} editing={editing} onChange={(value) => setForm((current) => ({ ...current, marketingName: value }))} />
             <Field label="Service Location" value={form.serviceLocation} editing={editing} onChange={(value) => setForm((current) => ({ ...current, serviceLocation: value }))} icon={<MapPin className="h-4 w-4 text-[#6b7280]" />} />
             <Field label="Service Radius (KM)" value={form.serviceRadiusKm} editing={editing} onChange={(value) => setForm((current) => ({ ...current, serviceRadiusKm: value }))} />
+            <Field label="Emergency Contact" value={form.emergencyContact} editing={editing} onChange={(value) => setForm((current) => ({ ...current, emergencyContact: value }))} icon={<Phone className="h-4 w-4 text-[#6b7280]" />} />
+            <Field label="Availability Days" value={form.availabilityDays} editing={editing} onChange={(value) => setForm((current) => ({ ...current, availabilityDays: value }))} icon={<CalendarDays className="h-4 w-4 text-[#6b7280]" />} />
+            <Field label="Availability Hours" value={form.availabilityHours} editing={editing} onChange={(value) => setForm((current) => ({ ...current, availabilityHours: value }))} icon={<CalendarDays className="h-4 w-4 text-[#6b7280]" />} />
             <FieldArea label="Bio" value={form.bio} editing={editing} onChange={(value) => setForm((current) => ({ ...current, bio: value }))} />
           </div>
 
@@ -826,6 +846,16 @@ export function ProviderDashboardClient() {
               {isSaving ? "Saving..." : "Save Listing"}
             </button>
           ) : null}
+        </section>
+
+        <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">
+          <h2 className="text-[18px] font-extrabold text-[#111827]">Provider Details</h2>
+          <div className="mt-4 grid gap-3">
+            <StatusRow icon={<Phone className="h-4.5 w-4.5 text-[#16a34a]" />} label="Emergency Contact" value={data.emergencyContact || "Not provided"} />
+            <StatusRow icon={<CalendarDays className="h-4.5 w-4.5 text-[#16a34a]" />} label="Availability Days" value={data.availabilityDays || "Not set"} />
+            <StatusRow icon={<CalendarDays className="h-4.5 w-4.5 text-[#16a34a]" />} label="Availability Hours" value={data.availabilityHours || "Not set"} />
+            <StatusRow icon={<MapPin className="h-4.5 w-4.5 text-[#16a34a]" />} label="Current Coordinates" value={data.currentCoordinates || "Not captured"} />
+          </div>
         </section>
 
         <section className="rounded-[24px] border border-[#dbe8df] bg-white p-5 shadow-[0_18px_50px_rgba(22,163,74,0.07)]">

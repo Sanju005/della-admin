@@ -23,11 +23,35 @@ type ProviderServiceRow = {
 type ProviderProfileRow = {
   id: string;
   marketing_name: string | null;
+  profile_photo_url?: string | null;
   service_location: string | null;
   service_radius_km: number | null;
+  date_of_birth?: string | null;
+  sex?: string | null;
+  residential_address?: string | null;
   bio: string | null;
   approval_status: string | null;
   is_visible: boolean | null;
+  provider_admin_metadata?:
+    | {
+        availability_days?: string[] | null;
+        availability_time_preset?: string | null;
+        availability_start_time?: string | null;
+        availability_end_time?: string | null;
+        emergency_contact?: string | null;
+        current_latitude?: number | null;
+        current_longitude?: number | null;
+      }
+    | Array<{
+        availability_days?: string[] | null;
+        availability_time_preset?: string | null;
+        availability_start_time?: string | null;
+        availability_end_time?: string | null;
+        emergency_contact?: string | null;
+        current_latitude?: number | null;
+        current_longitude?: number | null;
+      }>
+    | null;
   provider_services: ProviderServiceRow[] | null;
   provider_verifications:
     | {
@@ -55,6 +79,24 @@ type ProfileRow = {
   status: string | null;
   phone: string | null;
 };
+
+function normalizeRole(value: string | null | undefined) {
+  return value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+}
+
+function isProviderRole(value: string | null | undefined) {
+  const normalized = normalizeRole(value);
+  return normalized === "provider" || normalized === "service_provider";
+}
+
+function splitFullName(fullName: string) {
+  const [firstName = "", ...rest] = fullName.trim().split(/\s+/).filter(Boolean);
+
+  return {
+    firstName,
+    lastName: rest.join(" "),
+  };
+}
 
 function getAdminSupabaseClient() {
   const url = getSupabaseUrl();
@@ -93,6 +135,48 @@ function toTitleCase(value: string | null | undefined) {
     .join(" ");
 }
 
+function formatAvailabilityDays(days: string[] | null | undefined) {
+  const cleanDays = (days ?? []).map((value) => value.trim()).filter(Boolean);
+
+  if (!cleanDays.length) {
+    return "Not set";
+  }
+
+  return cleanDays.join(", ");
+}
+
+function formatAvailabilityHours(metadata: {
+  availability_time_preset?: string | null;
+  availability_start_time?: string | null;
+  availability_end_time?: string | null;
+} | null | undefined) {
+  if (!metadata) {
+    return "Not set";
+  }
+
+  const preset = metadata.availability_time_preset?.trim() || "";
+  const start = metadata.availability_start_time?.trim() || "";
+  const end = metadata.availability_end_time?.trim() || "";
+
+  if (preset && preset.toLowerCase() !== "custom time") {
+    return preset;
+  }
+
+  if (start && end) {
+    return `${start} - ${end}`;
+  }
+
+  return preset || "Not set";
+}
+
+function formatCoordinates(latitude: number | null | undefined, longitude: number | null | undefined) {
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return "Not captured";
+  }
+
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+}
+
 async function verifyProviderRequest(request: Request) {
   const adminClient = getAdminSupabaseClient();
 
@@ -128,7 +212,7 @@ async function verifyProviderRequest(request: Request) {
     return { error: NextResponse.json({ error: "Provider profile was not found." }, { status: 404 }) };
   }
 
-  if (profile.role !== "provider") {
+  if (!isProviderRole(profile.role)) {
     return { error: NextResponse.json({ error: "This account is not a provider." }, { status: 403 }) };
   }
 
@@ -182,11 +266,24 @@ async function fetchProviderSnapshot(
     .select(`
       id,
       marketing_name,
+      profile_photo_url,
       service_location,
       service_radius_km,
+      date_of_birth,
+      sex,
+      residential_address,
       bio,
       approval_status,
       is_visible,
+      provider_admin_metadata (
+        availability_days,
+        availability_time_preset,
+        availability_start_time,
+        availability_end_time,
+        emergency_contact,
+        current_latitude,
+        current_longitude
+      ),
       provider_services (
         id,
         service_type,
@@ -217,6 +314,7 @@ async function fetchProviderSnapshot(
 
 function buildResponse(profile: ProfileRow, providerProfile: ProviderProfileRow, authUser: { email_confirmed_at?: string | null }) {
   const verification = relationItem(providerProfile.provider_verifications);
+  const metadata = relationItem(providerProfile.provider_admin_metadata);
 
   return {
     providerId: profile.id,
@@ -225,8 +323,16 @@ function buildResponse(profile: ProfileRow, providerProfile: ProviderProfileRow,
     phone: profile.phone ?? "",
     accountStatus: toTitleCase(profile.status),
     marketingName: providerProfile.marketing_name ?? "",
+    profilePhotoUrl: providerProfile.profile_photo_url ?? "",
     serviceLocation: providerProfile.service_location ?? "",
     serviceRadiusKm: providerProfile.service_radius_km ?? 0,
+    dateOfBirth: providerProfile.date_of_birth ?? "",
+    sex: providerProfile.sex ?? "",
+    residentialAddress: providerProfile.residential_address ?? "",
+    emergencyContact: metadata?.emergency_contact ?? "",
+    availabilityDays: formatAvailabilityDays(metadata?.availability_days),
+    availabilityHours: formatAvailabilityHours(metadata),
+    currentCoordinates: formatCoordinates(metadata?.current_latitude, metadata?.current_longitude),
     bio: providerProfile.bio ?? "",
     approvalStatus: toTitleCase(providerProfile.approval_status),
     isVisible: Boolean(providerProfile.is_visible),
@@ -277,7 +383,45 @@ type UpdatePayload = {
   serviceLocation?: string;
   serviceRadiusKm?: number;
   bio?: string;
+  emergencyContact?: string;
+  availabilityDays?: string;
+  availabilityHours?: string;
 };
+
+function parseAvailabilityDays(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseAvailabilityHours(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      preset: null as string | null,
+      start: null as string | null,
+      end: null as string | null,
+    };
+  }
+
+  const rangeMatch = trimmed.match(/^(.+?)\s*-\s*(.+)$/);
+
+  if (rangeMatch) {
+    return {
+      preset: "Custom Time",
+      start: rangeMatch[1].trim() || null,
+      end: rangeMatch[2].trim() || null,
+    };
+  }
+
+  return {
+    preset: trimmed,
+    start: null,
+    end: null,
+  };
+}
 
 export async function PATCH(request: Request) {
   const verified = await verifyProviderRequest(request);
@@ -287,11 +431,18 @@ export async function PATCH(request: Request) {
   }
 
   const payload = (await request.json()) as UpdatePayload;
+  const nextFullName = payload.fullName?.trim() ?? "";
+  const nextMarketingName = payload.marketingName?.trim() ?? "";
+  const nextEmergencyContact = payload.emergencyContact?.trim() ?? "";
+  const nextAvailabilityDays =
+    typeof payload.availabilityDays === "string" ? parseAvailabilityDays(payload.availabilityDays) : null;
+  const nextAvailabilityHours =
+    typeof payload.availabilityHours === "string" ? parseAvailabilityHours(payload.availabilityHours) : null;
 
-  if (typeof payload.fullName === "string" && payload.fullName.trim()) {
+  if (nextFullName) {
     const { error } = await verified.adminClient
       .from("profiles")
-      .update({ full_name: payload.fullName.trim() })
+      .update({ full_name: nextFullName })
       .eq("id", verified.profile.id);
 
     if (error) {
@@ -299,9 +450,35 @@ export async function PATCH(request: Request) {
     }
   }
 
+  if (nextFullName || nextMarketingName) {
+    const currentMetadata =
+      verified.authUser.user_metadata && typeof verified.authUser.user_metadata === "object"
+        ? verified.authUser.user_metadata
+        : {};
+    const nameParts = nextFullName ? splitFullName(nextFullName) : null;
+
+    const { error } = await verified.adminClient.auth.admin.updateUserById(verified.profile.id, {
+      user_metadata: {
+        ...currentMetadata,
+        ...(nextFullName
+          ? {
+              full_name: nextFullName,
+              first_name: nameParts?.firstName ?? "",
+              last_name: nameParts?.lastName ?? "",
+            }
+          : {}),
+        ...(nextMarketingName ? { marketing_name: nextMarketingName } : {}),
+      },
+    });
+
+    if (error) {
+      return NextResponse.json({ error: error.message || "Unable to update provider account metadata." }, { status: 500 });
+    }
+  }
+
   const providerPayload = Object.fromEntries(
     Object.entries({
-      marketing_name: payload.marketingName?.trim(),
+      marketing_name: nextMarketingName || undefined,
       service_location: payload.serviceLocation?.trim(),
       service_radius_km:
         typeof payload.serviceRadiusKm === "number" && Number.isFinite(payload.serviceRadiusKm)
@@ -319,6 +496,37 @@ export async function PATCH(request: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message || "Unable to update listing." }, { status: 500 });
+    }
+  }
+
+  if (
+    typeof payload.emergencyContact === "string" ||
+    typeof payload.availabilityDays === "string" ||
+    typeof payload.availabilityHours === "string"
+  ) {
+    const metadataPayload = {
+      provider_id: verified.profile.id,
+      ...(typeof payload.emergencyContact === "string"
+        ? { emergency_contact: nextEmergencyContact || null }
+        : {}),
+      ...(typeof payload.availabilityDays === "string"
+        ? { availability_days: nextAvailabilityDays }
+        : {}),
+      ...(typeof payload.availabilityHours === "string"
+        ? {
+            availability_time_preset: nextAvailabilityHours?.preset ?? null,
+            availability_start_time: nextAvailabilityHours?.start ?? null,
+            availability_end_time: nextAvailabilityHours?.end ?? null,
+          }
+        : {}),
+    };
+
+    const { error } = await verified.adminClient
+      .from("provider_admin_metadata")
+      .upsert(metadataPayload, { onConflict: "provider_id" });
+
+    if (error) {
+      return NextResponse.json({ error: error.message || "Unable to update provider metadata." }, { status: 500 });
     }
   }
 

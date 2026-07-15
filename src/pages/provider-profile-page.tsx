@@ -178,6 +178,22 @@ function isRenderableImageUrl(value: string | undefined) {
   return /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
 }
 
+function fileLabelFromUrl(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "File";
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const lastSegment = url.pathname.split("/").filter(Boolean).at(-1);
+    return lastSegment || trimmed;
+  } catch {
+    return trimmed.split("/").filter(Boolean).at(-1) || trimmed;
+  }
+}
+
 function isMeaningfulText(value: string | undefined) {
   return Boolean(value?.trim());
 }
@@ -1590,9 +1606,19 @@ export function ProviderProfilePage() {
               </div>
               <div className="mt-3 space-y-2">
                 {(detail.serviceImageFiles ?? []).length ? (
-                  (detail.serviceImageFiles ?? []).map((fileName) => (
-                    <div key={fileName} className="text-xs font-medium text-slate-500">
-                      {fileName}
+                  (detail.serviceImageFiles ?? []).map((fileUrl) => (
+                    <div key={fileUrl} className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <a
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-emerald-700"
+                      >
+                        Open {fileLabelFromUrl(fileUrl)}
+                      </a>
+                      {isRenderableImageUrl(fileUrl) ? (
+                        <img src={fileUrl} alt={fileLabelFromUrl(fileUrl)} className="mt-3 max-h-48 w-full rounded-xl object-contain bg-white" />
+                      ) : null}
                     </div>
                   ))
                 ) : null}
@@ -1619,9 +1645,19 @@ export function ProviderProfilePage() {
               </div>
               <div className="mt-3 space-y-2">
                 {(detail.certificateImageFiles ?? []).length ? (
-                  (detail.certificateImageFiles ?? []).map((fileName) => (
-                    <div key={fileName} className="text-xs font-medium text-slate-500">
-                      {fileName}
+                  (detail.certificateImageFiles ?? []).map((fileUrl) => (
+                    <div key={fileUrl} className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <a
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-emerald-700"
+                      >
+                        Open {fileLabelFromUrl(fileUrl)}
+                      </a>
+                      {isRenderableImageUrl(fileUrl) ? (
+                        <img src={fileUrl} alt={fileLabelFromUrl(fileUrl)} className="mt-3 max-h-48 w-full rounded-xl object-contain bg-white" />
+                      ) : null}
                     </div>
                   ))
                 ) : null}

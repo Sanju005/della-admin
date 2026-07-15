@@ -21,7 +21,8 @@ function normalizeStoredCustomerProfile(value: unknown): CustomerProfile | null 
     phoneNumber: raw.phoneNumber ?? "",
     countryCode: raw.countryCode ?? "+60",
     city: raw.city ?? "",
-    region: raw.region ?? "Malaysia",
+    region: raw.region ?? "",
+    country: raw.country ?? "Malaysia",
     verified: Boolean(raw.verified),
     completion:
       typeof raw.completion === "number" && Number.isFinite(raw.completion)

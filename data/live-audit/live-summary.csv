@@ -1,0 +1,11 @@
+metric,value
+profiles_total,76
+customers_in_profiles,12
+providers_in_profiles,62
+customer_profiles_total,12
+provider_profiles_total,60
+provider_verifications_total,59
+provider_admin_metadata_total,1
+provider_services_total,60
+provider_documents_total,0
+mismatch_rows_total,64

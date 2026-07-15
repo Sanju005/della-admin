@@ -312,6 +312,9 @@ export const providerDocumentRequestOptions = [
 const adminProviderVerificationApiUrl =
   import.meta.env.VITE_ADMIN_PROVIDER_VERIFICATION_URL?.trim() ||
   "/api/admin/providers/verification";
+const adminStorageResolveApiUrl =
+  import.meta.env.VITE_ADMIN_STORAGE_RESOLVE_URL?.trim() ||
+  "/api/admin/storage/resolve";
 
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
@@ -331,6 +334,129 @@ async function getAdminAccessToken() {
   } = await supabase.auth.getSession();
 
   return session?.access_token ?? null;
+}
+
+type StorageAssetSpec = {
+  bucket: string;
+  path: string;
+};
+
+function isAbsoluteAssetUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return /^(https?:\/\/|data:|blob:)/i.test(trimmed);
+}
+
+function normalizeStoragePath(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed || isAbsoluteAssetUrl(trimmed)) {
+    return "";
+  }
+
+  return trimmed.replace(/^\/+/, "");
+}
+
+async function resolveStorageAssets(specs: StorageAssetSpec[]) {
+  if (!supabase || !specs.length) {
+    return new Map<string, string>();
+  }
+
+  const accessToken = await getAdminAccessToken();
+
+  if (!accessToken) {
+    return new Map<string, string>();
+  }
+
+  try {
+    const response = await fetch(adminStorageResolveApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ assets: specs }),
+    });
+
+    if (!response.ok) {
+      return new Map<string, string>();
+    }
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      assets?: Array<{ bucket?: string; path?: string; url?: string }>;
+    };
+
+    return new Map(
+      (payload.assets ?? [])
+        .filter((item) => item.bucket?.trim() && item.path?.trim() && item.url?.trim())
+        .map((item) => [`${item.bucket!.trim()}:${item.path!.trim()}`, item.url!.trim()] as const),
+    );
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
+function applyResolvedAssetUrl(value: string | null | undefined, bucket: string, resolved: Map<string, string>) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (isAbsoluteAssetUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const normalizedPath = normalizeStoragePath(trimmed);
+  return resolved.get(`${bucket}:${normalizedPath}`) ?? trimmed;
+}
+
+function buildStorageResolveSpecs(
+  profilePhotoUrl: string | null | undefined,
+  verification: ProviderVerificationRow | null,
+  serviceImageFiles: string[],
+  certificateImageFiles: string[],
+  uploadedDocuments: ProviderUploadedDocumentRow[],
+) {
+  const specs = new Map<string, StorageAssetSpec>();
+
+  function add(bucket: string, pathValue: string | null | undefined) {
+    const path = normalizeStoragePath(pathValue);
+    if (!bucket || !path) {
+      return;
+    }
+
+    specs.set(`${bucket}:${path}`, { bucket, path });
+  }
+
+  add("profile-images", profilePhotoUrl);
+  add("identity-documents", verification?.identity_front_image_url ?? verification?.document_front_url);
+  add("identity-documents", verification?.identity_back_image_url ?? verification?.document_back_url);
+
+  for (const value of serviceImageFiles) {
+    add("provider-work-images", value);
+  }
+
+  for (const value of certificateImageFiles) {
+    add("certificates", value);
+  }
+
+  for (const document of uploadedDocuments) {
+    const type = document.document_type?.trim().toLowerCase() ?? "";
+    const fileUrl = document.file_url?.trim() ?? "";
+
+    if (!fileUrl) {
+      continue;
+    }
+
+    if (type === "certificate" || type.startsWith("service_certificate_")) {
+      add("certificates", fileUrl);
+      continue;
+    }
+
+    add("identity-documents", fileUrl);
+  }
+
+  return [...specs.values()];
 }
 
 async function postProviderVerificationAction(payload: Record<string, unknown>) {
@@ -1684,13 +1810,60 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const liveCertificateFiles = certificateDocuments
     .map((row) => row.file_url?.trim())
     .filter((value): value is string => Boolean(value));
+  const liveServiceFiles =
+    serviceKey && metadata?.service_image_files?.[serviceKey]?.length
+      ? metadata.service_image_files[serviceKey]?.filter(Boolean) ?? []
+      : [];
+  const metadataCertificateFiles =
+    serviceKey && metadata?.certificate_image_files?.[serviceKey]?.length
+      ? metadata.certificate_image_files[serviceKey]?.filter(Boolean) ?? []
+      : [];
+  const resolvedAssets = await resolveStorageAssets(
+    buildStorageResolveSpecs(
+      liveProfile.profile_photo_url,
+      verification,
+      liveServiceFiles,
+      metadataCertificateFiles.length ? metadataCertificateFiles : liveCertificateFiles,
+      uploadedDocuments,
+    ),
+  );
+  const resolvedProfilePhotoUrl = applyResolvedAssetUrl(
+    liveProfile.profile_photo_url?.trim() || registrationFallback?.profilePhotoUrl,
+    "profile-images",
+    resolvedAssets,
+  );
+  const resolvedIdentityFrontUrl = applyResolvedAssetUrl(
+    identityFrontDocument?.file_url?.trim() ||
+      verification?.identity_front_image_url?.trim() ||
+      verification?.document_front_url?.trim(),
+    "identity-documents",
+    resolvedAssets,
+  );
+  const resolvedIdentityBackUrl = applyResolvedAssetUrl(
+    identityBackDocument?.file_url?.trim() ||
+      verification?.identity_back_image_url?.trim() ||
+      verification?.document_back_url?.trim(),
+    "identity-documents",
+    resolvedAssets,
+  );
+  const resolvedDrivingLicenseUrl = applyResolvedAssetUrl(
+    drivingLicenseDocument?.file_url?.trim(),
+    "identity-documents",
+    resolvedAssets,
+  );
+  const resolvedServiceImageFiles = liveServiceFiles.map((value) =>
+    applyResolvedAssetUrl(value, "provider-work-images", resolvedAssets) ?? value,
+  );
+  const resolvedCertificateImageFiles = (
+    metadataCertificateFiles.length ? metadataCertificateFiles : liveCertificateFiles
+  ).map((value) => applyResolvedAssetUrl(value, "certificates", resolvedAssets) ?? value);
 
   const detail: ProviderDetailRecord = {
     ...baseDetail,
     providerId,
     name: liveProfile.marketing_name?.trim() || liveAccount?.full_name?.trim() || baseDetail.name,
     email: liveAccount?.email?.trim() || baseDetail.email,
-    profilePhotoUrl: liveProfile.profile_photo_url?.trim() || registrationFallback?.profilePhotoUrl || baseDetail.profilePhotoUrl,
+    profilePhotoUrl: resolvedProfilePhotoUrl || baseDetail.profilePhotoUrl,
     profilePhotoName: metadata?.profile_image_name?.trim() || registrationFallback?.profilePhotoName || baseDetail.profilePhotoName,
     status,
     visibilityStatus: liveProfile.is_visible === false ? "Hidden" : "Visible",
@@ -1776,18 +1949,18 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
         ? metadata.service_image_captions[serviceKey]?.filter(Boolean) ?? []
         : baseDetail.serviceImageCaptions ?? [],
     serviceImageFiles:
-      serviceKey && metadata?.service_image_files?.[serviceKey]?.length
-        ? metadata.service_image_files[serviceKey]?.filter(Boolean) ?? []
+      resolvedServiceImageFiles.length
+        ? resolvedServiceImageFiles
         : baseDetail.serviceImageFiles ?? [],
     certificateImageCaptions:
       serviceKey && metadata?.certificate_image_captions?.[serviceKey]?.length
         ? metadata.certificate_image_captions[serviceKey]?.filter(Boolean) ?? []
         : baseDetail.certificateImageCaptions ?? [],
     certificateImageFiles:
-      serviceKey && metadata?.certificate_image_files?.[serviceKey]?.length
-        ? metadata.certificate_image_files[serviceKey]?.filter(Boolean) ?? []
+      resolvedCertificateImageFiles.length
+        ? resolvedCertificateImageFiles
         : liveCertificateFiles.length
-          ? liveCertificateFiles
+          ? liveCertificateFiles.map((value) => applyResolvedAssetUrl(value, "certificates", resolvedAssets) ?? value)
           : baseDetail.certificateImageFiles ?? [],
     documents: [
       {
@@ -1820,11 +1993,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
             identityFrontDocument?.label?.trim() ||
             verification?.front_image_name?.trim() ||
             undefined,
-          fileUrl:
-            identityFrontDocument?.file_url?.trim() ||
-            verification?.identity_front_image_url?.trim() ||
-            verification?.document_front_url?.trim() ||
-            undefined,
+          fileUrl: resolvedIdentityFrontUrl,
           note: identityFrontDocument?.notes?.trim() || undefined,
           updated: identityFrontDocument?.created_at
             ? formatDate(identityFrontDocument.created_at)
@@ -1849,11 +2018,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
             identityBackDocument?.label?.trim() ||
             verification?.back_image_name?.trim() ||
             undefined,
-          fileUrl:
-            identityBackDocument?.file_url?.trim() ||
-            verification?.identity_back_image_url?.trim() ||
-            verification?.document_back_url?.trim() ||
-            undefined,
+          fileUrl: resolvedIdentityBackUrl,
           note: identityBackDocument?.notes?.trim() || undefined,
           updated: identityBackDocument?.created_at
             ? formatDate(identityBackDocument.created_at)
@@ -1867,7 +2032,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
             label: "Driving License",
             status: formatDocumentReviewStatus(drivingLicenseDocument.status, "Pending"),
             fileName: drivingLicenseDocument.label?.trim() || "Driving License",
-            fileUrl: drivingLicenseDocument.file_url?.trim() || undefined,
+            fileUrl: resolvedDrivingLicenseUrl,
             note: drivingLicenseDocument.notes?.trim() || undefined,
             updated: drivingLicenseDocument.created_at ? formatDate(drivingLicenseDocument.created_at) : undefined,
           }]
@@ -1877,7 +2042,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
         label: document.label?.trim() || `Certificate ${index + 1}`,
         status: formatDocumentReviewStatus(document.status, "Uploaded"),
         fileName: document.label?.trim() || `Certificate ${index + 1}`,
-        fileUrl: document.file_url?.trim() || undefined,
+        fileUrl: applyResolvedAssetUrl(document.file_url?.trim(), "certificates", resolvedAssets),
         note: document.notes?.trim() || undefined,
         updated: document.created_at ? formatDate(document.created_at) : undefined,
       })),

@@ -1,0 +1,13 @@
+id,email,full_name,role,status,profile_phone,first_name,last_name,customer_phone_number,customer_country_code,date_of_birth,sex,city,region,state,country,verified,completion,has_customer_profile,created_at
+f9e62615-9fe0-46a4-9bb5-f1e69d989016,aisyah.rahman@example.com,Aisyah Rahman,customer,active,+60 12-778 8899,Aisyah,Rahman,12-778 8899,+60,1994-02-14,Female,Kajang,Selangor,Selangor,Malaysia,true,100,yes,2026-07-09T09:54:00.748908+00:00
+98d1f044-cf8b-4296-a5e3-562d1aa600a9,kanna@gmail.com,Kanna Kada,customer,active,+601234567,Kanna,Kada,,+60,1989-06-24,Male,Selayang Municipal Council,Selangor,Selangor,Malaysia,false,80,yes,2026-06-23T13:49:56.747204+00:00
+56a928b0-8f13-47ca-9fef-90e50f0f9386,sara@gmail.com,Sara Arumugam,customer,active,+60123456,Sara,Arumugam,,+60,1989-06-17,Male,,,,Malaysia,false,80,yes,2026-06-23T12:33:47.103648+00:00
+fa71400b-8f76-46cf-b99f-6b9e917c56a8,cheetah@gmail.com,Nur Sorfina,customer,active,+60136458266,Nur,Sorfina,,+60,2003-04-15,Female,,,,Malaysia,false,80,yes,2026-06-10T04:59:54.545535+00:00
+3018717b-b413-46ad-b1d6-3ddb097e2786,maria@gmail.com,Maria Rose,customer,active,+60123456,Maria,Rose,123456,+60,1998-06-12,Female,,Malaysia,,Malaysia,true,80,yes,2026-06-10T03:10:24.433968+00:00
+fdd0a660-27a8-41d4-a569-5612ea5d54ed,zahid@gmail.com,Zahid Hamidi,customer,active,+60123456,Zahid,Hamidi,123456,+60,1953-06-06,Male,,Malaysia,,Malaysia,true,80,yes,2026-06-09T05:08:01.940602+00:00
+e0b389b3-732f-4dae-9f3b-f9cf39d99a94,sanju@gmail.com,Sanju Rajeeth,customer,active,+60126175555,Sanju,Rajeeth,126175555,+60,,,,Malaysia,,Malaysia,true,80,yes,2026-06-09T04:20:33.793372+00:00
+f4d7e6e3-6c29-41ae-8178-9c11c6a7c9bb,user1@gmail.com,user1 sanju,customer,pending,+6012345,,,12345,+60,,,,Malaysia,,Malaysia,false,80,yes,2026-06-06T08:09:27.151695+00:00
+98c72a81-35f0-4f88-9573-4d9e2c613720,sanjurajeeth@gmail.com,Net Man,customer,pending,+60126175555,,,,+60,,,,,,Malaysia,false,80,yes,2026-06-01T05:49:58.641522+00:00
+5c37f439-f06d-4ab2-b6d5-09e819f5a073,customer3@seed.della,Mei Lin,customer,active,+60 12-333 3333,,,,+60,1998-11-05,,Subang Jaya,,Selangor,Malaysia,false,80,yes,2026-05-30T06:19:47.199799+00:00
+5962d175-008e-4f2a-9eab-43e312698bd7,customer2@seed.della,Daniel Tan,customer,active,+60 12-222 2222,,,,+60,1992-08-21,,Petaling Jaya,,Selangor,Malaysia,false,80,yes,2026-05-30T06:19:47.046016+00:00
+6eb31df0-e50e-4d4e-8eca-d147b20fc598,customer1@seed.della,Nur Aisyah,customer,active,+60 12-111 1111,,,,+60,1996-03-12,,Kuala Lumpur,,Kuala Lumpur,Malaysia,false,80,yes,2026-05-30T06:19:46.852476+00:00

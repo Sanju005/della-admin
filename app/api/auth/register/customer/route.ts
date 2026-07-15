@@ -12,8 +12,12 @@ type CustomerSignupPayload = {
   firstName?: string;
   lastName?: string;
   sex?: string;
+  dateOfBirth?: string;
   email?: string;
   phoneNumber?: string;
+  city?: string;
+  state?: string;
+  country?: string;
   password?: string;
   confirmPassword?: string;
 };
@@ -68,9 +72,13 @@ export async function POST(request: Request) {
   const firstName = payload.firstName?.trim() ?? "";
   const lastName = payload.lastName?.trim() ?? "";
   const sex = payload.sex === "Male" || payload.sex === "Female" ? payload.sex : "";
+  const dateOfBirth = payload.dateOfBirth?.trim() ?? "";
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
   const email = payload.email?.trim().toLowerCase() ?? "";
   const phoneNumber = payload.phoneNumber?.trim() ?? "";
+  const city = payload.city?.trim() ?? "";
+  const state = payload.state?.trim() ?? "";
+  const country = payload.country?.trim() ?? "Malaysia";
   const password = payload.password ?? "";
   const confirmPassword = payload.confirmPassword ?? "";
 
@@ -174,7 +182,11 @@ export async function POST(request: Request) {
         id: data.user.id,
         first_name: firstName,
         last_name: lastName,
-        country: "Malaysia",
+        date_of_birth: dateOfBirth || null,
+        city: city || null,
+        region: state || null,
+        state: state || null,
+        country,
       },
       { onConflict: "id" }
     );

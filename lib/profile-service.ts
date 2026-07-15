@@ -23,7 +23,8 @@ const mockProfile: CustomerProfile = {
   phoneNumber: "12-345 6789",
   countryCode: "+60",
   city: "Kuala Lumpur",
-  region: "Malaysia",
+  region: "Kuala Lumpur",
+  country: "Malaysia",
   verified: true,
   completion: 80,
 };
