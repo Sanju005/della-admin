@@ -17,8 +17,10 @@ export type ProviderServiceDetails = {
   specialties: string[];
   imageCaptions: string[];
   imageFileNames: string[];
+  imageUrls?: string[];
   certificateCaptions: string[];
   certificateFileNames: string[];
+  certificateUrls?: string[];
   hourlyRate: string;
   dailyRate: string;
 };
@@ -29,11 +31,16 @@ export type ProviderRegistrationData = {
     lastName: string;
     sex: "" | "Male" | "Female";
     profileImageName: string;
+    profileImageUrl?: string;
+    profilePhotoUrl?: string;
+    profile_photo_url?: string;
     marketingName: string;
     dateOfBirth: string;
     residentialAddress: string;
     serviceLocation: string;
     serviceRadius: number;
+    emergencyContact?: string;
+    emergency_contact?: string;
   };
   account: {
     email: string;
@@ -62,6 +69,10 @@ export type ProviderRegistrationData = {
     documentType: string;
     frontImageName: string;
     backImageName: string;
+    frontImageUrl?: string;
+    backImageUrl?: string;
+    identityFrontImageUrl?: string;
+    identityBackImageUrl?: string;
   };
 };
 

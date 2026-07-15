@@ -86,6 +86,22 @@ function buildFileMap(
   );
 }
 
+function buildAssetMap(
+  payload: ProviderRegistrationData,
+  key: "imageUrls" | "certificateUrls",
+  fallbackKey: "imageFileNames" | "certificateFileNames",
+) {
+  return Object.fromEntries(
+    payload.selectedServices.map((service) => {
+      const details = payload.serviceDetails[service] as ProviderRegistrationData["serviceDetails"][keyof ProviderRegistrationData["serviceDetails"]];
+      const preferred = (details[key] ?? []).filter((value) => value.trim().length > 0);
+      const fallback = details[fallbackKey].filter((value) => value.trim().length > 0);
+
+      return [toServiceType(service), preferred.length ? preferred : fallback];
+    }),
+  );
+}
+
 function buildProviderBio(payload: ProviderRegistrationData) {
   const specialties = payload.selectedServices
     .flatMap((service) => payload.serviceDetails[service].specialties)
@@ -171,20 +187,35 @@ function pickEmergencyContact(payload: ProviderRegistrationData) {
 async function upsertProviderVerification(
   adminClient: ReturnType<typeof getAdminSupabaseClient>,
   providerId: string,
-  phoneVerified: boolean,
-  emailVerified: boolean,
-  identityVerified: boolean,
+  payload: {
+    phoneVerified: boolean;
+    emailVerified: boolean;
+    identityVerified: boolean;
+    identityDocumentType: string | null;
+    frontImageName: string | null;
+    backImageName: string | null;
+    frontImageUrl: string | null;
+    backImageUrl: string | null;
+  },
 ) {
   if (!adminClient) {
     return { error: { message: "Supabase is not configured yet." } };
   }
 
-  const payload = {
-    phone_verified: phoneVerified,
-    email_verified: emailVerified,
-    identity_verified: identityVerified,
-    kyc_verified: identityVerified,
+  const verificationPayload = {
+    phone_verified: payload.phoneVerified,
+    email_verified: payload.emailVerified,
+    identity_verified: payload.identityVerified,
+    kyc_verified: payload.identityVerified,
     background_check_verified: false,
+    document_type: payload.identityDocumentType,
+    identity_document_type: payload.identityDocumentType,
+    front_image_name: payload.frontImageName,
+    back_image_name: payload.backImageName,
+    document_front_url: payload.frontImageUrl,
+    document_back_url: payload.backImageUrl,
+    identity_front_image_url: payload.frontImageUrl,
+    identity_back_image_url: payload.backImageUrl,
   };
 
   const byProviderId = await adminClient
@@ -192,7 +223,7 @@ async function upsertProviderVerification(
     .upsert(
       {
         provider_id: providerId,
-        ...payload,
+        ...verificationPayload,
       },
       { onConflict: "provider_id" },
     );
@@ -206,7 +237,7 @@ async function upsertProviderVerification(
     .upsert(
       {
         id: providerId,
-        ...payload,
+        ...verificationPayload,
       },
       { onConflict: "id" },
     );
@@ -224,6 +255,12 @@ export async function POST(request: Request) {
     const profilePhotoUrl = pickProfilePhotoUrl(payload);
     const profileImageName = pickProfilePhotoName(payload);
     const emergencyContact = pickEmergencyContact(payload);
+    const verificationFrontImageUrl =
+      normalizeOptionalText((payload.verification as Record<string, unknown>).frontImageUrl) ??
+      normalizeOptionalText((payload.verification as Record<string, unknown>).identityFrontImageUrl);
+    const verificationBackImageUrl =
+      normalizeOptionalText((payload.verification as Record<string, unknown>).backImageUrl) ??
+      normalizeOptionalText((payload.verification as Record<string, unknown>).identityBackImageUrl);
 
     if (!payload.basicProfile.firstName || !payload.basicProfile.lastName || !sex || !payload.account.email) {
       return NextResponse.json(
@@ -368,8 +405,8 @@ export async function POST(request: Request) {
           availability_end_time: payload.availability.endTime,
           service_image_captions: buildCaptionMap(payload, "imageCaptions"),
           certificate_image_captions: buildCaptionMap(payload, "certificateCaptions"),
-          service_image_files: buildFileMap(payload, "imageFileNames"),
-          certificate_image_files: buildFileMap(payload, "certificateFileNames"),
+          service_image_files: buildAssetMap(payload, "imageUrls", "imageFileNames"),
+          certificate_image_files: buildAssetMap(payload, "certificateUrls", "certificateFileNames"),
           emergency_contact: emergencyContact,
           profile_image_name: profileImageName,
           current_latitude: payload.providerLocation.latitude,
@@ -388,9 +425,16 @@ export async function POST(request: Request) {
     const verificationResult = await upsertProviderVerification(
       adminClient,
       providerId,
-      phoneVerified,
-      true,
-      identityVerified,
+      {
+        phoneVerified,
+        emailVerified: true,
+        identityVerified,
+        identityDocumentType: normalizeOptionalText(payload.verification.documentType),
+        frontImageName: normalizeOptionalText(payload.verification.frontImageName),
+        backImageName: normalizeOptionalText(payload.verification.backImageName),
+        frontImageUrl: verificationFrontImageUrl,
+        backImageUrl: verificationBackImageUrl,
+      },
     );
 
     if (verificationResult.error) {
