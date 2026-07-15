@@ -83,8 +83,13 @@ type ProviderVerificationSnapshot = {
   kyc_verified: boolean | null;
   background_check_verified: boolean | null;
   document_type: string | null;
+  document_front_url: string | null;
+  document_back_url: string | null;
   front_image_name: string | null;
   back_image_name: string | null;
+  identity_document_type: string | null;
+  identity_front_image_url: string | null;
+  identity_back_image_url: string | null;
   admin_note: string | null;
   last_reviewed_at: string | null;
 };
@@ -511,8 +516,21 @@ export async function upsertProviderApplication(
     }
   }
 
-  const identityFront = payload.documents.find((document) => normalizeOptionalText(document.document_type).toLowerCase() === "ic_front");
-  const identityBack = payload.documents.find((document) => normalizeOptionalText(document.document_type).toLowerCase() === "ic_back");
+  const identityFront = payload.documents.find((document) =>
+    ["ic_front", "identity_front", "passport_front"].includes(
+      normalizeOptionalText(document.document_type).toLowerCase(),
+    ),
+  );
+  const identityBack = payload.documents.find((document) =>
+    ["ic_back", "identity_back", "passport_back"].includes(
+      normalizeOptionalText(document.document_type).toLowerCase(),
+    ),
+  );
+  const identityDocumentType = normalizeOptionalText(identityFront?.document_type).toLowerCase().includes("passport")
+    ? "Passport"
+    : identityFront?.file_url || identityBack?.file_url
+      ? "IC"
+      : null;
   const phoneVerified = normalizeOptionalText(payload.verification_phone) === phone;
   const emailVerified = normalizeOptionalText(payload.verification_email).toLowerCase() === email;
   const identityVerified = Boolean(identityFront?.file_url && identityBack?.file_url && normalizeOptionalText(payload.id_number));
@@ -528,8 +546,13 @@ export async function upsertProviderApplication(
         kyc_verified: identityVerified,
         background_check_verified: false,
         document_type: normalizeOptionalText(payload.id_number) || null,
+        document_front_url: normalizeOptionalText(identityFront?.file_url) || null,
+        document_back_url: normalizeOptionalText(identityBack?.file_url) || null,
         front_image_name: normalizeOptionalText(identityFront?.label) || null,
         back_image_name: normalizeOptionalText(identityBack?.label) || null,
+        identity_document_type: identityDocumentType,
+        identity_front_image_url: normalizeOptionalText(identityFront?.file_url) || null,
+        identity_back_image_url: normalizeOptionalText(identityBack?.file_url) || null,
         requested_documents: [],
         admin_note: "",
       },
@@ -586,7 +609,7 @@ export async function fetchProviderApplicationBundle(
         .eq("provider_id", providerId),
       adminClient
         .from("provider_verifications")
-        .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, admin_note, last_reviewed_at")
+        .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, document_front_url, document_back_url, front_image_name, back_image_name, identity_document_type, identity_front_image_url, identity_back_image_url, admin_note, last_reviewed_at")
         .eq("provider_id", providerId)
         .maybeSingle(),
       adminClient

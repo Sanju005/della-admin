@@ -296,6 +296,33 @@ type ProviderProfilePayload = {
   detail: ProviderDetailRecord | null;
 };
 
+type ProviderOverviewFallbackDocument = {
+  id?: string;
+  document_type?: string | null;
+  label?: string | null;
+  file_url?: string | null;
+  notes?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+type ProviderOverviewFallbackImage = {
+  image_url?: string | null;
+  title?: string | null;
+  caption?: string | null;
+};
+
+type ProviderOverviewFallbackPayload = {
+  ok?: boolean;
+  provider?: {
+    profile_photo_url?: string | null;
+    emergency_contact?: string | null;
+    verification_phone?: string | null;
+  } | null;
+  documents?: ProviderOverviewFallbackDocument[] | null;
+  images?: ProviderOverviewFallbackImage[] | null;
+};
+
 type ProfileNameRow = {
   id: string;
   full_name: string | null;
@@ -805,6 +832,21 @@ async function fetchProviderRegistrationFallback(providerId: string): Promise<Pr
   }
 }
 
+async function fetchProviderOverviewFallback(providerId: string): Promise<ProviderOverviewFallbackPayload | null> {
+  try {
+    const response = await fetch(`/api/providers/${providerId}/overview`);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json().catch(() => null)) as ProviderOverviewFallbackPayload | null;
+    return payload?.ok ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatSchedule(dateValue?: string | null, timeValue?: string | null) {
   if (!dateValue) {
     return "Upcoming task";
@@ -924,6 +966,39 @@ function collectUploadedDocuments(
   matcher: (row: ProviderUploadedDocumentRow) => boolean,
 ) {
   return rows.filter(matcher);
+}
+
+function mergeUploadedDocuments(
+  primary: ProviderUploadedDocumentRow[],
+  fallback: ProviderUploadedDocumentRow[],
+) {
+  const merged = [...primary];
+  const seen = new Set(
+    primary.map((row) =>
+      [
+        row.document_type?.trim().toLowerCase() ?? "",
+        row.file_url?.trim().toLowerCase() ?? "",
+        row.label?.trim().toLowerCase() ?? "",
+      ].join("|"),
+    ),
+  );
+
+  for (const row of fallback) {
+    const key = [
+      row.document_type?.trim().toLowerCase() ?? "",
+      row.file_url?.trim().toLowerCase() ?? "",
+      row.label?.trim().toLowerCase() ?? "",
+    ].join("|");
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(row);
+  }
+
+  return merged;
 }
 
 function buildProofAsset(
@@ -1757,6 +1832,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
 
   const liveAccount = await fetchProviderAccountById(providerId);
   const registrationFallback = await fetchProviderRegistrationFallback(providerId);
+  const overviewFallback = await fetchProviderOverviewFallback(providerId);
   const firstService = relationItem(liveProfile.provider_services);
   const verification = relationItem(liveProfile.provider_verifications);
   const metadata = liveProfile.provider_admin_metadata ?? null;
@@ -1780,6 +1856,23 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const liveReviews = await tryFetchProviderReviews(providerId);
   const liveLastLogin = await tryFetchProviderLastLogin(providerId);
   const uploadedDocuments = await tryFetchProviderUploadedDocuments(providerId);
+  const overviewDocuments = (overviewFallback?.documents ?? []).map((document) => ({
+    id: document.id?.trim() || crypto.randomUUID(),
+    provider_id: providerId,
+    document_type: document.document_type?.trim() || null,
+    label: document.label?.trim() || null,
+    file_url: document.file_url?.trim() || null,
+    notes: document.notes?.trim() || null,
+    status: document.status?.trim() || null,
+    created_at: document.created_at?.trim() || null,
+  }));
+  const mergedUploadedDocuments = mergeUploadedDocuments(uploadedDocuments, overviewDocuments);
+  const overviewServiceImageFiles = (overviewFallback?.images ?? [])
+    .map((image) => image.image_url?.trim() || "")
+    .filter(Boolean);
+  const overviewServiceImageCaptions = (overviewFallback?.images ?? [])
+    .map((image) => image.caption?.trim() || image.title?.trim() || "")
+    .filter(Boolean);
   const customerNames = await fetchProfileNameMap([
     ...(liveTasks?.map((row) => row.customer_id) ?? []),
     ...(liveReviews?.map((row) => row.customer_id) ?? []),
@@ -1797,11 +1890,11 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   );
 
   const status = formatStatus(liveAccount?.status ?? (liveProfile.is_visible === false ? "paused" : "active"));
-  const identityFrontDocument = findUploadedDocument(uploadedDocuments, ["ic_front", "identity_front"]);
-  const identityBackDocument = findUploadedDocument(uploadedDocuments, ["ic_back", "identity_back"]);
-  const drivingLicenseDocument = findUploadedDocument(uploadedDocuments, ["driving_license"]);
+  const identityFrontDocument = findUploadedDocument(mergedUploadedDocuments, ["ic_front", "identity_front", "passport_front"]);
+  const identityBackDocument = findUploadedDocument(mergedUploadedDocuments, ["ic_back", "identity_back", "passport_back"]);
+  const drivingLicenseDocument = findUploadedDocument(mergedUploadedDocuments, ["driving_license"]);
   const certificateDocuments = collectUploadedDocuments(
-    uploadedDocuments,
+    mergedUploadedDocuments,
     (row) => {
       const type = row.document_type?.trim().toLowerCase() ?? "";
       return type === "certificate" || type.startsWith("service_certificate_");
@@ -1820,15 +1913,17 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
       : [];
   const resolvedAssets = await resolveStorageAssets(
     buildStorageResolveSpecs(
-      liveProfile.profile_photo_url,
+      liveProfile.profile_photo_url || overviewFallback?.provider?.profile_photo_url,
       verification,
-      liveServiceFiles,
+      liveServiceFiles.length ? liveServiceFiles : overviewServiceImageFiles,
       metadataCertificateFiles.length ? metadataCertificateFiles : liveCertificateFiles,
-      uploadedDocuments,
+      mergedUploadedDocuments,
     ),
   );
   const resolvedProfilePhotoUrl = applyResolvedAssetUrl(
-    liveProfile.profile_photo_url?.trim() || registrationFallback?.profilePhotoUrl,
+    liveProfile.profile_photo_url?.trim() ||
+      overviewFallback?.provider?.profile_photo_url?.trim() ||
+      registrationFallback?.profilePhotoUrl,
     "profile-images",
     resolvedAssets,
   );
@@ -1852,6 +1947,9 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     resolvedAssets,
   );
   const resolvedServiceImageFiles = liveServiceFiles.map((value) =>
+    applyResolvedAssetUrl(value, "provider-work-images", resolvedAssets) ?? value,
+  );
+  const resolvedOverviewServiceImageFiles = overviewServiceImageFiles.map((value) =>
     applyResolvedAssetUrl(value, "provider-work-images", resolvedAssets) ?? value,
   );
   const resolvedCertificateImageFiles = (
@@ -1884,7 +1982,11 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     phone: liveAccount?.phone?.trim() || baseDetail.phone,
     dob: formatDateOfBirth(liveProfile.date_of_birth || registrationFallback?.dateOfBirth) || baseDetail.dob,
     gender: liveProfile.sex?.trim() || registrationFallback?.sex || baseDetail.gender,
-    emergencyContact: metadata?.emergency_contact?.trim() || registrationFallback?.emergencyContact || baseDetail.emergencyContact,
+    emergencyContact:
+      metadata?.emergency_contact?.trim() ||
+      overviewFallback?.provider?.emergency_contact?.trim() ||
+      registrationFallback?.emergencyContact ||
+      baseDetail.emergencyContact,
     address: liveProfile.residential_address?.trim() || registrationFallback?.residentialAddress || baseDetail.address,
     nationalId: verification?.document_type?.trim() || baseDetail.nationalId,
     about: liveProfile.bio?.trim() || baseDetail.about,
@@ -1947,11 +2049,15 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     serviceImageCaptions:
       serviceKey && metadata?.service_image_captions?.[serviceKey]?.length
         ? metadata.service_image_captions[serviceKey]?.filter(Boolean) ?? []
-        : baseDetail.serviceImageCaptions ?? [],
+        : overviewServiceImageCaptions.length
+          ? overviewServiceImageCaptions
+          : baseDetail.serviceImageCaptions ?? [],
     serviceImageFiles:
       resolvedServiceImageFiles.length
         ? resolvedServiceImageFiles
-        : baseDetail.serviceImageFiles ?? [],
+        : resolvedOverviewServiceImageFiles.length
+          ? resolvedOverviewServiceImageFiles
+          : baseDetail.serviceImageFiles ?? [],
     certificateImageCaptions:
       serviceKey && metadata?.certificate_image_captions?.[serviceKey]?.length
         ? metadata.certificate_image_captions[serviceKey]?.filter(Boolean) ?? []

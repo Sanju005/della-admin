@@ -58,6 +58,7 @@ export async function GET(
       phone_number: bundle.account.phone,
       profile_photo_url: bundle.profile.profile_photo_url,
       verification_email: bundle.account.email,
+      emergency_contact: bundle.metadata?.emergency_contact,
       verification_phone: bundle.metadata?.emergency_contact ?? bundle.account.phone,
       verification_status: bundle.profile.approval_status,
       status: bundle.account.status,
