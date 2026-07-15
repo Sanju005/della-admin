@@ -114,11 +114,16 @@ type ProviderProfileRow = {
         kyc_verified?: boolean | null;
         background_check_verified?: boolean | null;
         document_type?: string | null;
+        document_front_url?: string | null;
+        document_back_url?: string | null;
         front_image_name?: string | null;
         back_image_name?: string | null;
         requested_documents?: string[] | null;
         admin_note?: string | null;
         last_reviewed_at?: string | null;
+        identity_document_type?: string | null;
+        identity_front_image_url?: string | null;
+        identity_back_image_url?: string | null;
       }
     | Array<{
         phone_verified?: boolean | null;
@@ -127,11 +132,16 @@ type ProviderProfileRow = {
         kyc_verified?: boolean | null;
         background_check_verified?: boolean | null;
         document_type?: string | null;
+        document_front_url?: string | null;
+        document_back_url?: string | null;
         front_image_name?: string | null;
         back_image_name?: string | null;
         requested_documents?: string[] | null;
         admin_note?: string | null;
         last_reviewed_at?: string | null;
+        identity_document_type?: string | null;
+        identity_front_image_url?: string | null;
+        identity_back_image_url?: string | null;
       }>
     | null;
   provider_admin_metadata?: ProviderAdminMetadataRow | null;
@@ -154,11 +164,16 @@ type ProviderVerificationRow = {
   kyc_verified?: boolean | null;
   background_check_verified?: boolean | null;
   document_type?: string | null;
+  document_front_url?: string | null;
+  document_back_url?: string | null;
   front_image_name?: string | null;
   back_image_name?: string | null;
   requested_documents?: string[] | null;
   admin_note?: string | null;
   last_reviewed_at?: string | null;
+  identity_document_type?: string | null;
+  identity_front_image_url?: string | null;
+  identity_back_image_url?: string | null;
 };
 
 type ProviderAdminMetadataRow = {
@@ -948,7 +963,7 @@ async function fetchProviderProfiles() {
       .in("provider_id", ids),
     supabase
       .from("provider_verifications")
-      .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at")
+      .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, document_front_url, document_back_url, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at, identity_document_type, identity_front_image_url, identity_back_image_url")
       .in("provider_id", ids),
     supabase
       .from("provider_admin_metadata")
@@ -1030,7 +1045,7 @@ async function fetchProviderProfileById(providerId: string) {
       .eq("provider_id", providerId),
     supabase
       .from("provider_verifications")
-      .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at")
+      .select("provider_id, phone_verified, email_verified, identity_verified, kyc_verified, background_check_verified, document_type, document_front_url, document_back_url, front_image_name, back_image_name, requested_documents, admin_note, last_reviewed_at, identity_document_type, identity_front_image_url, identity_back_image_url")
       .eq("provider_id", providerId)
       .maybeSingle(),
     supabase
@@ -1523,25 +1538,36 @@ function buildGeneratedProviderDetail(
         status: verification?.email_verified ? "Verified" : "Pending",
         updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
       },
-      {
-        id: "live-doc-front",
-        label: verification?.document_type?.trim() || "Identity Document",
-        status: formatDocumentStatus(
-          Boolean(verification?.identity_verified),
-          Boolean(verification?.requested_documents?.includes(providerDocumentRequestOptions[0])),
-        ),
-        fileName: verification?.front_image_name?.trim() || undefined,
-        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
-      },
-      {
-        id: "live-doc-back",
-        label: "Back of Document",
+        {
+          id: "live-doc-front",
+          label:
+            verification?.identity_document_type?.trim() ||
+            verification?.document_type?.trim() ||
+            "Identity Document",
+          status: formatDocumentStatus(
+            Boolean(verification?.identity_verified),
+            Boolean(verification?.requested_documents?.includes(providerDocumentRequestOptions[0])),
+          ),
+          fileName: verification?.front_image_name?.trim() || undefined,
+          fileUrl:
+            verification?.identity_front_image_url?.trim() ||
+            verification?.document_front_url?.trim() ||
+            undefined,
+          updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
+        },
+        {
+          id: "live-doc-back",
+          label: "Back of Document",
         status: verification?.back_image_name?.trim()
-          ? formatDocumentStatus(Boolean(verification?.identity_verified), false)
-          : "Pending",
-        fileName: verification?.back_image_name?.trim() || undefined,
-        updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
-      },
+            ? formatDocumentStatus(Boolean(verification?.identity_verified), false)
+            : "Pending",
+          fileName: verification?.back_image_name?.trim() || undefined,
+          fileUrl:
+            verification?.identity_back_image_url?.trim() ||
+            verification?.document_back_url?.trim() ||
+            undefined,
+          updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
+        },
     ],
     completedTaskRows: [],
     upcomingTaskRows: [],
@@ -1776,49 +1802,63 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
         status: verification?.email_verified ? "Verified" : "Pending",
         updated: verification?.last_reviewed_at ? formatDate(verification.last_reviewed_at) : undefined,
       },
-      {
-        id: "live-doc-3",
-        label: "Identity Verification",
-        status:
-          formatDocumentReviewStatus(
-            identityFrontDocument?.status,
-            formatDocumentStatus(
-              Boolean(verification?.identity_verified),
+        {
+          id: "live-doc-3",
+          label:
+            verification?.identity_document_type?.trim() ||
+            verification?.document_type?.trim() ||
+            "Identity Verification",
+          status:
+            formatDocumentReviewStatus(
+              identityFrontDocument?.status,
+              formatDocumentStatus(
+                Boolean(verification?.identity_verified),
               Boolean(verification?.requested_documents?.length),
             ),
           ),
-        fileName:
-          identityFrontDocument?.label?.trim() ||
-          verification?.front_image_name?.trim() ||
-          undefined,
-        fileUrl: identityFrontDocument?.file_url?.trim() || undefined,
-        note: identityFrontDocument?.notes?.trim() || undefined,
-        updated: identityFrontDocument?.created_at
-          ? formatDate(identityFrontDocument.created_at)
-          : verification?.last_reviewed_at
-            ? formatDate(verification.last_reviewed_at)
+          fileName:
+            identityFrontDocument?.label?.trim() ||
+            verification?.front_image_name?.trim() ||
+            undefined,
+          fileUrl:
+            identityFrontDocument?.file_url?.trim() ||
+            verification?.identity_front_image_url?.trim() ||
+            verification?.document_front_url?.trim() ||
+            undefined,
+          note: identityFrontDocument?.notes?.trim() || undefined,
+          updated: identityFrontDocument?.created_at
+            ? formatDate(identityFrontDocument.created_at)
+            : verification?.last_reviewed_at
+              ? formatDate(verification.last_reviewed_at)
             : undefined,
       },
       {
-        id: "live-doc-4",
-        label: "Back of Document",
-        status:
-          formatDocumentReviewStatus(
-            identityBackDocument?.status,
-            verification?.back_image_name?.trim() || identityBackDocument?.file_url?.trim()
-              ? formatDocumentStatus(Boolean(verification?.identity_verified), false)
-              : "Pending",
-          ),
-        fileName:
-          identityBackDocument?.label?.trim() ||
-          verification?.back_image_name?.trim() ||
-          undefined,
-        fileUrl: identityBackDocument?.file_url?.trim() || undefined,
-        note: identityBackDocument?.notes?.trim() || undefined,
-        updated: identityBackDocument?.created_at
-          ? formatDate(identityBackDocument.created_at)
-          : verification?.last_reviewed_at
-            ? formatDate(verification.last_reviewed_at)
+          id: "live-doc-4",
+          label: "Back of Document",
+          status:
+            formatDocumentReviewStatus(
+              identityBackDocument?.status,
+              verification?.back_image_name?.trim() ||
+              identityBackDocument?.file_url?.trim() ||
+              verification?.identity_back_image_url?.trim() ||
+              verification?.document_back_url?.trim()
+                ? formatDocumentStatus(Boolean(verification?.identity_verified), false)
+                : "Pending",
+            ),
+          fileName:
+            identityBackDocument?.label?.trim() ||
+            verification?.back_image_name?.trim() ||
+            undefined,
+          fileUrl:
+            identityBackDocument?.file_url?.trim() ||
+            verification?.identity_back_image_url?.trim() ||
+            verification?.document_back_url?.trim() ||
+            undefined,
+          note: identityBackDocument?.notes?.trim() || undefined,
+          updated: identityBackDocument?.created_at
+            ? formatDate(identityBackDocument.created_at)
+            : verification?.last_reviewed_at
+              ? formatDate(verification.last_reviewed_at)
             : undefined,
       },
       ...(drivingLicenseDocument
