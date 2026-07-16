@@ -95,6 +95,7 @@ const EMPTY_USER_DETAIL: UserDetailRecord = {
   role: "customer",
   status: "Active",
   phone: "",
+  emergencyContact: "Not provided",
   dob: "Not provided",
   gender: "Not provided",
   city: "Malaysia",
@@ -345,6 +346,11 @@ function isProviderRoleValue(value: string | undefined) {
 function isRenderableAsset(value: string | undefined) {
   const normalized = value?.trim() ?? "";
   return /^(https?:\/\/|data:image\/|blob:)/i.test(normalized);
+}
+
+function isPendingDocumentStatus(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return !normalized || normalized === "pending" || normalized === "not uploaded";
 }
 
 export function UserProfilePage() {
@@ -622,51 +628,30 @@ export function UserProfilePage() {
   );
 
   const verificationDocuments = useMemo(
-    () => [
-      {
-        id: "user-email",
-        label: "Email Verification",
-        status: isVerifiedLabel(safeDetail.emailVerifiedAt) ? "Verified" : "Pending",
-        updated: safeDetail.emailVerifiedAt || "Not verified",
-      },
-      {
-        id: "user-phone",
-        label: "Phone Verification",
-        status: isVerifiedLabel(safeDetail.phoneVerifiedAt) ? "Verified" : "Pending",
-        updated: safeDetail.phoneVerifiedAt || "Not verified",
-      },
-      {
-        id: "user-ic-front",
-        label: "IC Front",
-        status: safeDetail.documents[0]?.status ?? "Pending",
-        updated: safeDetail.documents[0]?.updated ?? "Not uploaded",
-      },
-      {
-        id: "user-ic-back",
-        label: "IC Back",
-        status: safeDetail.documents[1]?.status ?? "Pending",
-        updated: safeDetail.documents[1]?.updated ?? "Not uploaded",
-      },
-      {
-        id: "user-license",
-        label: "Driving License",
-        status: safeDetail.documents[2]?.status ?? "Pending",
-        updated: safeDetail.documents[2]?.updated ?? "Not uploaded",
-      },
-      {
-        id: "user-resume",
-        label: "Resume",
-        status: "Pending",
-        updated: "Not uploaded",
-      },
-      {
-        id: "user-certificates",
-        label: "Certificates",
-        status: "Pending",
-        updated: "Not uploaded",
-      },
-    ],
-    [safeDetail]
+    () => {
+      const accountVerification = safeDetail.documents.find((document) =>
+        document.label.trim().toLowerCase() === "account verification",
+      );
+      const identityDocuments = safeDetail.documents.filter((document) => /front|back/i.test(document.label));
+
+      return [
+        {
+          id: "user-email",
+          label: "Email Verification",
+          status: isVerifiedLabel(safeDetail.emailVerifiedAt) ? "Verified" : "Pending",
+          updated: safeDetail.emailVerifiedAt || "Not verified",
+        },
+        {
+          id: "user-phone",
+          label: "Phone Verification",
+          status: isVerifiedLabel(safeDetail.phoneVerifiedAt) ? "Verified" : "Pending",
+          updated: safeDetail.phoneVerifiedAt || "Not verified",
+        },
+        ...(accountVerification ? [accountVerification] : []),
+        ...identityDocuments,
+      ];
+    },
+    [safeDetail.documents, safeDetail.emailVerifiedAt, safeDetail.phoneVerifiedAt]
   );
   const adminDocumentRows = useMemo(
     () =>
@@ -1072,6 +1057,11 @@ export function UserProfilePage() {
                     )
                   }
                   icon={<MapPin className="size-4" />}
+                />
+                <InfoRow
+                  label="Emergency Contact"
+                  value={detail.emergencyContact || "Not provided"}
+                  icon={<Phone className="size-4" />}
                 />
               </div>
               {editing ? (
@@ -2010,11 +2000,23 @@ export function UserProfilePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {verificationDocuments.slice(0, 2).map((document) => (
+              {verificationDocuments.map((document) => (
                 <div key={document.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{document.label}</p>
                     <p className="mt-1 text-[13px] text-slate-500">Updated {document.updated}</p>
+                    {document.note ? <p className="mt-1 text-[12px] text-slate-400">{document.note}</p> : null}
+                    {document.fileUrl ? (
+                      <a
+                        href={document.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-emerald-700"
+                      >
+                        <Eye className="size-4" />
+                        Open file
+                      </a>
+                    ) : null}
                   </div>
                   <MiniStatus status={document.status} />
                 </div>

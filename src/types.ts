@@ -169,6 +169,9 @@ export type UserDocumentItem = {
   label: string;
   status: string;
   updated: string;
+  fileName?: string;
+  fileUrl?: string;
+  note?: string;
 };
 
 export type UserReportItem = {
@@ -201,6 +204,7 @@ export type UserDetailRecord = {
   role: string;
   status: string;
   phone: string;
+  emergencyContact?: string;
   dob: string;
   gender: string;
   city: string;

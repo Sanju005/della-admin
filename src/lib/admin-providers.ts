@@ -250,6 +250,8 @@ type LiveBookingRow = {
         service_type?: string | null;
       }>
     | null;
+  work_finished_images?: string[] | string | null;
+  cash_payment_proof_images?: string[] | string | null;
 };
 
 type LivePaymentRow = {
@@ -2311,6 +2313,51 @@ function pickFirstText(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
+function fileNameFromUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    return url.pathname.split("/").filter(Boolean).at(-1) || undefined;
+  } catch {
+    return trimmed.split("/").filter(Boolean).at(-1) || undefined;
+  }
+}
+
+function parseStringArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  }
+
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean);
+    }
+  } catch {
+    return [trimmed];
+  }
+
+  return [];
+}
+
 function timelineHasStatus(
   timeline: ProviderTaskDetail["timeline"],
   matcher: (item: ProviderTaskDetail["timeline"][number]) => boolean,
@@ -2348,7 +2395,9 @@ async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderT
       paid_at,
       review_requested_at,
       reviewed_at,
-      cancelled_at
+      cancelled_at,
+      work_finished_images,
+      cash_payment_proof_images
     `)
     .eq("id", rawBookingId)
     .maybeSingle();
@@ -2358,6 +2407,8 @@ async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderT
   }
 
   const booking = bookingData as Record<string, unknown>;
+  const workFinishedImages = parseStringArray(booking.work_finished_images);
+  const cashPaymentProofImages = parseStringArray(booking.cash_payment_proof_images);
 
   const [paymentsResult, reviewsResult, messagesResult, historyResult] = await Promise.allSettled([
     supabase
@@ -2476,11 +2527,44 @@ async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderT
     };
   });
 
+  const resolvedAssets = await resolveStorageAssets([
+    ...paymentsRows.flatMap((row) => {
+      const item = row as Record<string, unknown>;
+      const assets: StorageAssetSpec[] = [];
+
+      for (const value of [
+        normalizeOptionalText(item.customer_payment_proof_data_url),
+        normalizeOptionalText(item.provider_company_payment_proof_data_url),
+      ]) {
+        const path = normalizeStoragePath(value);
+        if (!path) {
+          continue;
+        }
+
+        assets.push({ bucket: "payment-proofs", path });
+      }
+
+      return assets;
+    }),
+    ...workFinishedImages.flatMap((value) => {
+      const path = normalizeStoragePath(value);
+      return path ? [{ bucket: "job-completion-images", path }] : [];
+    }),
+    ...cashPaymentProofImages.flatMap((value) => {
+      const path = normalizeStoragePath(value);
+      return path ? [{ bucket: "payment-proofs", path }] : [];
+    }),
+  ]);
+
   const images = paymentsRows.flatMap((row) => {
     const item = row as Record<string, unknown>;
     const results: ProviderTaskDetail["images"] = [];
 
-    const customerUrl = normalizeOptionalText(item.customer_payment_proof_data_url);
+    const customerUrl = applyResolvedAssetUrl(
+      normalizeOptionalText(item.customer_payment_proof_data_url),
+      "payment-proofs",
+      resolvedAssets,
+    );
     if (customerUrl) {
       results.push({
         id: `${String(item.id)}-customer-proof`,
@@ -2491,7 +2575,11 @@ async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderT
       });
     }
 
-    const providerUrl = normalizeOptionalText(item.provider_company_payment_proof_data_url);
+    const providerUrl = applyResolvedAssetUrl(
+      normalizeOptionalText(item.provider_company_payment_proof_data_url),
+      "payment-proofs",
+      resolvedAssets,
+    );
     if (providerUrl) {
       results.push({
         id: `${String(item.id)}-provider-proof`,
@@ -2503,7 +2591,20 @@ async function tryFetchTaskDetailDirect(rawBookingId: string): Promise<ProviderT
     }
 
     return results;
-  });
+  }).concat(
+    workFinishedImages.map((value, index) => ({
+      id: `booking-work-finished-${index + 1}`,
+      label: `Job completion image ${index + 1}`,
+      url: applyResolvedAssetUrl(value, "job-completion-images", resolvedAssets) ?? value,
+      fileName: fileNameFromUrl(value),
+    })),
+    cashPaymentProofImages.map((value, index) => ({
+      id: `booking-cash-proof-${index + 1}`,
+      label: `Cash payment proof ${index + 1}`,
+      url: applyResolvedAssetUrl(value, "payment-proofs", resolvedAssets) ?? value,
+      fileName: fileNameFromUrl(value),
+    })),
+  );
 
   const reviews = reviewRows
     .filter((row) => {

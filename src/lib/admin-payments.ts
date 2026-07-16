@@ -66,6 +66,15 @@ type PaymentAggregateBucket = {
   providerCompanyPaymentProof: PaymentProofAsset | null;
 };
 
+type StorageAssetSpec = {
+  bucket: string;
+  path: string;
+};
+
+const adminStorageResolveApiUrl =
+  import.meta.env.VITE_ADMIN_STORAGE_RESOLVE_URL?.trim() ||
+  "/api/admin/storage/resolve";
+
 function relationItem<T>(value: T | T[] | null | undefined) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -202,6 +211,102 @@ function buildProofAsset(
   };
 }
 
+function buildResolvedProofAsset(
+  label: string,
+  url: string | null | undefined,
+  fileName: string | null | undefined,
+  mimeType: string | null | undefined,
+  resolved: Map<string, string>,
+) {
+  return buildProofAsset(
+    label,
+    applyResolvedAssetUrl(url, "payment-proofs", resolved) ?? url,
+    fileName,
+    mimeType,
+  );
+}
+
+async function getAdminAccessToken() {
+  if (!supabase) {
+    return null;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token ?? null;
+}
+
+function isAbsoluteAssetUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return /^(https?:\/\/|data:|blob:)/i.test(trimmed);
+}
+
+function normalizeStoragePath(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed || isAbsoluteAssetUrl(trimmed)) {
+    return "";
+  }
+
+  return trimmed.replace(/^\/+/, "");
+}
+
+async function resolveStorageAssets(specs: StorageAssetSpec[]) {
+  if (!supabase || !specs.length) {
+    return new Map<string, string>();
+  }
+
+  const accessToken = await getAdminAccessToken();
+
+  if (!accessToken) {
+    return new Map<string, string>();
+  }
+
+  try {
+    const response = await fetch(adminStorageResolveApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ assets: specs }),
+    });
+
+    if (!response.ok) {
+      return new Map<string, string>();
+    }
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      assets?: Array<{ bucket?: string; path?: string; url?: string }>;
+    };
+
+    return new Map(
+      (payload.assets ?? [])
+        .filter((item) => item.bucket?.trim() && item.path?.trim() && item.url?.trim())
+        .map((item) => [`${item.bucket!.trim()}:${item.path!.trim()}`, item.url!.trim()] as const),
+    );
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
+function applyResolvedAssetUrl(value: string | null | undefined, bucket: string, resolved: Map<string, string>) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (isAbsoluteAssetUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const normalizedPath = normalizeStoragePath(trimmed);
+  return resolved.get(`${bucket}:${normalizedPath}`) ?? trimmed;
+}
+
 function summarizeStatuses(values: Set<string>, fallback: string) {
   const items = [...values].filter(Boolean);
   if (items.length === 0) {
@@ -312,6 +417,25 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
     ...livePayments.map((row) => row.customer_id),
     ...livePayments.map((row) => row.provider_id),
   ]);
+  const paymentProofAssets = await resolveStorageAssets(
+    livePayments.flatMap((row) => {
+      const assets: StorageAssetSpec[] = [];
+
+      for (const value of [
+        row.customer_payment_proof_data_url,
+        row.provider_company_payment_proof_data_url,
+      ]) {
+        const path = normalizeStoragePath(value);
+        if (!path) {
+          continue;
+        }
+
+        assets.push({ bucket: "payment-proofs", path });
+      }
+
+      return assets;
+    }),
+  );
 
   return livePayments
     .filter((row) => {
@@ -322,17 +446,19 @@ export async function listPaymentsWithFallback(): Promise<PaymentRow[]> {
     .map((row) => {
       const booking = relationItem(row.bookings);
       const paymentAmount = row.amount ?? booking?.total_amount ?? 0;
-      const customerProof = buildProofAsset(
+      const customerProof = buildResolvedProofAsset(
         "Customer payment proof",
         row.customer_payment_proof_data_url,
         row.customer_payment_proof_file_name,
         row.customer_payment_proof_mime_type,
+        paymentProofAssets,
       );
-      const providerProof = buildProofAsset(
+      const providerProof = buildResolvedProofAsset(
         "Provider company payment proof",
         row.provider_company_payment_proof_data_url,
         row.provider_company_payment_proof_file_name,
         row.provider_company_payment_proof_mime_type,
+        paymentProofAssets,
       );
 
       return {

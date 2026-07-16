@@ -15,6 +15,10 @@ type ProfileRelation =
       country_code?: string | null;
       verified?: boolean | null;
       completion?: number | null;
+      emergency_contact_number?: string | null;
+      identity_document_type?: string | null;
+      identity_front_image_url?: string | null;
+      identity_back_image_url?: string | null;
       marketing_name?: string | null;
       service_location?: string | null;
       approval_status?: string | null;
@@ -47,6 +51,10 @@ type ProfileRelation =
       country_code?: string | null;
       verified?: boolean | null;
       completion?: number | null;
+      emergency_contact_number?: string | null;
+      identity_document_type?: string | null;
+      identity_front_image_url?: string | null;
+      identity_back_image_url?: string | null;
       marketing_name?: string | null;
       service_location?: string | null;
       approval_status?: string | null;
@@ -185,9 +193,23 @@ type CustomerProfileRow = {
   date_of_birth?: string | null;
   phone_number?: string | null;
   country_code?: string | null;
+  sex?: string | null;
   verified?: boolean | null;
   completion?: number | null;
+  emergency_contact_number?: string | null;
+  identity_document_type?: string | null;
+  identity_front_image_url?: string | null;
+  identity_back_image_url?: string | null;
 };
+
+type StorageAssetSpec = {
+  bucket: string;
+  path: string;
+};
+
+const adminStorageResolveApiUrl =
+  import.meta.env.VITE_ADMIN_STORAGE_RESOLVE_URL?.trim() ||
+  "/api/admin/storage/resolve";
 
 type ProviderVerificationRow = {
   phone_verified?: boolean | null;
@@ -390,6 +412,133 @@ function buildProofAsset(
   };
 }
 
+async function getAdminAccessToken() {
+  if (!supabase) {
+    return null;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token ?? null;
+}
+
+function isAbsoluteAssetUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return /^(https?:\/\/|data:|blob:)/i.test(trimmed);
+}
+
+function normalizeStoragePath(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed || isAbsoluteAssetUrl(trimmed)) {
+    return "";
+  }
+
+  return trimmed.replace(/^\/+/, "");
+}
+
+async function resolveStorageAssets(specs: StorageAssetSpec[]) {
+  if (!supabase || !specs.length) {
+    return new Map<string, string>();
+  }
+
+  const accessToken = await getAdminAccessToken();
+
+  if (!accessToken) {
+    return new Map<string, string>();
+  }
+
+  try {
+    const response = await fetch(adminStorageResolveApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ assets: specs }),
+    });
+
+    if (!response.ok) {
+      return new Map<string, string>();
+    }
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      assets?: Array<{ bucket?: string; path?: string; url?: string }>;
+    };
+
+    return new Map(
+      (payload.assets ?? [])
+        .filter((item) => item.bucket?.trim() && item.path?.trim() && item.url?.trim())
+        .map((item) => [`${item.bucket!.trim()}:${item.path!.trim()}`, item.url!.trim()] as const),
+    );
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
+function applyResolvedAssetUrl(value: string | null | undefined, bucket: string, resolved: Map<string, string>) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (isAbsoluteAssetUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const normalizedPath = normalizeStoragePath(trimmed);
+  return resolved.get(`${bucket}:${normalizedPath}`) ?? trimmed;
+}
+
+function buildStorageSpecs(bucket: string, values: Array<string | null | undefined>) {
+  const specs = new Map<string, StorageAssetSpec>();
+
+  for (const value of values) {
+    const path = normalizeStoragePath(value);
+    if (!path) {
+      continue;
+    }
+
+    specs.set(`${bucket}:${path}`, { bucket, path });
+  }
+
+  return [...specs.values()];
+}
+
+function buildResolvedProofAsset(
+  label: string,
+  url: string | null | undefined,
+  fileName: string | null | undefined,
+  mimeType: string | null | undefined,
+  bucket: string,
+  resolved: Map<string, string>,
+) {
+  return buildProofAsset(
+    label,
+    applyResolvedAssetUrl(url, bucket, resolved) ?? url,
+    fileName,
+    mimeType,
+  );
+}
+
+function fileNameFromUrl(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    return url.pathname.split("/").filter(Boolean).at(-1) || undefined;
+  } catch {
+    return trimmed.split("/").filter(Boolean).at(-1) || undefined;
+  }
+}
+
 function formatDateOfBirth(value: string | null | undefined) {
   if (!value?.trim()) {
     return "Not provided";
@@ -490,6 +639,7 @@ function buildGeneratedUserDetail(
   const customerPhone = customerProfile?.phone_number?.trim()
     ? `${customerProfile.country_code?.trim() || "+60"} ${customerProfile.phone_number.trim()}`.trim()
     : liveProfile.phone?.trim() || "Not provided";
+  const emergencyContact = customerProfile?.emergency_contact_number?.trim() || "Not provided";
   const customerCompletion = typeof customerProfile?.completion === "number"
     ? `${Math.max(0, Math.min(100, customerProfile.completion)).toFixed(1)}%`
     : "0.0%";
@@ -501,6 +651,7 @@ function buildGeneratedUserDetail(
     role,
     status: formatStatus(liveProfile.status, role),
     phone: role === "provider" ? liveProfile.phone?.trim() || "Not provided" : customerPhone,
+    emergencyContact: role === "provider" ? "Not provided" : emergencyContact,
     dob:
       role === "provider"
         ? formatDateOfBirth(providerProfile?.date_of_birth)
@@ -848,20 +999,35 @@ async function tryFetchLivePayments(userId: string, role: string, profileNames: 
     return null;
   }
 
-    return (data as LivePaymentRow[]).map((row) => {
+  const liveRows = data as LivePaymentRow[];
+  const resolvedAssets = await resolveStorageAssets(
+    buildStorageSpecs(
+      "payment-proofs",
+      liveRows.flatMap((row) => [
+        row.customer_payment_proof_data_url,
+        row.provider_company_payment_proof_data_url,
+      ]),
+    ),
+  );
+
+    return liveRows.map((row) => {
       const customerName = profileNames.get(row.customer_id ?? "");
       const providerName = profileNames.get(row.provider_id ?? "");
-      const customerProof = buildProofAsset(
+      const customerProof = buildResolvedProofAsset(
         "Customer payment proof",
         row.customer_payment_proof_data_url,
         row.customer_payment_proof_file_name,
         row.customer_payment_proof_mime_type,
+        "payment-proofs",
+        resolvedAssets,
       );
-      const providerProof = buildProofAsset(
+      const providerProof = buildResolvedProofAsset(
         "Provider company payment proof",
         row.provider_company_payment_proof_data_url,
         row.provider_company_payment_proof_file_name,
         row.provider_company_payment_proof_mime_type,
+        "payment-proofs",
+        resolvedAssets,
       );
   
       return {
@@ -1056,7 +1222,7 @@ async function fetchProfiles() {
   const [{ data: customerProfiles }, { data: providerProfiles }] = await Promise.all([
     supabase
       .from("customer_profiles")
-        .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, sex, verified, completion")
+        .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, sex, verified, completion, emergency_contact_number, identity_document_type, identity_front_image_url, identity_back_image_url")
       .in("id", ids),
     supabase
       .from("provider_profiles")
@@ -1108,7 +1274,7 @@ async function fetchProfileById(userId: string) {
   const [{ data: customerProfile }, { data: providerProfile }] = await Promise.all([
     supabase
       .from("customer_profiles")
-        .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, sex, verified, completion")
+        .select("id, first_name, last_name, city, region, state, country, date_of_birth, phone_number, country_code, sex, verified, completion, emergency_contact_number, identity_document_type, identity_front_image_url, identity_back_image_url")
       .eq("id", userId)
       .maybeSingle(),
     supabase
@@ -1251,8 +1417,28 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
   const relatedPayments = livePayments?.length ? livePayments : [];
   const metrics = buildMetrics(role, relatedBookings, relatedPayments, baseDetail.metrics);
   const providerProfile = relationNode(liveProfile.provider_profiles);
+  const customerProfile = relationNode(liveProfile.customer_profiles);
   const verification = relationItem(providerProfile?.provider_verifications);
   const accountType = role === "provider" ? "Service Provider" : toTitleCase(role);
+  const customerIdentityAssets = !isProviderRole(role) && customerProfile
+    ? await resolveStorageAssets(
+        buildStorageSpecs("identity-documents", [
+          customerProfile.identity_front_image_url,
+          customerProfile.identity_back_image_url,
+        ]),
+      )
+    : new Map<string, string>();
+  const customerIdentityLabel = customerProfile?.identity_document_type?.trim() || "IC / Passport";
+  const customerFrontUrl = applyResolvedAssetUrl(
+    customerProfile?.identity_front_image_url,
+    "identity-documents",
+    customerIdentityAssets,
+  );
+  const customerBackUrl = applyResolvedAssetUrl(
+    customerProfile?.identity_back_image_url,
+    "identity-documents",
+    customerIdentityAssets,
+  );
 
   return {
     detail: {
@@ -1263,6 +1449,10 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
       role,
       status,
       phone: generatedDetail.phone,
+      emergencyContact:
+        isProviderRole(role)
+          ? generatedDetail.emergencyContact
+          : customerProfile?.emergency_contact_number?.trim() || generatedDetail.emergencyContact,
       dob: generatedDetail.dob,
       gender: generatedDetail.gender,
       city,
@@ -1291,7 +1481,33 @@ export async function getUserProfileWithFallback(userId: string): Promise<UserPr
             )
           : generatedDetail.kycVerifiedAt,
       addresses: generatedDetail.addresses,
-      documents: generatedDetail.documents,
+      documents:
+        !isProviderRole(role)
+          ? [
+              generatedDetail.documents[0] ?? {
+                id: "live-doc-customer-1",
+                label: "Account Verification",
+                status: "Pending",
+                updated: "Pending",
+              },
+              {
+                id: "live-doc-customer-2",
+                label: `${customerIdentityLabel} Front`,
+                status: customerFrontUrl ? "Uploaded" : "Pending",
+                updated: customerFrontUrl ? "Live profile record" : "Not uploaded",
+                fileName: fileNameFromUrl(customerFrontUrl),
+                fileUrl: customerFrontUrl,
+              },
+              {
+                id: "live-doc-customer-3",
+                label: `${customerIdentityLabel} Back`,
+                status: customerBackUrl ? "Uploaded" : "Pending",
+                updated: customerBackUrl ? "Live profile record" : "Not uploaded",
+                fileName: fileNameFromUrl(customerBackUrl),
+                fileUrl: customerBackUrl,
+              },
+            ]
+          : generatedDetail.documents,
       timeline: generatedDetail.timeline,
       recentActions:
         liveLoginAudits?.length
