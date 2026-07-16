@@ -2057,6 +2057,13 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const resolvedRegistrationCertificateImageFiles = (registrationFallback?.certificateImageFiles ?? []).map((value) =>
     applyResolvedAssetUrl(value, "certificates", resolvedAssets) ?? value,
   );
+  const resolvedEmergencyContact =
+    metadata?.emergency_contact?.trim() ||
+    overviewFallback?.provider?.emergency_contact?.trim() ||
+    overviewFallback?.provider?.verification_phone?.trim() ||
+    liveAccount?.phone?.trim() ||
+    registrationFallback?.emergencyContact ||
+    baseDetail.emergencyContact;
 
   const detail: ProviderDetailRecord = {
     ...baseDetail,
@@ -2084,12 +2091,7 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
     phone: liveAccount?.phone?.trim() || baseDetail.phone,
     dob: formatDateOfBirth(liveProfile.date_of_birth || registrationFallback?.dateOfBirth) || baseDetail.dob,
     gender: liveProfile.sex?.trim() || registrationFallback?.sex || baseDetail.gender,
-    emergencyContact:
-      metadata?.emergency_contact?.trim() ||
-      overviewFallback?.provider?.emergency_contact?.trim() ||
-      overviewFallback?.provider?.verification_phone?.trim() ||
-      registrationFallback?.emergencyContact ||
-      baseDetail.emergencyContact,
+    emergencyContact: resolvedEmergencyContact,
     address: liveProfile.residential_address?.trim() || registrationFallback?.residentialAddress || baseDetail.address,
     nationalId:
       verification?.identity_document_type?.trim() ||
@@ -2183,6 +2185,29 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
           : resolvedRegistrationCertificateImageFiles.length
             ? resolvedRegistrationCertificateImageFiles
           : baseDetail.certificateImageFiles ?? [],
+    debugFields: [
+      { label: "Provider ID", value: debugFieldValue(providerId) },
+      { label: "Metadata Emergency Contact", value: debugFieldValue(metadata?.emergency_contact) },
+      { label: "Overview Emergency Contact", value: debugFieldValue(overviewFallback?.provider?.emergency_contact) },
+      { label: "Overview Verification Phone", value: debugFieldValue(overviewFallback?.provider?.verification_phone) },
+      { label: "Account Phone", value: debugFieldValue(liveAccount?.phone) },
+      { label: "Registration Emergency Contact", value: debugFieldValue(registrationFallback?.emergencyContact) },
+      { label: "Resolved Emergency Contact", value: debugFieldValue(resolvedEmergencyContact) },
+      { label: "Identity Document Type", value: debugFieldValue(verification?.identity_document_type ?? verification?.document_type) },
+      { label: "Verification Front URL", value: debugFieldValue(verification?.identity_front_image_url) },
+      { label: "Verification Front Fallback URL", value: debugFieldValue(verification?.document_front_url) },
+      { label: "Verification Back URL", value: debugFieldValue(verification?.identity_back_image_url) },
+      { label: "Verification Back Fallback URL", value: debugFieldValue(verification?.document_back_url) },
+      { label: "Front Image Name", value: debugFieldValue(verification?.front_image_name) },
+      { label: "Back Image Name", value: debugFieldValue(verification?.back_image_name) },
+      { label: "Uploaded Front Document URL", value: debugFieldValue(identityFrontDocument?.file_url) },
+      { label: "Uploaded Back Document URL", value: debugFieldValue(identityBackDocument?.file_url) },
+      { label: "Resolved Front URL", value: debugFieldValue(resolvedIdentityFrontUrl) },
+      { label: "Resolved Back URL", value: debugFieldValue(resolvedIdentityBackUrl) },
+      { label: "Requested Documents", value: debugFieldValue(verification?.requested_documents) },
+      { label: "Provider Metadata Present", value: debugFieldValue(Boolean(metadata)) },
+      { label: "Verification Row Present", value: debugFieldValue(Boolean(verification)) },
+    ],
     documents: [
       {
         id: "live-doc-1",
@@ -2311,6 +2336,26 @@ function pickFirstText(row: Record<string, unknown>, keys: string[]) {
   }
 
   return "";
+}
+
+function debugFieldValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return "Missing";
+  }
+
+  if (typeof value === "string") {
+    return value.trim() || "Missing";
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.length ? JSON.stringify(value) : "Missing";
+  }
+
+  return JSON.stringify(value);
 }
 
 function fileNameFromUrl(value: string | null | undefined) {

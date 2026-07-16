@@ -250,6 +250,11 @@ export type ProviderSkill = {
   label: string;
 };
 
+export type ProviderDebugField = {
+  label: string;
+  value: string;
+};
+
 export type ProviderDocumentItem = {
   id: string;
   label: string;
@@ -372,6 +377,7 @@ export type ProviderDetailRecord = {
   serviceImageFiles?: string[];
   certificateImageCaptions?: string[];
   certificateImageFiles?: string[];
+  debugFields?: ProviderDebugField[];
   documents: ProviderDocumentItem[];
   completedTaskRows: ProviderTaskRow[];
   upcomingTaskRows: ProviderUpcomingTaskRow[];

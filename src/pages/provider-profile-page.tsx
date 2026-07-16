@@ -431,6 +431,39 @@ function normalizeIdentityDocumentLabel(value: string | undefined) {
   return normalized;
 }
 
+function normalizeDocumentLabel(value: string | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function isIdentityFrontLabel(label: string, identityDocumentLabel: string) {
+  const normalized = normalizeDocumentLabel(label);
+  const normalizedIdentity = normalizeDocumentLabel(identityDocumentLabel);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized === "identity verification" ||
+    normalized === "identity document" ||
+    normalized === normalizedIdentity ||
+    normalized.includes("front") ||
+    normalized.includes("passport") ||
+    normalized.includes("identity");
+}
+
+function isIdentityBackLabel(label: string, identityDocumentLabel: string) {
+  const normalized = normalizeDocumentLabel(label);
+  const normalizedIdentity = normalizeDocumentLabel(identityDocumentLabel);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized === "back of document" ||
+    normalized === `${normalizedIdentity} back` ||
+    normalized.includes("back");
+}
+
 function ProofLinkCard({
   title,
   fileName,
@@ -838,17 +871,14 @@ export function ProviderProfilePage() {
   const detailIdentityFrontDocument = useMemo(
     () =>
       safeDetail.documents.find((item) => {
-        const label = item.label.trim().toLowerCase();
-        return label === "identity verification" ||
-          label === "identity document" ||
-          label === safeDetail.nationalId.trim().toLowerCase();
+        return isIdentityFrontLabel(item.label, safeDetail.nationalId);
       }) ?? null,
     [safeDetail.documents, safeDetail.nationalId],
   );
   const detailIdentityBackDocument = useMemo(
     () =>
-      safeDetail.documents.find((item) => item.label.trim().toLowerCase() === "back of document") ?? null,
-    [safeDetail.documents],
+      safeDetail.documents.find((item) => isIdentityBackLabel(item.label, safeDetail.nationalId)) ?? null,
+    [safeDetail.documents, safeDetail.nationalId],
   );
   const detailDrivingLicenseDocument = useMemo(
     () =>
@@ -2421,6 +2451,26 @@ export function ProviderProfilePage() {
                   <p className="mt-2 text-[12px] text-slate-500">{(detail.certificateImageFiles ?? []).join(", ")}</p>
                 ) : null}
               </div>
+              <details className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+                  Debug Source Fields
+                </summary>
+                <div className="mt-4 space-y-2">
+                  {(detail.debugFields ?? []).map((field) => (
+                    <div
+                      key={field.label}
+                      className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3"
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                        {field.label}
+                      </p>
+                      <p className="mt-1 break-all font-mono text-[12px] text-slate-700">
+                        {field.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           </div>
         </SurfaceCard>
