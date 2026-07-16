@@ -858,7 +858,7 @@ async function fetchProviderRegistrationFallback(providerId: string): Promise<Pr
       (data as { serviceDetails?: Record<string, Record<string, unknown>> }).serviceDetails ?? {};
     const serviceImageFiles = selectedServices.flatMap((service) => {
       const details = serviceDetails[String(service)] ?? {};
-      const values = Array.isArray(details.imageUrls) ? details.imageUrls : details.imageFileNames;
+      const values = Array.isArray(details.imageUrls) ? details.imageUrls : [];
       return Array.isArray(values) ? values.map((value) => normalizeText(value)).filter(Boolean) : [];
     });
     const serviceImageCaptions = selectedServices.flatMap((service) => {
@@ -868,7 +868,7 @@ async function fetchProviderRegistrationFallback(providerId: string): Promise<Pr
     });
     const certificateImageFiles = selectedServices.flatMap((service) => {
       const details = serviceDetails[String(service)] ?? {};
-      const values = Array.isArray(details.certificateUrls) ? details.certificateUrls : details.certificateFileNames;
+      const values = Array.isArray(details.certificateUrls) ? details.certificateUrls : [];
       return Array.isArray(values) ? values.map((value) => normalizeText(value)).filter(Boolean) : [];
     });
     const certificateImageCaptions = selectedServices.flatMap((service) => {
@@ -2060,8 +2060,6 @@ export async function getProviderProfileWithFallback(providerId: string): Promis
   const resolvedEmergencyContact =
     metadata?.emergency_contact?.trim() ||
     overviewFallback?.provider?.emergency_contact?.trim() ||
-    overviewFallback?.provider?.verification_phone?.trim() ||
-    liveAccount?.phone?.trim() ||
     registrationFallback?.emergencyContact ||
     baseDetail.emergencyContact;
 

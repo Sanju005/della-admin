@@ -74,30 +74,16 @@ function buildCaptionMap(
   );
 }
 
-function buildFileMap(
-  payload: ProviderRegistrationData,
-  key: "imageFileNames" | "certificateFileNames",
-) {
-  return Object.fromEntries(
-    payload.selectedServices.map((service) => [
-      toServiceType(service),
-      payload.serviceDetails[service][key].filter((value) => value.trim().length > 0),
-    ]),
-  );
-}
-
 function buildAssetMap(
   payload: ProviderRegistrationData,
   key: "imageUrls" | "certificateUrls",
-  fallbackKey: "imageFileNames" | "certificateFileNames",
 ) {
   return Object.fromEntries(
     payload.selectedServices.map((service) => {
       const details = payload.serviceDetails[service] as ProviderRegistrationData["serviceDetails"][keyof ProviderRegistrationData["serviceDetails"]];
       const preferred = (details[key] ?? []).filter((value) => value.trim().length > 0);
-      const fallback = details[fallbackKey].filter((value) => value.trim().length > 0);
 
-      return [toServiceType(service), preferred.length ? preferred : fallback];
+      return [toServiceType(service), preferred];
     }),
   );
 }
@@ -182,6 +168,40 @@ function pickEmergencyContact(payload: ProviderRegistrationData) {
   }
 
   return null;
+}
+
+function buildProviderDocumentRows(
+  providerId: string,
+  payload: ProviderRegistrationData,
+  frontImageUrl: string | null,
+  backImageUrl: string | null,
+) {
+  const documentType = normalizeOptionalText(payload.verification.documentType) || "Identity Document";
+  const rows = [];
+
+  if (frontImageUrl) {
+    rows.push({
+      provider_id: providerId,
+      document_type: "ic_front",
+      label: `${documentType} Front`,
+      file_url: frontImageUrl,
+      notes: null,
+      status: "Pending",
+    });
+  }
+
+  if (backImageUrl) {
+    rows.push({
+      provider_id: providerId,
+      document_type: "ic_back",
+      label: `${documentType} Back`,
+      file_url: backImageUrl,
+      notes: null,
+      status: "Pending",
+    });
+  }
+
+  return rows;
 }
 
 async function upsertProviderVerification(
@@ -405,8 +425,8 @@ export async function POST(request: Request) {
           availability_end_time: payload.availability.endTime,
           service_image_captions: buildCaptionMap(payload, "imageCaptions"),
           certificate_image_captions: buildCaptionMap(payload, "certificateCaptions"),
-          service_image_files: buildAssetMap(payload, "imageUrls", "imageFileNames"),
-          certificate_image_files: buildAssetMap(payload, "certificateUrls", "certificateFileNames"),
+          service_image_files: buildAssetMap(payload, "imageUrls"),
+          certificate_image_files: buildAssetMap(payload, "certificateUrls"),
           emergency_contact: emergencyContact,
           profile_image_name: profileImageName,
           current_latitude: payload.providerLocation.latitude,
@@ -442,6 +462,26 @@ export async function POST(request: Request) {
         { error: "Account created, but provider verification setup failed." },
         { status: 500 }
       );
+    }
+
+    const providerDocumentRows = buildProviderDocumentRows(
+      providerId,
+      payload,
+      verificationFrontImageUrl,
+      verificationBackImageUrl,
+    );
+
+    if (providerDocumentRows.length > 0) {
+      const { error: providerDocumentsError } = await adminClient
+        .from("provider_documents")
+        .insert(providerDocumentRows);
+
+      if (providerDocumentsError) {
+        return NextResponse.json(
+          { error: "Account created, but provider documents setup failed." },
+          { status: 500 }
+        );
+      }
     }
 
     const providerServicesPayload = payload.selectedServices.map((service) => {

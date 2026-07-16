@@ -31,6 +31,15 @@ type FlowStep =
   | { type: "identity"; label: string }
   | { type: "success"; label: string };
 
+async function readFileAsDataUrl(file: File) {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Unable to read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ProviderRegistrationWizard() {
   const [data, setData] = useState<ProviderRegistrationData>(
     createDefaultProviderRegistration()
@@ -165,7 +174,13 @@ export function ProviderRegistrationWizard() {
 
   const updateServiceDetailItem = (
     service: ProviderService,
-    field: "imageCaptions" | "imageFileNames" | "certificateCaptions" | "certificateFileNames",
+    field:
+      | "imageCaptions"
+      | "imageFileNames"
+      | "imageUrls"
+      | "certificateCaptions"
+      | "certificateFileNames"
+      | "certificateUrls",
     index: number,
     value: string,
   ) => {
@@ -242,6 +257,63 @@ export function ProviderRegistrationWizard() {
     }));
   };
 
+  const handleProfileImageSelect = async (file: File) => {
+    const dataUrl = await readFileAsDataUrl(file);
+    setData((current) => ({
+      ...current,
+      basicProfile: {
+        ...current.basicProfile,
+        profileImageName: file.name,
+        profileImageUrl: dataUrl,
+      },
+    }));
+  };
+
+  const handleVerificationImageSelect = async (
+    file: File,
+    kind: "front" | "back",
+  ) => {
+    const dataUrl = await readFileAsDataUrl(file);
+    setData((current) => ({
+      ...current,
+      verification: {
+        ...current.verification,
+        [kind === "front" ? "frontImageName" : "backImageName"]: file.name,
+        [kind === "front" ? "frontImageUrl" : "backImageUrl"]: dataUrl,
+      },
+    }));
+  };
+
+  const handleServiceAssetSelect = async (
+    service: ProviderService,
+    kind: "image" | "certificate",
+    index: number,
+    file: File,
+  ) => {
+    const dataUrl = await readFileAsDataUrl(file);
+    const nameField = kind === "image" ? "imageFileNames" : "certificateFileNames";
+    const urlField = kind === "image" ? "imageUrls" : "certificateUrls";
+
+    setData((current) => {
+      const nextNames = [...(current.serviceDetails[service][nameField] ?? [])];
+      const nextUrls = [...(current.serviceDetails[service][urlField] ?? [])];
+      nextNames[index] = file.name;
+      nextUrls[index] = dataUrl;
+
+      return {
+        ...current,
+        serviceDetails: {
+          ...current.serviceDetails,
+          [service]: {
+            ...current.serviceDetails[service],
+            [nameField]: nextNames,
+            [urlField]: nextUrls,
+          },
+        },
+      };
+    });
+  };
+
   return (
     <main className="min-h-[100dvh] overflow-x-hidden bg-[#f6fff8]">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col px-4 py-4 sm:justify-center">
@@ -278,10 +350,18 @@ export function ProviderRegistrationWizard() {
             <ProgressHeader current={stepIndex} total={steps.length} label={activeStep.label} />
 
             {activeStep.type === "basic" ? (
-              <BasicProfileStep data={data} updateBasic={updateBasic} />
+              <BasicProfileStep
+                data={data}
+                updateBasic={updateBasic}
+                onProfileImageSelect={handleProfileImageSelect}
+              />
             ) : null}
             {activeStep.type === "account" ? (
-              <AccountDetailsStep data={data} updateAccount={updateAccount} />
+              <AccountDetailsStep
+                data={data}
+                updateAccount={updateAccount}
+                updateBasic={updateBasic}
+              />
             ) : null}
             {activeStep.type === "services" ? (
               <SelectServicesStep
@@ -296,6 +376,7 @@ export function ProviderRegistrationWizard() {
                 onUpdate={updateServiceDetail}
                 onUpdateItem={updateServiceDetailItem}
                 onToggleSpecialty={toggleSpecialty}
+                onAssetSelect={handleServiceAssetSelect}
               />
             ) : null}
             {activeStep.type === "availability" ? (
@@ -332,7 +413,11 @@ export function ProviderRegistrationWizard() {
               <VerificationStep data={data} onUpdate={updateVerification} />
             ) : null}
             {activeStep.type === "identity" ? (
-              <IdentityStep data={data} onUpdate={updateVerification} />
+              <IdentityStep
+                data={data}
+                onUpdate={updateVerification}
+                onImageSelect={handleVerificationImageSelect}
+              />
             ) : null}
             {activeStep.type === "success" ? (
               <SuccessStep data={data} registrationId={registrationId} />
@@ -364,24 +449,26 @@ export function ProviderRegistrationWizard() {
 function BasicProfileStep({
   data,
   updateBasic,
+  onProfileImageSelect,
 }: {
   data: ProviderRegistrationData;
   updateBasic: (
     field: keyof ProviderRegistrationData["basicProfile"],
     value: string | number
   ) => void;
+  onProfileImageSelect: (file: File) => Promise<void>;
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 rounded-[18px] bg-[#f8fbf8] p-4">
-        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-[#eaf8ee] text-[#16a34a]">
-          <ProfilePhotoIcon className="h-8 w-8" />
-        </div>
-        <div>
-          <p className="text-[13px] font-semibold text-[#111827]">Profile Image</p>
-          <p className="mt-1 text-[12px] text-[#6b7280]">Select from phone</p>
-        </div>
-      </div>
+      <UploadCard
+        label="Profile Image"
+        fileName={data.basicProfile.profileImageName}
+        fileUrl={data.basicProfile.profileImageUrl}
+        buttonLabel="Upload Profile Image"
+        helperText="JPG, PNG (Max 5MB)"
+        accept="image/*"
+        onSelect={onProfileImageSelect}
+      />
 
       <InputField label="First Name" value={data.basicProfile.firstName} onChange={(value) => updateBasic("firstName", value)} />
       <InputField label="Last Name" value={data.basicProfile.lastName} onChange={(value) => updateBasic("lastName", value)} />
@@ -415,11 +502,16 @@ function BasicProfileStep({
 function AccountDetailsStep({
   data,
   updateAccount,
+  updateBasic,
 }: {
   data: ProviderRegistrationData;
   updateAccount: (
     field: keyof ProviderRegistrationData["account"],
     value: string
+  ) => void;
+  updateBasic: (
+    field: keyof ProviderRegistrationData["basicProfile"],
+    value: string | number
   ) => void;
 }) {
   return (
@@ -442,6 +534,11 @@ function AccountDetailsStep({
           </div>
         </div>
       </div>
+      <InputField
+        label="Emergency Contact"
+        value={data.basicProfile.emergencyContact ?? ""}
+        onChange={(value) => updateBasic("emergencyContact", value)}
+      />
       <InputField label="Password" value={data.account.password} onChange={(value) => updateAccount("password", value)} rightIcon={<EyeIcon className="h-4 w-4 text-[#6b7280]" />} type="password" />
       <InputField label="Retype Password" value={data.account.confirmPassword} onChange={(value) => updateAccount("confirmPassword", value)} rightIcon={<EyeIcon className="h-4 w-4 text-[#6b7280]" />} type="password" />
     </div>
@@ -488,6 +585,7 @@ function ServiceDetailsStep({
   onUpdate,
   onUpdateItem,
   onToggleSpecialty,
+  onAssetSelect,
 }: {
   service: ProviderService;
   details: ProviderRegistrationData["serviceDetails"][ProviderService];
@@ -498,11 +596,23 @@ function ServiceDetailsStep({
   ) => void;
   onUpdateItem: (
     service: ProviderService,
-    field: "imageCaptions" | "imageFileNames" | "certificateCaptions" | "certificateFileNames",
+    field:
+      | "imageCaptions"
+      | "imageFileNames"
+      | "imageUrls"
+      | "certificateCaptions"
+      | "certificateFileNames"
+      | "certificateUrls",
     index: number,
     value: string,
   ) => void;
   onToggleSpecialty: (service: ProviderService, specialty: string) => void;
+  onAssetSelect: (
+    service: ProviderService,
+    kind: "image" | "certificate",
+    index: number,
+    file: File,
+  ) => Promise<void>;
 }) {
   const specialties = serviceSpecialties[service];
 
@@ -536,16 +646,20 @@ function ServiceDetailsStep({
         label="Images (3) with caption"
         captions={details.imageCaptions}
         fileNames={details.imageFileNames}
+        fileUrls={details.imageUrls ?? []}
         onCaptionChange={(index, value) => onUpdateItem(service, "imageCaptions", index, value)}
         onFileNameChange={(index, value) => onUpdateItem(service, "imageFileNames", index, value)}
+        onFileSelect={(index, file) => onAssetSelect(service, "image", index, file)}
         tone="media"
       />
       <AssetStrip
         label="Certificates (3) with caption"
         captions={details.certificateCaptions}
         fileNames={details.certificateFileNames}
+        fileUrls={details.certificateUrls ?? []}
         onCaptionChange={(index, value) => onUpdateItem(service, "certificateCaptions", index, value)}
         onFileNameChange={(index, value) => onUpdateItem(service, "certificateFileNames", index, value)}
+        onFileSelect={(index, file) => onAssetSelect(service, "certificate", index, file)}
         tone="certificate"
       />
 
@@ -770,12 +884,14 @@ function VerificationStep({
 function IdentityStep({
   data,
   onUpdate,
+  onImageSelect,
 }: {
   data: ProviderRegistrationData;
   onUpdate: (
     field: keyof ProviderRegistrationData["verification"],
     value: string | string[]
   ) => void;
+  onImageSelect: (file: File, kind: "front" | "back") => Promise<void>;
 }) {
   return (
     <div className="space-y-4">
@@ -788,12 +904,20 @@ function IdentityStep({
       <UploadCard
         label="Upload Document (Front)"
         fileName={data.verification.frontImageName}
-        onSelect={(value) => onUpdate("frontImageName", value)}
+        fileUrl={data.verification.frontImageUrl}
+        buttonLabel="Upload Front Image"
+        helperText="JPG, PNG (Max 5MB)"
+        accept="image/*"
+        onSelect={(file) => onImageSelect(file, "front")}
       />
       <UploadCard
         label="Upload Document (Back)"
         fileName={data.verification.backImageName}
-        onSelect={(value) => onUpdate("backImageName", value)}
+        fileUrl={data.verification.backImageUrl}
+        buttonLabel="Upload Back Image"
+        helperText="JPG, PNG (Max 5MB)"
+        accept="image/*"
+        onSelect={(file) => onImageSelect(file, "back")}
       />
     </div>
   );
@@ -1036,15 +1160,19 @@ function AssetStrip({
   label,
   captions,
   fileNames,
+  fileUrls,
   onCaptionChange,
   onFileNameChange,
+  onFileSelect,
   tone,
 }: {
   label: string;
   captions: string[];
   fileNames: string[];
+  fileUrls: string[];
   onCaptionChange: (index: number, value: string) => void;
   onFileNameChange: (index: number, value: string) => void;
+  onFileSelect: (index: number, file: File) => Promise<void>;
   tone: "media" | "certificate";
 }) {
   return (
@@ -1053,7 +1181,36 @@ function AssetStrip({
       <div className="grid grid-cols-1 gap-3">
         {captions.map((caption, index) => (
           <div key={`${label}-${index}`} className="rounded-[14px] border border-[#e1e9e4] bg-white p-3 shadow-[0_8px_18px_rgba(15,23,42,0.03)]">
-            <div className={`h-16 rounded-[12px] border border-[#e1e9e4] ${tone === "media" ? mediaThumbClasses(index) : "bg-[linear-gradient(180deg,#fffaf4_0%,#f7efe5_100%)]"} shadow-[0_8px_18px_rgba(15,23,42,0.03)]`} />
+            <div className="rounded-[12px] border border-[#e1e9e4] bg-[#f8fbf8] p-3 shadow-[0_8px_18px_rgba(15,23,42,0.03)]">
+              {fileUrls[index] ? (
+                tone === "media" && /^data:image\/|^https?:\/\/|^blob:/i.test(fileUrls[index] ?? "") ? (
+                  <img
+                    src={fileUrls[index]}
+                    alt={fileNames[index] ?? `Uploaded ${label}`}
+                    className="h-24 w-full rounded-[10px] object-cover"
+                  />
+                ) : (
+                  <p className="text-[12px] font-semibold text-[#16a34a]">{fileNames[index] || "File selected"}</p>
+                )
+              ) : (
+                <div className={`h-16 rounded-[12px] border border-[#e1e9e4] ${tone === "media" ? mediaThumbClasses(index) : "bg-[linear-gradient(180deg,#fffaf4_0%,#f7efe5_100%)]"}`} />
+              )}
+              <label className="mt-3 inline-flex cursor-pointer items-center justify-center rounded-[10px] border border-[#cfe4d4] px-3 py-2 text-[12px] font-bold text-[#16a34a]">
+                {fileNames[index] ? "Replace file" : "Upload file"}
+                <input
+                  type="file"
+                  accept={tone === "media" ? "image/*" : ".pdf,image/*"}
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) {
+                      void onFileSelect(index, file);
+                    }
+                  }}
+                />
+              </label>
+            </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               <input
                 value={caption}
@@ -1142,24 +1299,49 @@ function OtpGroup({
 function UploadCard({
   label,
   fileName,
+  fileUrl,
   onSelect,
+  buttonLabel,
+  helperText,
+  accept,
 }: {
   label: string;
   fileName: string;
-  onSelect: (value: string) => void;
+  fileUrl?: string;
+  onSelect: (file: File) => Promise<void>;
+  buttonLabel: string;
+  helperText: string;
+  accept: string;
 }) {
   return (
     <div>
       <p className="mb-2 text-[13px] font-semibold text-[#111827]">{label}</p>
-      <button
-        type="button"
-        onClick={() => onSelect(fileName)}
-        className="flex h-32 w-full flex-col items-center justify-center rounded-[16px] border border-[#dfe8e2] bg-[linear-gradient(180deg,#fcfffd_0%,#f3fbf4_100%)]"
-      >
-        <UploadIcon className="h-8 w-8 text-[#16a34a]" />
-        <p className="mt-3 text-[14px] font-bold text-[#111827]">Upload Image</p>
-        <p className="mt-1 text-[12px] text-[#6b7280]">JPG, PNG (Max 5MB)</p>
-      </button>
+      <label className="flex cursor-pointer flex-col items-center justify-center rounded-[16px] border border-[#dfe8e2] bg-[linear-gradient(180deg,#fcfffd_0%,#f3fbf4_100%)] p-4">
+        {fileUrl && /^data:image\/|^https?:\/\/|^blob:/i.test(fileUrl) ? (
+          <img src={fileUrl} alt={fileName || label} className="max-h-40 w-full rounded-[12px] object-contain" />
+        ) : (
+          <div className="flex h-24 w-full flex-col items-center justify-center">
+            <UploadIcon className="h-8 w-8 text-[#16a34a]" />
+            <p className="mt-3 text-[14px] font-bold text-[#111827]">{buttonLabel}</p>
+            <p className="mt-1 text-[12px] text-[#6b7280]">{helperText}</p>
+          </div>
+        )}
+        <p className="mt-3 text-[12px] font-semibold text-[#16a34a]">
+          {fileName || "No file uploaded"}
+        </p>
+        <input
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) {
+              void onSelect(file);
+            }
+          }}
+        />
+      </label>
     </div>
   );
 }
