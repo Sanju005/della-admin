@@ -235,6 +235,70 @@ export function normalizeServiceKey(value: string) {
   return normalizeOptionalText(value).toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 
+function normalizeDocumentTypeKey(value: string | null | undefined) {
+  return normalizeOptionalText(value).toLowerCase().replace(/[^a-z0-9]+/g, "_");
+}
+
+function isIdentityFrontDocumentType(value: string | null | undefined) {
+  const normalized = normalizeDocumentTypeKey(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.endsWith("_front") && (
+    normalized.includes("ic") ||
+    normalized.includes("identity") ||
+    normalized.includes("passport") ||
+    normalized.includes("national_id") ||
+    normalized.includes("driving_license")
+  );
+}
+
+function isIdentityBackDocumentType(value: string | null | undefined) {
+  const normalized = normalizeDocumentTypeKey(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.endsWith("_back") && (
+    normalized.includes("ic") ||
+    normalized.includes("identity") ||
+    normalized.includes("passport") ||
+    normalized.includes("national_id") ||
+    normalized.includes("driving_license")
+  );
+}
+
+function inferIdentityDocumentType(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeDocumentTypeKey(value);
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (normalized.includes("passport")) {
+      return "Passport";
+    }
+
+    if (normalized.includes("driving_license")) {
+      return "Driving License";
+    }
+
+    if (normalized.includes("national_id")) {
+      return "National ID";
+    }
+
+    if (normalized.includes("ic") || normalized.includes("identity")) {
+      return "IC";
+    }
+  }
+
+  return null;
+}
+
 function buildAvailabilityMetadata(services: ProviderApplicationServicePayload[]) {
   const firstService = services[0];
 
@@ -516,21 +580,16 @@ export async function upsertProviderApplication(
     }
   }
 
-  const identityFront = payload.documents.find((document) =>
-    ["ic_front", "identity_front", "passport_front"].includes(
-      normalizeOptionalText(document.document_type).toLowerCase(),
-    ),
-  );
-  const identityBack = payload.documents.find((document) =>
-    ["ic_back", "identity_back", "passport_back"].includes(
-      normalizeOptionalText(document.document_type).toLowerCase(),
-    ),
-  );
-  const identityDocumentType = normalizeOptionalText(identityFront?.document_type).toLowerCase().includes("passport")
-    ? "Passport"
-    : identityFront?.file_url || identityBack?.file_url
-      ? "IC"
-      : null;
+  const identityFront = payload.documents.find((document) => isIdentityFrontDocumentType(document.document_type));
+  const identityBack = payload.documents.find((document) => isIdentityBackDocumentType(document.document_type));
+  const identityDocumentType =
+    inferIdentityDocumentType(
+      identityFront?.document_type,
+      identityBack?.document_type,
+      identityFront?.label,
+      identityBack?.label,
+    ) ||
+    (identityFront?.file_url || identityBack?.file_url ? "IC" : null);
   const phoneVerified = normalizeOptionalText(payload.verification_phone) === phone;
   const emailVerified = normalizeOptionalText(payload.verification_email).toLowerCase() === email;
   const identityVerified = Boolean(identityFront?.file_url && identityBack?.file_url && normalizeOptionalText(payload.id_number));

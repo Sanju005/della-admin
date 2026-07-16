@@ -116,6 +116,58 @@ function splitPhoneNumber(value) {
 function normalizeServiceKey(value) {
     return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
+function normalizeDocumentTypeKey(value) {
+    var _a;
+    return (_a = value === null || value === void 0 ? void 0 : value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")) !== null && _a !== void 0 ? _a : "";
+}
+function isIdentityFrontDocumentType(value) {
+    var normalized = normalizeDocumentTypeKey(value);
+    if (!normalized) {
+        return false;
+    }
+    return normalized.endsWith("_front") && (normalized.includes("ic") ||
+        normalized.includes("identity") ||
+        normalized.includes("passport") ||
+        normalized.includes("national_id") ||
+        normalized.includes("driving_license"));
+}
+function isIdentityBackDocumentType(value) {
+    var normalized = normalizeDocumentTypeKey(value);
+    if (!normalized) {
+        return false;
+    }
+    return normalized.endsWith("_back") && (normalized.includes("ic") ||
+        normalized.includes("identity") ||
+        normalized.includes("passport") ||
+        normalized.includes("national_id") ||
+        normalized.includes("driving_license"));
+}
+function inferIdentityDocumentType() {
+    var values = [];
+    for (var _i = 0; _i < arguments.length; _i++) {
+        values[_i] = arguments[_i];
+    }
+    for (var _a = 0, values_1 = values; _a < values_1.length; _a++) {
+        var value = values_1[_a];
+        var normalized = normalizeDocumentTypeKey(value);
+        if (!normalized) {
+            continue;
+        }
+        if (normalized.includes("passport")) {
+            return "Passport";
+        }
+        if (normalized.includes("driving_license")) {
+            return "Driving License";
+        }
+        if (normalized.includes("national_id")) {
+            return "National ID";
+        }
+        if (normalized.includes("ic") || normalized.includes("identity")) {
+            return "IC";
+        }
+    }
+    return null;
+}
 function titleizeServiceKey(value) {
     return value
         .split(/[_\s-]+/)
@@ -433,10 +485,10 @@ function handlePaymentSettlement(request, env) {
 }
 function handleAccountCreate(request, env) {
     return __awaiter(this, void 0, void 0, function () {
-        var origin, verified, payload, accountType, fullName, email, password, phone, adminClient, _a, createdUser, authError, userId, normalizedStatus, normalizedCountry, _b, countryCode, phoneNumber, _c, firstName, lastName, profileError, customerError, providerVisible, approvalStatus, normalizedServices, primaryService, serviceLocation, serviceRadiusKm, providerProfileError, serviceError, verificationError, serviceImageFiles, serviceImageCaptions, metadataError, normalizedDocuments, documentError;
-        var _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17;
-        return __generator(this, function (_18) {
-            switch (_18.label) {
+        var origin, verified, payload, accountType, fullName, email, password, phone, adminClient, _a, createdUser, authError, userId, normalizedStatus, normalizedCountry, _b, countryCode, phoneNumber, _c, firstName, lastName, profileError, customerError, providerVisible, approvalStatus, normalizedServices, primaryService, serviceLocation, serviceRadiusKm, providerProfileError, serviceError, identityFrontDocument, identityBackDocument, resolvedIdentityDocumentType, verificationError, serviceImageFiles, serviceImageCaptions, metadataError, normalizedDocuments, documentError;
+        var _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24;
+        return __generator(this, function (_25) {
+            switch (_25.label) {
                 case 0:
                     origin = request.headers.get("origin");
                     if (request.method === "OPTIONS") {
@@ -450,13 +502,13 @@ function handleAccountCreate(request, env) {
                     }
                     return [4 /*yield*/, verifyAdminRequest(request, env)];
                 case 1:
-                    verified = _18.sent();
+                    verified = _25.sent();
                     if ("error" in verified) {
                         return [2 /*return*/, verified.error];
                     }
                     return [4 /*yield*/, request.json().catch(function () { return ({}); })];
                 case 2:
-                    payload = (_18.sent());
+                    payload = (_25.sent());
                     accountType = payload.accountType === "provider" ? "provider" : payload.accountType === "customer" ? "customer" : "";
                     fullName = (_e = (_d = payload.fullName) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
                     email = (_g = (_f = payload.email) === null || _f === void 0 ? void 0 : _f.trim().toLowerCase()) !== null && _g !== void 0 ? _g : "";
@@ -476,7 +528,7 @@ function handleAccountCreate(request, env) {
                             },
                         })];
                 case 3:
-                    _a = _18.sent(), createdUser = _a.data, authError = _a.error;
+                    _a = _25.sent(), createdUser = _a.data, authError = _a.error;
                     if (authError || !createdUser.user) {
                         return [2 /*return*/, json({ error: (authError === null || authError === void 0 ? void 0 : authError.message) || "Unable to create auth account." }, { status: 400 }, origin)];
                     }
@@ -494,11 +546,11 @@ function handleAccountCreate(request, env) {
                             status: normalizedStatus,
                         })];
                 case 4:
-                    profileError = (_18.sent()).error;
+                    profileError = (_25.sent()).error;
                     if (!profileError) return [3 /*break*/, 6];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 5:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: profileError.message || "Unable to create profile record." }, { status: 500 }, origin)];
                 case 6:
                     if (!(accountType === "customer")) return [3 /*break*/, 10];
@@ -515,11 +567,11 @@ function handleAccountCreate(request, env) {
                             verified: normalizedStatus.toLowerCase() === "active",
                         })];
                 case 7:
-                    customerError = (_18.sent()).error;
+                    customerError = (_25.sent()).error;
                     if (!customerError) return [3 /*break*/, 9];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 8:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: customerError.message || "Unable to create customer profile." }, { status: 500 }, origin)];
                 case 9: return [3 /*break*/, 25];
                 case 10:
@@ -562,11 +614,11 @@ function handleAccountCreate(request, env) {
                             is_visible: providerVisible,
                         })];
                 case 11:
-                    providerProfileError = (_18.sent()).error;
+                    providerProfileError = (_25.sent()).error;
                     if (!providerProfileError) return [3 /*break*/, 13];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 12:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: providerProfileError.message || "Unable to create provider profile." }, { status: 500 }, origin)];
                 case 13:
                     if (!normalizedServices.length) return [3 /*break*/, 16];
@@ -578,31 +630,46 @@ function handleAccountCreate(request, env) {
                             daily_rate: service.dailyRate,
                         }); }))];
                 case 14:
-                    serviceError = (_18.sent()).error;
+                    serviceError = (_25.sent()).error;
                     if (!serviceError) return [3 /*break*/, 16];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 15:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: serviceError.message || "Unable to create provider service." }, { status: 500 }, origin)];
-                case 16: return [4 /*yield*/, adminClient.from("provider_verifications").upsert({
-                        provider_id: userId,
-                        phone_verified: Boolean(payload.phoneVerified),
-                        email_verified: Boolean(payload.emailVerified),
-                        identity_verified: Boolean(payload.identityVerified),
-                        kyc_verified: Boolean(payload.kycVerified),
-                        background_check_verified: Boolean(payload.backgroundCheckVerified),
-                        document_type: ((_4 = payload.identityDocumentType) === null || _4 === void 0 ? void 0 : _4.trim()) || null,
-                        front_image_name: ((_8 = (_7 = (_6 = (_5 = payload.documents) === null || _5 === void 0 ? void 0 : _5[0]) === null || _6 === void 0 ? void 0 : _6.file) === null || _7 === void 0 ? void 0 : _7.fileName) === null || _8 === void 0 ? void 0 : _8.trim()) || null,
-                        back_image_name: ((_12 = (_11 = (_10 = (_9 = payload.documents) === null || _9 === void 0 ? void 0 : _9[1]) === null || _10 === void 0 ? void 0 : _10.file) === null || _11 === void 0 ? void 0 : _11.fileName) === null || _12 === void 0 ? void 0 : _12.trim()) || null,
-                        requested_documents: [],
-                        admin_note: "",
-                    })];
+                case 16:
+                    identityFrontDocument = ((_4 = payload.documents) !== null && _4 !== void 0 ? _4 : []).find(function (document) {
+                        return isIdentityFrontDocumentType(document.documentType);
+                    });
+                    identityBackDocument = ((_5 = payload.documents) !== null && _5 !== void 0 ? _5 : []).find(function (document) {
+                        return isIdentityBackDocumentType(document.documentType);
+                    });
+                    resolvedIdentityDocumentType = inferIdentityDocumentType(payload.identityDocumentType, identityFrontDocument === null || identityFrontDocument === void 0 ? void 0 : identityFrontDocument.documentType, identityBackDocument === null || identityBackDocument === void 0 ? void 0 : identityBackDocument.documentType, identityFrontDocument === null || identityFrontDocument === void 0 ? void 0 : identityFrontDocument.label, identityBackDocument === null || identityBackDocument === void 0 ? void 0 : identityBackDocument.label) ||
+                        ((_6 = payload.identityDocumentType) === null || _6 === void 0 ? void 0 : _6.trim()) ||
+                        null;
+                    return [4 /*yield*/, adminClient.from("provider_verifications").upsert({
+                            provider_id: userId,
+                            phone_verified: Boolean(payload.phoneVerified),
+                            email_verified: Boolean(payload.emailVerified),
+                            identity_verified: Boolean(payload.identityVerified),
+                            kyc_verified: Boolean(payload.kycVerified),
+                            background_check_verified: Boolean(payload.backgroundCheckVerified),
+                            document_type: resolvedIdentityDocumentType,
+                            identity_document_type: resolvedIdentityDocumentType,
+                            front_image_name: ((_8 = (_7 = identityFrontDocument === null || identityFrontDocument === void 0 ? void 0 : identityFrontDocument.file) === null || _7 === void 0 ? void 0 : _7.fileName) === null || _8 === void 0 ? void 0 : _8.trim()) || null,
+                            back_image_name: ((_10 = (_9 = identityBackDocument === null || identityBackDocument === void 0 ? void 0 : identityBackDocument.file) === null || _9 === void 0 ? void 0 : _9.fileName) === null || _10 === void 0 ? void 0 : _10.trim()) || null,
+                            document_front_url: ((_12 = (_11 = identityFrontDocument === null || identityFrontDocument === void 0 ? void 0 : identityFrontDocument.file) === null || _11 === void 0 ? void 0 : _11.dataUrl) === null || _12 === void 0 ? void 0 : _12.trim()) || null,
+                            document_back_url: ((_14 = (_13 = identityBackDocument === null || identityBackDocument === void 0 ? void 0 : identityBackDocument.file) === null || _13 === void 0 ? void 0 : _13.dataUrl) === null || _14 === void 0 ? void 0 : _14.trim()) || null,
+                            identity_front_image_url: ((_16 = (_15 = identityFrontDocument === null || identityFrontDocument === void 0 ? void 0 : identityFrontDocument.file) === null || _15 === void 0 ? void 0 : _15.dataUrl) === null || _16 === void 0 ? void 0 : _16.trim()) || null,
+                            identity_back_image_url: ((_18 = (_17 = identityBackDocument === null || identityBackDocument === void 0 ? void 0 : identityBackDocument.file) === null || _17 === void 0 ? void 0 : _17.dataUrl) === null || _18 === void 0 ? void 0 : _18.trim()) || null,
+                            requested_documents: [],
+                            admin_note: "",
+                        })];
                 case 17:
-                    verificationError = (_18.sent()).error;
+                    verificationError = (_25.sent()).error;
                     if (!verificationError) return [3 /*break*/, 19];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 18:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: verificationError.message || "Unable to create provider verification." }, { status: 500 }, origin)];
                 case 19:
                     serviceImageFiles = Object.fromEntries(normalizedServices.map(function (service) { return [
@@ -615,22 +682,23 @@ function handleAccountCreate(request, env) {
                     ]; }));
                     return [4 /*yield*/, adminClient.from("provider_admin_metadata").upsert({
                             provider_id: userId,
-                            availability_days: ((_13 = payload.availabilityDays) !== null && _13 !== void 0 ? _13 : []).map(function (value) { return value.trim(); }).filter(Boolean),
-                            availability_time_preset: ((_14 = payload.availabilityPreset) === null || _14 === void 0 ? void 0 : _14.trim()) || null,
-                            availability_start_time: ((_15 = payload.availabilityStartTime) === null || _15 === void 0 ? void 0 : _15.trim()) || null,
-                            availability_end_time: ((_16 = payload.availabilityEndTime) === null || _16 === void 0 ? void 0 : _16.trim()) || null,
+                            availability_days: ((_19 = payload.availabilityDays) !== null && _19 !== void 0 ? _19 : []).map(function (value) { return value.trim(); }).filter(Boolean),
+                            availability_time_preset: ((_20 = payload.availabilityPreset) === null || _20 === void 0 ? void 0 : _20.trim()) || null,
+                            availability_start_time: ((_21 = payload.availabilityStartTime) === null || _21 === void 0 ? void 0 : _21.trim()) || null,
+                            availability_end_time: ((_22 = payload.availabilityEndTime) === null || _22 === void 0 ? void 0 : _22.trim()) || null,
                             service_image_files: Object.keys(serviceImageFiles).length ? serviceImageFiles : null,
                             service_image_captions: Object.keys(serviceImageCaptions).length ? serviceImageCaptions : null,
+                            emergency_contact: ((_23 = payload.phone) === null || _23 === void 0 ? void 0 : _23.trim()) || null,
                         })];
                 case 20:
-                    metadataError = (_18.sent()).error;
+                    metadataError = (_25.sent()).error;
                     if (!metadataError) return [3 /*break*/, 22];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 21:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: metadataError.message || "Unable to create provider availability." }, { status: 500 }, origin)];
                 case 22:
-                    normalizedDocuments = ((_17 = payload.documents) !== null && _17 !== void 0 ? _17 : [])
+                    normalizedDocuments = ((_24 = payload.documents) !== null && _24 !== void 0 ? _24 : [])
                         .filter(function (document) { var _a, _b, _c; return ((_a = document.documentType) === null || _a === void 0 ? void 0 : _a.trim()) && ((_c = (_b = document.file) === null || _b === void 0 ? void 0 : _b.dataUrl) === null || _c === void 0 ? void 0 : _c.trim()); })
                         .map(function (document) {
                         var _a, _b, _c, _d, _e, _f, _g;
@@ -646,11 +714,11 @@ function handleAccountCreate(request, env) {
                     if (!normalizedDocuments.length) return [3 /*break*/, 25];
                     return [4 /*yield*/, adminClient.from("provider_documents").insert(normalizedDocuments)];
                 case 23:
-                    documentError = (_18.sent()).error;
+                    documentError = (_25.sent()).error;
                     if (!documentError) return [3 /*break*/, 25];
                     return [4 /*yield*/, adminClient.auth.admin.deleteUser(userId)];
                 case 24:
-                    _18.sent();
+                    _25.sent();
                     return [2 /*return*/, json({ error: documentError.message || "Unable to create provider documents." }, { status: 500 }, origin)];
                 case 25: return [2 /*return*/, json({ success: true, userId: userId }, { status: 201 }, origin)];
             }

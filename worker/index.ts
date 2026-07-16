@@ -221,6 +221,70 @@ function normalizeServiceKey(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 
+function normalizeDocumentTypeKey(value: string | undefined) {
+  return value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_") ?? "";
+}
+
+function isIdentityFrontDocumentType(value: string | undefined) {
+  const normalized = normalizeDocumentTypeKey(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.endsWith("_front") && (
+    normalized.includes("ic") ||
+    normalized.includes("identity") ||
+    normalized.includes("passport") ||
+    normalized.includes("national_id") ||
+    normalized.includes("driving_license")
+  );
+}
+
+function isIdentityBackDocumentType(value: string | undefined) {
+  const normalized = normalizeDocumentTypeKey(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.endsWith("_back") && (
+    normalized.includes("ic") ||
+    normalized.includes("identity") ||
+    normalized.includes("passport") ||
+    normalized.includes("national_id") ||
+    normalized.includes("driving_license")
+  );
+}
+
+function inferIdentityDocumentType(...values: Array<string | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeDocumentTypeKey(value);
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (normalized.includes("passport")) {
+      return "Passport";
+    }
+
+    if (normalized.includes("driving_license")) {
+      return "Driving License";
+    }
+
+    if (normalized.includes("national_id")) {
+      return "National ID";
+    }
+
+    if (normalized.includes("ic") || normalized.includes("identity")) {
+      return "IC";
+    }
+  }
+
+  return null;
+}
+
 function titleizeServiceKey(value: string) {
   return value
     .split(/[_\s-]+/)
@@ -700,6 +764,23 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
       }
     }
 
+    const identityFrontDocument = (payload.documents ?? []).find((document) =>
+      isIdentityFrontDocumentType(document.documentType),
+    );
+    const identityBackDocument = (payload.documents ?? []).find((document) =>
+      isIdentityBackDocumentType(document.documentType),
+    );
+    const resolvedIdentityDocumentType =
+      inferIdentityDocumentType(
+        payload.identityDocumentType,
+        identityFrontDocument?.documentType,
+        identityBackDocument?.documentType,
+        identityFrontDocument?.label,
+        identityBackDocument?.label,
+      ) ||
+      payload.identityDocumentType?.trim() ||
+      null;
+
     const { error: verificationError } = await adminClient.from("provider_verifications").upsert({
       provider_id: userId,
       phone_verified: Boolean(payload.phoneVerified),
@@ -707,9 +788,14 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
       identity_verified: Boolean(payload.identityVerified),
       kyc_verified: Boolean(payload.kycVerified),
       background_check_verified: Boolean(payload.backgroundCheckVerified),
-      document_type: payload.identityDocumentType?.trim() || null,
-      front_image_name: payload.documents?.[0]?.file?.fileName?.trim() || null,
-      back_image_name: payload.documents?.[1]?.file?.fileName?.trim() || null,
+      document_type: resolvedIdentityDocumentType,
+      identity_document_type: resolvedIdentityDocumentType,
+      front_image_name: identityFrontDocument?.file?.fileName?.trim() || null,
+      back_image_name: identityBackDocument?.file?.fileName?.trim() || null,
+      document_front_url: identityFrontDocument?.file?.dataUrl?.trim() || null,
+      document_back_url: identityBackDocument?.file?.dataUrl?.trim() || null,
+      identity_front_image_url: identityFrontDocument?.file?.dataUrl?.trim() || null,
+      identity_back_image_url: identityBackDocument?.file?.dataUrl?.trim() || null,
       requested_documents: [],
       admin_note: "",
     });
@@ -740,6 +826,7 @@ async function handleAccountCreate(request: Request, env: Env): Promise<Response
       availability_end_time: payload.availabilityEndTime?.trim() || null,
       service_image_files: Object.keys(serviceImageFiles).length ? serviceImageFiles : null,
       service_image_captions: Object.keys(serviceImageCaptions).length ? serviceImageCaptions : null,
+      emergency_contact: payload.phone?.trim() || null,
     });
 
     if (metadataError) {
